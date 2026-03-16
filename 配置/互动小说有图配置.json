@@ -1,0 +1,573 @@
+{
+  "version": "2.0",
+  "description": "互动小说自动化创作系统完整配置（含剧情策划师、规则设计师、交互代理、交互分析师）- 元Agent版（已移除最终保存器）",
+  "maxStateBooks": 3,
+  "stateTypeLimit": 30,
+  "maxConsecutiveReflows": 3,
+  "maxReflowDepth": 100,
+  "mode": "interactive",
+  "apiConfigs": {
+    "sd-webui": {
+      "type": "image",
+      "source": "sdwebui",
+      "apiUrl": "http://127.0.0.1:7860",
+      "key": "",
+      "mode": "",
+      "model": "v1-5-pruned-emaonly.safetensors",
+      "steps": 20,
+      "cfg_scale": 7,
+      "width": 512,
+      "height": 512,
+      "sampler_name": "DPM++ 2M",
+      "negative_prompt": "nsfw, low quality, blurry",
+      "timeout": 10000000
+    }
+  },
+  "workflowStages": [
+    {
+      "stage": 1,
+      "id": "planning",
+      "name": "规则设计",
+      "color": "#9b59b6",
+      "description": "负责整体剧情策划与规则设计",
+      "agents": [
+        "P1",
+        "R1"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 2,
+      "id": "writing",
+      "name": "场景创作",
+      "color": "#f39c12",
+      "description": "生成场景文本",
+      "agents": [
+        "W1"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 3,
+      "id": "image",
+      "name": "图像生成",
+      "color": "#8e44ad",
+      "description": "生成元素图片",
+      "agents": [
+        "G1"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 4,
+      "id": "fusion",
+      "name": "融合",
+      "color": "#e67e22",
+      "description": "将元素图融合成完整场景",
+      "agents": [
+        "G2"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 5,
+      "id": "typeset",
+      "name": "排版",
+      "color": "#1abc9c",
+      "description": "合成初始HTML场景",
+      "agents": [
+        "T1"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 6,
+      "id": "interaction",
+      "name": "交互",
+      "color": "#e74c3c",
+      "description": "处理用户交互",
+      "agents": [
+        "IA"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 7,
+      "id": "analysis",
+      "name": "分析",
+      "color": "#ff8c00",
+      "description": "生成带状态草稿的分析文本",
+      "agents": [
+        "IA2"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 8,
+      "id": "summary",
+      "name": "概览",
+      "color": "#3498db",
+      "description": "生成累积故事概览",
+      "agents": [
+        "S1"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 9,
+      "id": "state_opt",
+      "name": "优化",
+      "color": "#27ae60",
+      "description": "状态优化",
+      "agents": [
+        "M1"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 10,
+      "id": "state_maint",
+      "name": "维护",
+      "color": "#27ae60",
+      "description": "状态维护",
+      "agents": [
+        "M2"
+      ],
+      "mode": "serial"
+    }
+  ],
+  "agents": {
+    "P1": {
+      "name": "通用生成器",
+      "displayName": "剧情策划师",
+      "hover": "根据上一章概览策划本章剧情走向",
+      "role": "",
+      "stage": "planning",
+      "order": 3,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "S1.last"
+      ],
+      "inputTemplate": "【职能】你现在是剧情策划师，请根据上一章的累积故事概览，策划本章的剧情走向和关键事件。\n\n【职能规则】1. 输出应包含本章的核心冲突、人物发展目标、悬念设置；2. 保持与故事概览的逻辑连贯。\n\n【唯一输出格式】\n===剧情策划===\n核心冲突：\n\n人物发展目标：\n\n悬念设置：\n\n\n【输入】\n上一章概览：\n【】\n\n请严格按照格式输出。",
+      "inputMode": [
+        "txt"
+      ],
+      "autoConfig": [
+        0
+      ],
+      "inputPrompts": [
+        ""
+      ],
+      "outputs": [
+        "剧情策划"
+      ],
+      "description": "策划本章剧情",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "R1": {
+      "name": "通用生成器",
+      "displayName": "互动小说规则设计师",
+      "hover": "根据上一章概览设计本章交互规则（JSON格式）",
+      "role": "",
+      "stage": "planning",
+      "order": 5,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "S1.last"
+      ],
+      "inputTemplate": "【职能】你现在是互动小说规则设计师，请根据上一章的累积故事概览，设计本章的交互效果规则。\n\n【职能规则】1. 输出必须为严格的JSON格式；2. 必须包含type字段，可选值包括\"choice\"、\"dice\"、\"dialogue\"等；3. 必须包含effects数组，每个effect包含range、description、stateChanges；4. 对于dice类型，必须包含range字段；5. 状态变化使用点号表示嵌套属性。\n\n【唯一输出格式】JSON对象，例如：\n{\n  \"type\": \"dice\",\n  \"range\": \"1-6\",\n  \"effects\": [\n    {\"range\": \"1-2\", \"description\": \"受伤\", \"stateChanges\": {\"体力\": -10}},\n    ...\n  ]\n}\n\n【输出示例】见上。\n\n【输入】\n故事概览：\n【】\n\n请严格按照格式输出JSON，不要包含任何额外文字。",
+      "inputMode": [
+        "txt"
+      ],
+      "autoConfig": [
+        0
+      ],
+      "inputPrompts": [
+        ""
+      ],
+      "outputs": [
+        "交互规则"
+      ],
+      "description": "设计本章交互规则",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "W1": {
+      "name": "通用生成器",
+      "displayName": "互动小说场景师",
+      "hover": "根据规则、概览和上一轮选择生成【画面】【正文】【交互描述】",
+      "role": "finalChapter",
+      "stage": "writing",
+      "order": 10,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "R1",
+        "S1.last",
+        "IA.last"
+      ],
+      "inputTemplate": "【职能】你现在是互动小说场景师，负责根据交互规则、上一章累积故事概览和玩家上一轮选择，生成当前场景的【画面】视觉描述、【正文】故事叙述和【交互描述】。\n\n【职能规则】1. 输出必须严格分为三部分，用空行分隔；2. 【画面】描述必须包含位置、光影、相对大小等视觉细节，不得包含文字对话；3. 【正文】必须遵循第四面墙原则，不得提及玩家或交互，可分段；4. 【交互描述】必须包含触发时机、类型、选项等，格式严格参照模板；5. 所有部分必须完整。\n\n【唯一输出格式】\n【画面】\n（画面描述）\n\n【正文】\n（故事文本，可分段）\n\n【交互描述】\n触发时机: [时机]\n类型: [类型]\n选项:\n- [选项1]\n- [选项2]\n范围: [仅dice]\n提示: [仅dialogue或dice]\n时限: [仅timer]\n（请严格按照此格式，不得添加额外字段）\n\n【输出示例】\n【画面】\n背景：学校天台，黄昏，夕阳从右侧照射...\n【正文】\n你站在天台...\n【交互描述】\n触发时机: 对话后\n类型: choice\n选项:\n- 约她出去玩\n- 保持沉默\n\n【输入】\n交互规则：\n【】\n上一章累积故事概览：\n【】\n玩家上一轮选择：\n【】\n\n请严格按照上述格式生成场景。",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        ""
+      ],
+      "outputs": [
+        "画面",
+        "正文",
+        "交互描述"
+      ],
+      "description": "生成场景核心内容",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "G1": {
+      "name": "互动小说元素生图师",
+      "displayName": "互动小说元素生图师",
+      "hover": "从【画面】提取元素生成图片提示词",
+      "role": "imageGenerator",
+      "stage": "image",
+      "order": 20,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "W1"
+      ],
+      "inputTemplate": "你现在是互动小说元素生图师。请从以下【画面】描述中提取各个视觉元素，为每个元素生成图片提示词。\n【画面】描述：\n【】\n\n请提取画面中的元素（如背景、人物、物品），并为每个元素生成一个提示词。输出格式如下：\n===图片生成指令===\n元素名称：\n[图片提示词]\n\n元素名称建议采用“类型_名称”格式，如“人物_灵梦”、“背景_天台”。每个指令块之间用一个空行分隔。\n\n注意：提示词要根据当前图像模型的配置调整风格（如DALL·E用自然语言，Stable Diffusion用关键词）。",
+      "inputMode": [
+        "txt"
+      ],
+      "autoConfig": [
+        0
+      ],
+      "inputPrompts": [
+        ""
+      ],
+      "outputs": [
+        "图片指令"
+      ],
+      "description": "",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "G2": {
+      "name": "互动小说融合生图师",
+      "displayName": "互动小说融合生图师",
+      "hover": "将元素图融合成一张完整场景图",
+      "role": "fusionGenerator",
+      "stage": "fusion",
+      "order": 25,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "G1",
+        "W1"
+      ],
+      "inputTemplate": "你现在是互动小说融合生图师。请根据以下元素图片ID列表和原始画面描述，利用图生图技术融合成一张完整的场景图。\n\n元素图片ID列表：\n【】\n\n原始画面描述：\n【】\n\n请输出融合指令，格式为：\n===融合指令===\n融合图片：\ncontrol_sequence: openpose, depth, canny\nprompt: [提示词]\nbackground_id: [背景图ID]\ncharacter_ids: [控制图ID列表，用逗号分隔]\ndenoising_strength: [每步重绘幅度，用逗号分隔]\n\n可用控制类型：openpose（姿态）、depth（深度）、canny（边缘）、softedge（软边缘）、lineart（动漫线稿）。",
+      "inputMode": [
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        ""
+      ],
+      "outputs": [
+        "融合图ID"
+      ],
+      "description": "",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "T1": {
+      "name": "互动小说排版师",
+      "displayName": "互动小说排版师",
+      "hover": "合成初始HTML场景（含交互控件）",
+      "role": "typesetter",
+      "stage": "typeset",
+      "order": 30,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "W1",
+        "G2"
+      ],
+      "inputTemplate": "你现在是互动小说排版师。根据以下信息生成初始HTML：\n\n场景师输出：\n【】\n\n融合图ID：\n【】\n\n请从场景师输出中提取【正文】部分和【交互描述】部分，然后按照要求生成HTML。\n\n要求：\n- 背景图使用 <img src=\"id:xxx\">。\n- 正文分段展示，每段后加“继续”按钮（不带data-action）。\n- 根据交互描述在适当时机显示交互控件，控件需带 data-action 属性（参照规范）。\n- 添加固定“隐藏画面”按钮（不带data-action）。\n- 输出仅HTML片段，包含<style>和JavaScript实现触发时机控制。\n\n详细规范请参考系统文档。",
+      "inputMode": [
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        ""
+      ],
+      "outputs": [
+        "初始HTML"
+      ],
+      "description": "",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "IA": {
+      "name": "通用生成器",
+      "displayName": "互动小说交互代理",
+      "hover": "显示HTML、等待交互、返回用户操作结果",
+      "role": "interactiveAgent",
+      "stage": "interaction",
+      "order": 35,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "T1",
+        "user"
+      ],
+      "inputTemplate": "【职能】你现在是互动小说交互代理，唯一任务是将接收到的用户操作结果原样输出，不进行任何分析或修改。\n\n【职能规则】1. 直接输出用户输入的内容；2. 不得添加任何额外文字、解释、分析或格式；3. 输出仅为纯文本，不得包含HTML或Markdown。\n\n【唯一输出格式】原样输出用户输入内容，例如用户输入\"[选择: 约她出去玩]\"，则输出\"[选择: 约她出去玩]\"。\n\n【输出示例】\n输入：[选择: 约她出去玩]\n输出：[选择: 约她出去玩]\n\n【输入】\n初始HTML（用于显示，但不需处理）：\n【】\n玩家操作结果：\n【】\n\n请直接输出玩家操作结果，不要包含任何其他内容。",
+      "inputMode": [
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "等待用户交互..."
+      ],
+      "outputs": [
+        "用户操作结果"
+      ],
+      "description": "处理交互并返回用户操作",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "IA2": {
+      "name": "通用生成器",
+      "displayName": "交互分析师",
+      "hover": "根据用户操作、规则和正文生成带状态草稿的分析文本",
+      "role": "",
+      "stage": "analysis",
+      "order": 40,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "IA",
+        "R1",
+        "W1"
+      ],
+      "inputTemplate": "【职能】你现在是交互分析师，请根据用户操作结果、交互规则和场景正文，生成分析文本，将用户操作自然融入剧情，并在末尾包含原始状态草稿。\n\n【职能规则】1. 分析文本必须与正文自然衔接，不得出现“你选择了”等玩家指向语句；2. 原始状态草稿以“===原始状态草稿===”开头，列出所有状态变化（基于规则中的stateChanges）；3. 输出仅为纯文本，不得包含额外解释。\n\n【唯一输出格式】\n（分析文本，包含剧情推进、人物反应等）\n\n===原始状态草稿===\n- 状态1变化\n- 状态2变化\n...\n\n【输出示例】\n你站在天台，灵梦微笑着看着你。你鼓起勇气邀请她出去玩，她脸颊微红，点了点头。\n===原始状态草稿===\n- 灵梦好感度+2\n\n【输入】\n用户操作结果：\n【】\n交互规则：\n【】\n场景正文：\n【】\n\n请生成分析文本。",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        ""
+      ],
+      "outputs": [
+        "分析文本（含草稿）"
+      ],
+      "description": "生成带原始状态草稿的分析文本",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "S1": {
+      "name": "剧情概览师",
+      "displayName": "剧情概览师",
+      "hover": "生成累积故事概览",
+      "role": "storySummarizer",
+      "stage": "summary",
+      "order": 45,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "W1",
+        "S1.last",
+        "IA2"
+      ],
+      "inputTemplate": "你现在是剧情概览师。根据当前场景、上一章概览和交互分析文本，更新累积故事概览。\n\n当前场景：\n【】\n上一章概览：\n【】\n交互分析：\n【】\n\n请生成更新后的累积故事概览，包含核心剧情、人物变化、未解决悬念、情感基调。",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        ""
+      ],
+      "outputs": [
+        "累积概览"
+      ],
+      "description": "",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "M1": {
+      "name": "状态优化师",
+      "displayName": "状态优化师",
+      "hover": "优化状态模板体系",
+      "role": "optimizer",
+      "stage": "state_opt",
+      "order": 50,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "S1.last"
+      ],
+      "inputTemplate": "你现在是状态优化师。请根据当前故事概览，分析状态模板并提出优化建议。\n\n输出格式必须严格遵循以下规范：\n---需调整的状态模板---\n书号-条目uid：模板内容\n属性配置行\n...\n\n故事概览：\n【】\n\n请提出优化建议。",
+      "inputMode": [
+        "txt"
+      ],
+      "autoConfig": [
+        0
+      ],
+      "inputPrompts": [
+        ""
+      ],
+      "outputs": [
+        "状态优化建议"
+      ],
+      "description": "",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    },
+    "M2": {
+      "name": "状态维护师",
+      "displayName": "状态维护师",
+      "hover": "更新状态书（好感度、flag等）",
+      "role": "updater",
+      "stage": "state_maint",
+      "order": 55,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "S1.last",
+        "W1",
+        "IA2"
+      ],
+      "inputTemplate": "你现在是状态维护师。根据当前故事概览、最终章节内容和交互分析文本，更新状态书。\n\n故事概览：\n【】\n最终章节内容：\n【】\n交互分析：\n【】\n\n请为当前状态书生成续写锁定协议，格式如下：\n===续写锁定协议===\n\n**类别1:好感度**\n- 灵梦好感: 值（变化说明）\n- 魔理沙好感: 值（变化说明）\n\n**类别2:剧情flag**\n- flagA: 值（变化说明）\n...",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        ""
+      ],
+      "outputs": [
+        "状态协议"
+      ],
+      "description": "",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "review": false
+    }
+  },
+  "categories": {
+    "chapterType": {
+      "name": "章节类型",
+      "description": "选择本章的类型",
+      "selectionMode": "single",
+      "options": {
+        "normal": {
+          "name": "普通剧情",
+          "description": "推进主线或日常",
+          "icon": "📖",
+          "agents": [
+            "R1",
+            "W1",
+            "G1",
+            "G2",
+            "T1",
+            "IA",
+            "IA2",
+            "S1",
+            "M1",
+            "M2"
+          ]
+        },
+        "event": {
+          "name": "重要事件",
+          "description": "关键剧情节点",
+          "icon": "⚡",
+          "agents": [
+            "R1",
+            "W1",
+            "G1",
+            "G2",
+            "T1",
+            "IA",
+            "IA2",
+            "S1",
+            "M1",
+            "M2"
+          ]
+        }
+      }
+    }
+  },
+  "categoryGroups": [],
+  "extensions": {}
+}

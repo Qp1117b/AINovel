@@ -1,0 +1,299 @@
+/* ============================================
+   主题 08: 樱花粉黛 (Cherry Blossom)
+   风格：柔和粉色调，浪漫温馨
+   适用场景：轻松创作，治愈氛围
+   ============================================ */
+
+/* -------------------- 全局变量定义 -------------------- */
+:root {
+    --primary: #f472b6;
+    --primary-dark: #ec4899;
+    --secondary: #f9a8d4;
+    --accent: #fbcfe8;
+    --success: #10b981;
+    --warning: #f59e0b;
+    --danger: #f43f5e;
+    --info: #06b6d4;
+    --bg-dark: #831843;
+    --bg-card: rgba(255, 255, 255, 0.04);
+    --text-main: #fdf2f8;
+    --text-muted: #f9a8d4;
+}
+
+/* -------------------- 主面板 -------------------- */
+.nc-panel {
+    background: linear-gradient(145deg, #831843 0%, #9d174d 50%, #be185d 100%) !important;
+    box-shadow: 0 25px 80px rgba(244, 114, 182, 0.25), 0 0 0 1px rgba(244, 114, 182, 0.15) !important;
+}
+
+/* -------------------- 面板标题 -------------------- */
+.nc-panel-title-text {
+    background: linear-gradient(90deg, #f472b6, #fbcfe8) !important;
+    -webkit-background-clip: text !important;
+}
+
+/* -------------------- 滚动条 -------------------- */
+.nc-scroll::-webkit-scrollbar-thumb {
+    background: rgba(244, 114, 182, 0.5) !important;
+}
+.nc-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(244, 114, 182, 0.8) !important;
+}
+
+/* -------------------- 卡片样式 -------------------- */
+.nc-card {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(244, 114, 182, 0.08) !important;
+}
+
+.nc-card--accent {
+    border-color: rgba(244, 114, 182, 0.3) !important;
+    background: rgba(244, 114, 182, 0.06) !important;
+}
+
+.nc-card-title {
+    color: #f9a8d4 !important;
+}
+
+/* -------------------- 按钮样式 -------------------- */
+.nc-btn-primary {
+    background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%) !important;
+    box-shadow: 0 3px 12px rgba(244, 114, 182, 0.35) !important;
+}
+
+.nc-btn-danger {
+    background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%) !important;
+}
+
+.nc-btn-secondary {
+    background: rgba(244, 114, 182, 0.1) !important;
+    border: 1px solid rgba(244, 114, 182, 0.2) !important;
+}
+
+/* -------------------- 浮动按钮 -------------------- */
+#nc-float-btn {
+    background: linear-gradient(135deg, #f472b6 0%, #ec4899 100%) !important;
+    box-shadow: 0 5px 18px rgba(244, 114, 182, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.2) !important;
+}
+
+/* -------------------- 树形菜单 -------------------- */
+.nc-tree-header {
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.nc-tree-header:hover {
+    background: rgba(244, 114, 182, 0.1) !important;
+    border-color: rgba(244, 114, 182, 0.3) !important;
+}
+
+.nc-tree-header.active {
+    background: rgba(244, 114, 182, 0.2) !important;
+    border-color: rgba(244, 114, 182, 0.5) !important;
+}
+
+.nc-tree-children {
+    border-left: 2px solid rgba(244, 114, 182, 0.2) !important;
+}
+
+.nc-tree-child-item.selected {
+    background: rgba(244, 114, 182, 0.25) !important;
+    border: 1px solid rgba(244, 114, 182, 0.5) !important;
+}
+
+/* -------------------- Agent复选框 -------------------- */
+.nc-agent-checkbox.required {
+    background: rgba(16, 185, 129, 0.15) !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+
+.nc-required-badge {
+    background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+}
+
+/* -------------------- Agent状态按钮 -------------------- */
+.nc-workflow-agent-btn {
+    background: rgba(244, 114, 182, 0.15) !important;
+    color: #f9a8d4 !important;
+    border: 1px solid rgba(244, 114, 182, 0.4) !important;
+}
+
+/* 运行中状态 */
+.nc-workflow-agent-btn[data-state="running"] {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+    border-color: #fbbf24 !important;
+    color: #831843 !important;
+    box-shadow: 0 0 15px rgba(251, 191, 36, 0.5) !important;
+}
+
+/* 完成状态 */
+.nc-workflow-agent-btn[data-state="completed"] {
+    background: linear-gradient(135deg, #34d399, #10b981) !important;
+    border-color: #34d399 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 15px rgba(52, 211, 153, 0.5) !important;
+}
+
+/* 错误状态 */
+.nc-workflow-agent-btn[data-state="error"] {
+    background: linear-gradient(135deg, #f43f5e, #e11d48) !important;
+    border-color: #f43f5e !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 15px rgba(244, 63, 94, 0.5) !important;
+}
+
+/* 等待依赖 */
+.nc-workflow-agent-btn[data-state="pending"] {
+    background: rgba(168, 85, 247, 0.2) !important;
+    border-color: #a855f7 !important;
+    color: #d8b4fe !important;
+}
+
+/* 等待输入 */
+.nc-workflow-agent-btn[data-state="waiting_input"] {
+    background: linear-gradient(135deg, #22d3ee, #06b6d4) !important;
+    border-color: #22d3ee !important;
+    color: #831843 !important;
+}
+
+/* 回流处理中 */
+.nc-workflow-agent-btn[data-state="reflow_processing"] {
+    background: linear-gradient(135deg, #e879f9, #d946ef) !important;
+    border-color: #e879f9 !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 20px rgba(232, 121, 249, 0.5) !important;
+}
+
+/* 回流等待 */
+.nc-workflow-agent-btn[data-state="reflow_waiting"] {
+    background: rgba(251, 207, 232, 0.15) !important;
+    border-color: rgba(251, 207, 232, 0.5) !important;
+    color: #fbcfe8 !important;
+}
+
+/* 废章按钮 */
+.nc-workflow-agent-btn.nc-discard-btn.has-discard {
+    background: linear-gradient(135deg, #f43f5e, #e11d48) !important;
+    border-color: #f43f5e !important;
+    color: white !important;
+}
+
+/* -------------------- Token统计 -------------------- */
+.nc-token-display {
+    background: rgba(0, 0, 0, 0.25) !important;
+}
+
+.nc-token-value {
+    color: #f472b6 !important;
+}
+
+.nc-token-last {
+    color: #fbcfe8 !important;
+}
+
+/* -------------------- 工具栏按钮 -------------------- */
+.nc-toolbar-btn {
+    background: rgba(244, 114, 182, 0.15) !important;
+    color: #fbcfe8 !important;
+    border: 1px solid rgba(244, 114, 182, 0.3) !important;
+}
+
+.nc-toolbar-btn:hover {
+    background: rgba(244, 114, 182, 0.25) !important;
+}
+
+/* -------------------- 章节信息 -------------------- */
+.nc-chapter-num {
+    color: #fbcfe8 !important;
+}
+
+/* -------------------- 模态框 -------------------- */
+.nc-modal {
+    background: #9d174d !important;
+}
+
+.nc-modal-body {
+    background: #831843 !important;
+    border: 1px solid rgba(244, 114, 182, 0.2) !important;
+}
+
+.nc-modal-close-btn {
+    background: #f472b6 !important;
+}
+
+.nc-modal-copy-btn {
+    background: #fbcfe8 !important;
+    color: #831843 !important;
+}
+
+/* -------------------- 历史面板 -------------------- */
+.nc-history-panel {
+    background: linear-gradient(145deg, #831843 0%, #9d174d 100%) !important;
+}
+
+/* -------------------- 状态条目 -------------------- */
+.nc-state-item {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-left: 3px solid #f472b6 !important;
+}
+
+.nc-state-header:hover,
+.nc-state-header.nc-state-open {
+    background: rgba(244, 114, 182, 0.2) !important;
+}
+
+/* -------------------- 章节列表项 -------------------- */
+.nc-chapter-item {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(244, 114, 182, 0.06) !important;
+}
+
+.nc-chapter-item:hover {
+    background: rgba(244, 114, 182, 0.08) !important;
+}
+
+/* -------------------- Markdown样式 -------------------- */
+.markdown-body blockquote {
+    border-left: 3px solid #f472b6 !important;
+}
+
+.markdown-body a {
+    color: #fbcfe8 !important;
+}
+
+/* -------------------- 标签页 -------------------- */
+.nc-tab.active {
+    color: #f472b6 !important;
+    background: rgba(244, 114, 182, 0.15) !important;
+}
+
+/* -------------------- 输入框 -------------------- */
+#nc-user-input {
+    border: 1px solid rgba(244, 114, 182, 0.25) !important;
+    background: rgba(0, 0, 0, 0.3) !important;
+}
+
+#nc-user-input:focus {
+    border-color: #f472b6 !important;
+}
+
+/* -------------------- Agent分组标题 -------------------- */
+.nc-agent-group-title::before {
+    background: #f472b6 !important;
+}
+
+/* -------------------- 工作流阶段 -------------------- */
+.nc-workflow-stage-mode {
+    background: rgba(244, 114, 182, 0.25) !important;
+    color: #fbcfe8 !important;
+}
+
+/* -------------------- 错误面板 -------------------- */
+.nc-error-panel {
+    background: #9d174d !important;
+    border: 1px solid #f43f5e !important;
+}
+
+.nc-error-panel .nc-error-list {
+    background: #831843 !important;
+    border: 1px solid rgba(244, 114, 182, 0.2) !important;
+}

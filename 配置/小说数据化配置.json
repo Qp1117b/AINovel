@@ -1,0 +1,199 @@
+{
+  "version": "1.0",
+  "description": "小说数据化专用配置",
+  "maxStateBooks": 50,
+  "stateTypeLimit": 20,
+  "maxConsecutiveReflows": 3,
+  "maxReflowDepth": 100,
+  "mode": "datafication",
+  "workflowStages": [
+    {
+      "stage": 4,
+      "id": "analysis",
+      "name": "分析层",
+      "color": "#ffa500",
+      "description": "负责章节内容结构化分析（元Agent）",
+      "agents": [
+        "W1"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 5,
+      "id": "summary",
+      "name": "概览层",
+      "color": "#1abc9c",
+      "description": "负责生成累积故事概览",
+      "agents": [
+        "S1"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 6,
+      "id": "state",
+      "name": "管理层",
+      "color": "#27ae60",
+      "description": "负责状态模板创建与更新",
+      "agents": [
+        "M1",
+        "M2"
+      ],
+      "mode": "serial"
+    }
+  ],
+  "agents": {
+    "W1": {
+      "name": "最终章节师",
+      "displayName": "最终章节师（数据化时跳过）",
+      "hover": "数据化模式下跳过生成，直接使用导入的原始章节",
+      "role": "finalChapter",
+      "stage": "analysis",
+      "order": 1,
+      "required": true,
+      "parallel": false,
+      "inputs": [],
+      "inputTemplate": "（此Agent在数据化模式下会被跳过）",
+      "inputMode": [],
+      "autoConfig": [],
+      "inputPrompts": [],
+      "outputs": [],
+      "description": "数据化模式下直接使用原始章节内容",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "apiConfigId": "",
+      "review": false
+    },
+    "S1": {
+      "name": "剧情概览师",
+      "displayName": "剧情概览师",
+      "hover": "根据章节分析和上一章概览，更新累积故事概览。",
+      "role": "storySummarizer",
+      "stage": "summary",
+      "order": 11,
+      "required": true,
+      "parallel": false,
+      "inputs": [
+        "W1",
+        "S1.last"
+      ],
+      "inputTemplate": "你现在是剧情概览师。请根据本章的章节分析报告和上一章的累积故事概览，生成更新后的累积故事概览。概览应包含核心剧情进展、主要人物变化、未解决悬念、情感基调演变。\n\n本章章节分析报告：\n【】\n\n上一章累积概览（若无则为空）：\n【】\n\n请生成更新后的累积故事概览，使用Markdown格式，保持结构清晰。",
+      "inputMode": [
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "上一章的概览"
+      ],
+      "outputs": [
+        "累积故事概览"
+      ],
+      "description": "基于章节分析更新累积故事概览",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "apiConfigId": "",
+      "review": false
+    },
+    "M1": {
+      "name": "状态优化师",
+      "displayName": "状态优化师",
+      "hover": "分析本章故事概览、上一章正文和本章正文，创建或优化状态模板。",
+      "role": "optimizer",
+      "stage": "state",
+      "order": 42,
+      "required": true,
+      "parallel": false,
+      "inputs": [
+        "S1",
+        "W1.last",
+        "W1"
+      ],
+      "inputTemplate": "你现在是状态优化师。请根据本章故事概览、上一章正文、本章正文，分析状态模板并提出优化建议。如果状态模板不存在，请基于这些信息创建必要的模板。\n\n输出格式必须严格遵循以下规范：\n---需调整的状态模板---\n书号-条目uid：模板内容\n属性配置行\n...\n\n本章故事概览：\n【】\n\n上一章正文：\n【】\n\n本章正文：\n【】\n\n请提出优化建议。注意：字段值必须为占位符，不得出现具体故事数值。新增模板时，必须包含完整的属性配置（id、constant、key等）。",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        ""
+      ],
+      "outputs": [
+        "状态优化建议"
+      ],
+      "description": "优化状态模板体系，输出调整指令",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "apiConfigId": "",
+      "review": false
+    },
+    "M2": {
+      "name": "状态维护师",
+      "displayName": "状态维护师",
+      "hover": "根据本章故事概览、上一章正文和本章正文（含原始状态草稿），为所有状态书生成续写锁定协议。",
+      "role": "updater",
+      "stage": "state",
+      "order": 43,
+      "required": true,
+      "parallel": false,
+      "inputs": [
+        "S1",
+        "W1.last",
+        "W1"
+      ],
+      "inputTemplate": "你现在是状态维护师。请根据本章故事概览、上一章正文、本章正文（含原始状态草稿），为每本状态书生成续写锁定协议。\n\n输出格式必须严格遵循：\n===第X章续写锁定协议===\n\n**类别1:类别名称**\n- 字段名1: 值（变化说明）\n...\n\n本章故事概览：\n【】\n\n上一章正文：\n【】\n\n本章正文（含原始状态草稿）：\n【】\n\n请生成协议。注意：字段值必须为实际数值，变化说明需清晰。",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        ""
+      ],
+      "outputs": [
+        "续写锁定协议"
+      ],
+      "description": "基于章节正文和故事概览生成续写锁定协议，更新状态书",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "apiConfigId": "",
+      "review": false
+    }
+  },
+  "categories": {
+    "qualitystage": {
+      "name": "质量分层",
+      "description": "选择创作质量标准（数据化模式下无效）",
+      "selectionMode": "single",
+      "options": {
+        "minimal": {
+          "name": "极简模式",
+          "icon": "⚡",
+          "agents": [],
+          "description": "无"
+        }
+      }
+    }
+  },
+  "categoryGroups": [],
+  "extensions": {},
+  "apiConfigs": {}
+}

@@ -1,0 +1,473 @@
+{
+  "version": "2.0",
+  "description": "互动小说自动化创作系统完整配置（无图像生成，仅保留互动核心Agent）- 三Agent并行排版版",
+  "mode": "interactive",
+  "maxStateBooks": 3,
+  "stateTypeLimit": 30,
+  "maxImagesPerBook": 30,
+  "maxAudiosPerBook": 30,
+  "maxConsecutiveReflows": 3,
+  "maxReflowDepth": 100,
+  "apiConfigs": {},
+  "agents": {
+    "P1": {
+      "name": "通用生成器",
+      "displayName": "剧情策划师",
+      "hover": "根据用户需求和上一章概览策划本章剧情走向",
+      "stage": "planning",
+      "order": 3,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "user",
+        "S1.last"
+      ],
+      "inputTemplate": "【职能】你现在是剧情策划师，请根据用户的输入和上一章的累积故事概览，策划本章的剧情走向和关键事件。\n\n【职能规则】1. 输出应包含本章的核心冲突、人物发展目标、悬念设置；2. 保持与故事概览的逻辑连贯，并充分考虑用户的输入。\n\n【唯一输出格式】\n===剧情策划===\n核心冲突：\n\n人物发展目标：\n\n悬念设置：\n\n\n【输入】\n用户需求：\n【】\n上一章概览：\n【】\n\n请严格按照格式输出。",
+      "inputMode": [
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "请输入本章的剧情想法（例如：主角遇到危险、感情升温等）",
+        ""
+      ],
+      "description": "策划本章剧情（用户参与）",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "",
+      "review": false
+    },
+    "R1": {
+      "name": "通用生成器",
+      "displayName": "互动小说规则设计师",
+      "hover": "根据剧情策划和概览设计本章交互规则（JSON格式）",
+      "stage": "planning",
+      "order": 6,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "P1",
+        "S1.last"
+      ],
+      "inputTemplate": "【职能】你现在是互动小说规则设计师，请根据以下剧情策划和上一章累积故事概览，设计本章的交互规则。输出必须为严格的JSON格式，包含两部分：`controls` 数组（定义每个交互使用的控件类型和配置）和 `effects` 数组（定义每个交互的效果范围、描述和状态变化）。\n\n【支持的控件类型】\n- `choice`：选项按钮组，配置为 `{\"options\": [\"选项1\", \"选项2\"]}`\n- `dice`：掷骰子，配置为 `{\"range\": \"1-6\"}`（或 `\"1-100\"` 等）\n- `input`：文本输入，配置为 `{\"prompt\": \"提示语\", \"placeholder\": \"占位符\"}`\n- `slider`：滑块，配置为 `{\"min\": 0, \"max\": 100, \"step\": 1, \"default\": 50}`\n- `timer`：计时器，配置为 `{\"seconds\": 30}`\n- `confirm`：确认对话框，配置为 `{\"title\": \"标题\", \"message\": \"消息\", \"confirmText\": \"确认\", \"cancelText\": \"取消\"}`\n- `toggle`：开关，配置为 `{\"onText\": \"开启\", \"offText\": \"关闭\", \"default\": true}`\n\n【职能规则】\n1. `controls` 数组中的每个元素必须包含 `type` 和 `config` 字段，`type` 必须是上述支持的类型之一，`config` 为对应配置对象。\n2. `effects` 数组中的每个元素必须包含 `range`（字符串，如 \"1-2\"）、`description`（描述文本）、`stateChanges`（对象，点号表示嵌套属性，如 `{\"好感度\": 5}`）。\n3. 如果某个交互没有对应的效果（如纯推进剧情），可省略 `effects` 中的对应项。\n4. 输出仅JSON对象，不要包含任何额外文字。\n\n【唯一输出格式】\n{\n  \"controls\": [\n    {\"type\": \"choice\", \"config\": {\"options\": [\"约她出去玩\", \"保持沉默\"]}},\n    {\"type\": \"dice\", \"config\": {\"range\": \"1-6\"}}\n  ],\n  \"effects\": [\n    {\"range\": \"1-2\", \"description\": \"受伤\", \"stateChanges\": {\"体力\": -10}},\n    {\"range\": \"3-6\", \"description\": \"躲避成功\", \"stateChanges\": {}}\n  ]\n}\n\n【输入】\n剧情策划：\n【】\n上一章累积故事概览：\n【】\n\n请严格按照上述格式输出JSON。",
+      "inputMode": [
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        ""
+      ],
+      "description": "设计本章交互规则，包含控件类型和效果",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "",
+      "review": false
+    },
+    "W1": {
+      "name": "通用生成器",
+      "displayName": "互动小说场景师",
+      "hover": "根据规则、概览和上一轮选择生成【画面】【正文】【交互描述】",
+      "stage": "writing",
+      "order": 10,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "R1",
+        "S1.last"
+      ],
+      "inputTemplate": "【职能】你现在是互动小说场景师，负责根据交互规则、上一章累积故事概览和玩家上一轮选择，生成当前场景的【画面】视觉描述、【正文】故事叙述和【交互描述】。\n\n【职能规则】1. 输出必须严格分为三部分，用空行分隔；2. 【画面】描述必须包含位置、光影、相对大小等视觉细节，不得包含文字对话；3. 【正文】必须遵循第四面墙原则，不得提及玩家或交互，可分段；4. 【交互描述】必须包含触发时机、类型、选项等，格式严格参照模板；5. 所有部分必须完整。\n\n【唯一输出格式】\n【画面】\n（画面描述）\n\n【正文】\n（故事文本，可分段）\n\n【交互描述】\n触发时机: [时机]\n类型: [类型]\n选项:\n- [选项1]\n- [选项2]\n范围: [仅dice]\n提示: [仅dialogue或dice]\n时限: [仅timer]\n（请严格按照此格式，不得添加额外字段）\n\n【输出示例】\n【画面】\n背景：学校天台，黄昏，夕阳从右侧照射...\n【正文】\n你站在天台...\n【交互描述】\n触发时机: 对话后\n类型: choice\n选项:\n- 约她出去玩\n- 保持沉默\n\n【输入】\n交互规则：\n【】\n上一章累积故事概览：\n【】\n\n请严格按照上述格式生成场景。",
+      "inputMode": [
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        ""
+      ],
+      "description": "生成场景核心内容",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "finalChapter",
+      "review": false
+    },
+    "T_html": {
+      "name": "通用生成器",
+      "displayName": "HTML框架师",
+      "hover": "生成语义化HTML骨架，包含控件容器、资源引用和JS库引用",
+      "stage": "typeset",
+      "order": 30,
+      "required": true,
+      "parallel": true,
+      "apiConfigId": "",
+      "inputs": [
+        "W1"
+      ],
+      "inputTemplate": "【职能】你现在是HTML框架师，请根据以下场景师输出，生成一个语义化的HTML骨架，严格遵循下述规范。\n\n【职能规则】\n1. 必须包含根容器 `<div id=\"scene-root\" data-scene-id=\"第X章\">`，其中“X”为当前章节号（可从上下文中推断）。\n2. 视觉描述层（可选）：如果场景师输出包含【画面】部分，将其文本放入 `<div data-id=\"visual-text\">` 中。\n3. 文本段落层（可选）：如果【正文】包含多个段落，用 `<div data-id=\"paragraphs\">` 包裹每个段落（用 `<p>`）。\n4. **图片和音频引用**：如果需要展示图片或播放音频，请在适当位置插入以下标签，使用 `id:` 协议引用资源ID（资源ID由场景师或其他Agent提供）：\n   - 图片：`<img src=\"id:图片ID\" alt=\"图片描述\">`\n   - 音频：`<audio src=\"id:音频ID\" controls preload=\"auto\"></audio>` 或 `<audio autoplay loop><source src=\"id:音频ID\" type=\"audio/mpeg\"></audio>`\n5. 控件容器：根据【交互描述】生成对应的控件容器，每个容器必须包含 `data-control-type` 和 `data-config` 属性，且容器内初始为空。支持的控件类型和配置格式如下：\n   - 选项按钮组：`<div data-control-type=\"choice\" data-config='{\"options\":[\"选项1\",\"选项2\"]}'></div>`\n   - 掷骰子：`<div data-control-type=\"dice\" data-config='{\"range\":\"1-6\"}'></div>`\n   - 文本输入：`<div data-control-type=\"input\" data-config='{\"prompt\":\"输入你的名字：\",\"placeholder\":\"例如：林夏\"}'></div>`\n   - 滑块：`<div data-control-type=\"slider\" data-config='{\"min\":0,\"max\":100,\"step\":1,\"default\":50}'></div>`\n   - 计时器：`<div data-control-type=\"timer\" data-config='{\"seconds\":30}'></div>`\n   - 确认对话框：`<div data-control-type=\"confirm\" data-config='{\"title\":\"确认\",\"message\":\"确定吗？\",\"confirmText\":\"是\",\"cancelText\":\"否\"}'></div>`\n   - 开关：`<div data-control-type=\"toggle\" data-config='{\"onText\":\"开启\",\"offText\":\"关闭\",\"default\":true}'></div>`\n6. 必须包含对JS控件库的引用，放在根容器末尾：`<script src=\"id:txt_control\"></script>`\n7. 不得包含任何 `<style>` 标签、内联样式或额外的 `<script>` 标签。\n\n【唯一输出格式】纯HTML片段（不要包含`<!DOCTYPE>`、`<html>`、`<head>`、`<body>`）。\n\n【输出示例】\n<div id=\"scene-root\" data-scene-id=\"第1章\">\n  <div data-id=\"visual-text\">黄昏的天台，夕阳斜照...</div>\n  <img src=\"id:img_背景_001\" alt=\"天台背景\">\n  <div data-id=\"paragraphs\">\n    <p>第一段内容...</p>\n    <p>第二段内容...</p>\n  </div>\n  <audio autoplay loop>\n    <source src=\"id:audio_背景音乐\" type=\"audio/mpeg\">\n  </audio>\n  <div data-control-type=\"choice\" data-config='{\"options\":[\"约她出去玩\",\"保持沉默\"]}'></div>\n  <div data-control-type=\"dice\" data-config='{\"range\":\"1-6\"}'></div>\n  <script src=\"id:txt_control\"></script>\n</div>\n\n【输入】\n【】",
+      "inputMode": [
+        "txt"
+      ],
+      "autoConfig": [
+        0
+      ],
+      "inputPrompts": [
+        ""
+      ],
+      "description": "生成语义化HTML骨架，支持图片、音频和控件",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "saver",
+      "review": false
+    },
+    "T_css": {
+      "name": "通用生成器",
+      "displayName": "CSS样式师",
+      "hover": "根据剧情生成自定义CSS样式，覆盖所有控件",
+      "stage": "typeset",
+      "order": 31,
+      "required": true,
+      "parallel": true,
+      "apiConfigId": "",
+      "inputs": [
+        "W1"
+      ],
+      "inputTemplate": "【职能】你现在是CSS样式师，请根据以下场景师输出，生成本章的自定义CSS样式，以 `<style>` 标签形式输出。样式应根据本章实际出现的控件类型进行定制，避免不必要的冗余，同时确保文本样式清晰。你可自由设计以匹配剧情氛围。\\n\\n【输入说明】\\n输入是场景师（W1）的输出，包含【画面】、【正文】、【交互描述】三部分。请重点分析【交互描述】来确定本章所需的控件类型。\\n\\n【职能规则】\\n1. **控件样式范围**：\\n   - 从场景师输出的【交互描述】中识别本章实际出现的控件类型（如选项按钮组、掷骰子、文本输入、滑块、计时器、确认对话框、开关）。**仅对这些出现过的控件类型生成样式**，未出现的控件不要生成，以减小CSS体积。\\n   - 如果本章未出现任何交互控件，则只生成根容器和文本样式。\\n\\n   **必须为以下核心元素定义样式（无论控件出现与否）**：\\n   - **根容器** `#scene-root`：定义全局字体、背景色、内边距等，确保页面基调。\\n   - **文本样式**：为视觉描述容器 `[data-id=\\\"visual-text\\\"]` 和段落容器 `[data-id=\\\"paragraphs\\\"] p` 定义样式，确保文本清晰美观，符合本章氛围（如字体大小、行高、颜色、文字阴影等）。\\n   - **通用按钮** `.gal-btn`：因为所有交互控件都使用 `.gal-btn` 作为按钮的基础类，且可能包含系统按钮（如“跳过”），建议保留对 `.gal-btn` 的基本样式（基础、悬停、点击状态），即使本章没有控件。如果确实没有按钮，可酌情省略。\\n\\n2. **样式必须包含**：\\n   - 基础状态（normal）\\n   - 悬停状态（hover）\\n   - 点击/激活状态（active）（适用于按钮类）\\n   - 必要的动画（如淡入、滑入、脉冲等）**可适当简化**，避免过度复杂，除非剧情氛围特别需要。\\n   - 尽量使用CSS变量（如 `--primary-color`, `--bg-color`, `--text-color`）以便整体调色和复用。\\n\\n3. **根容器样式**：\\n   - 可为 `#scene-root` 定义全局字体、背景色、内边距等，确保所有控件继承基础样式。\\n\\n4. **创意自由**：\\n   - 根据场景师输出的【画面】描述，可设计独特的配色方案（如黄昏暖色调、冷峻科技感等）。\\n   - 动画可以借鉴视觉小说常见效果（如文字淡入、按钮呼吸、滑块流光）。\\n\\n5. **输出格式**：\\n   - 必须输出完整的 `<style>` 标签，内含所有CSS规则。\\n   - 不要包含任何HTML或JavaScript。\\n\\n【唯一输出格式】\\n<style>\\n/* 在此编写所有CSS规则，按控件类型分组，并添加注释说明 */\\n</style>\\n\\n【输出示例】\\n<style>\\n/* 根容器 */\\n#scene-root {\\n  background: linear-gradient(145deg, #1a1a2e, #16213e);\\n  color: #eaeaea;\\n  font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;\\n  padding: 20px;\\n}\\n\\n/* 文本样式 */\\n[data-id=\\\"visual-text\\\"] {\\n  font-size: 1.2rem;\\n  line-height: 1.6;\\n  color: #f0e6d2;\\n  text-shadow: 0 2px 4px rgba(0,0,0,0.5);\\n}\\n[data-id=\\\"paragraphs\\\"] p {\\n  margin: 1em 0;\\n  font-size: 1rem;\\n  line-height: 1.8;\\n}\\n\\n/* 通用按钮 */\\n.gal-btn {\\n  background: rgba(102, 126, 234, 0.2);\\n  backdrop-filter: blur(4px);\\n  border: 1px solid rgba(255,255,255,0.2);\\n  border-radius: 40px;\\n  color: white;\\n  padding: 10px 28px;\\n  font-size: 1rem;\\n  font-weight: 600;\\n  cursor: pointer;\\n  transition: all 0.25s ease;\\n}\\n.gal-btn:hover {\\n  background: rgba(102, 126, 234, 0.4);\\n  border-color: #667eea;\\n  transform: translateY(-2px);\\n}\\n.gal-btn:active {\\n  transform: translateY(0);\\n}\\n\\n/* 根据实际控件动态生成的样式（例如本章有选项按钮组） */\\n.choice-container {\\n  display: flex;\\n  flex-wrap: wrap;\\n  gap: 12px;\\n  justify-content: center;\\n  margin: 20px 0;\\n}\\n</style>\\n\\n【输入】\\n【】",
+      "inputMode": [
+        "txt"
+      ],
+      "autoConfig": [
+        0
+      ],
+      "inputPrompts": [
+        ""
+      ],
+      "description": "生成自定义CSS样式",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "saver",
+      "review": false
+    },
+    "IA": {
+      "name": "通用生成器",
+      "displayName": "互动小说交互代理",
+      "hover": "显示HTML、等待交互、返回用户操作结果",
+      "stage": "interaction",
+      "order": 35,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "T_css",
+        "T_html",
+        "user"
+      ],
+      "inputTemplate": "【职能】你现在是互动小说交互代理，唯一任务是将接收到的用户操作结果原样输出，不进行任何分析或修改。\n\n【职能规则】1. 直接输出用户输入的内容；2. 不得添加任何额外文字、解释、分析或格式；3. 输出仅为纯文本，不得包含HTML或Markdown。\n\n【唯一输出格式】原样输出用户输入内容，例如用户输入\"[选择: 约她出去玩]\"，则输出\"[选择: 约她出去玩]\"。\n\n【输出示例】\n输入：[选择: 约她出去玩]\n输出：[选择: 约她出去玩]\n\n【输入】\nCSS样式：\n【】\nHTML骨架：\n【】\n玩家操作结果：\n【】\n\n请直接输出玩家操作结果，不要包含任何其他内容。",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        "等待用户交互..."
+      ],
+      "description": "处理交互并返回用户操作",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "interactiveAgent",
+      "review": false
+    },
+    "IA2": {
+      "name": "通用生成器",
+      "displayName": "交互分析师",
+      "hover": "根据用户操作、规则和正文生成带状态草稿的分析文本",
+      "stage": "analysis",
+      "order": 40,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "IA",
+        "R1",
+        "W1"
+      ],
+      "inputTemplate": "【职能】你现在是交互分析师，请根据用户操作结果、交互规则和场景正文，生成分析文本，将用户操作自然融入剧情，并在末尾包含原始状态草稿。\n\n【职能规则】1. 分析文本必须与正文自然衔接，不得出现“你选择了”等玩家指向语句；2. 原始状态草稿以“===原始状态草稿===”开头，列出所有状态变化（基于规则中的stateChanges）；3. 输出仅为纯文本，不得包含额外解释。\n\n【唯一输出格式】\n（分析文本，包含剧情推进、人物反应等）\n\n===原始状态草稿===\n- 状态1变化\n- 状态2变化\n...\n\n【输出示例】\n你站在天台，灵梦微笑着看着你。你鼓起勇气邀请她出去玩，她脸颊微红，点了点头。\n===原始状态草稿===\n- 灵梦好感度+2\n\n【输入】\n用户操作结果：\n【】\n交互规则：\n【】\n场景正文：\n【】\n\n请生成分析文本。",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        ""
+      ],
+      "description": "生成带原始状态草稿的分析文本",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "",
+      "review": false
+    },
+    "S1": {
+      "name": "剧情概览师",
+      "displayName": "剧情概览师",
+      "hover": "生成累积故事概览",
+      "stage": "summary",
+      "order": 45,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "W1",
+        "S1.last",
+        "IA2"
+      ],
+      "inputTemplate": "你现在是剧情概览师。根据当前场景、上一章概览和交互分析文本，更新累积故事概览。\n\n当前场景：\n【】\n上一章概览：\n【】\n交互分析：\n【】\n\n请生成更新后的累积故事概览，包含核心剧情、人物变化、未解决悬念、情感基调。",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        ""
+      ],
+      "description": "",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "storySummarizer",
+      "review": false
+    },
+    "M1": {
+      "name": "状态优化师",
+      "displayName": "状态优化师",
+      "hover": "优化状态模板体系",
+      "stage": "state_opt",
+      "order": 50,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "S1.last"
+      ],
+      "inputTemplate": "你现在是状态优化师。请根据当前故事概览，分析状态模板并提出优化建议。\n\n输出格式必须严格遵循以下规范：\n---需调整的状态模板---\n书号-条目uid：模板内容\n属性配置行\n...\n\n故事概览：\n【】\n\n请提出优化建议。",
+      "inputMode": [
+        "txt"
+      ],
+      "autoConfig": [
+        0
+      ],
+      "inputPrompts": [
+        ""
+      ],
+      "description": "",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "optimizer",
+      "review": false
+    },
+    "M2": {
+      "name": "状态维护师",
+      "displayName": "状态维护师",
+      "hover": "更新状态书（好感度、flag等）",
+      "stage": "state_maint",
+      "order": 55,
+      "required": true,
+      "parallel": false,
+      "apiConfigId": "",
+      "inputs": [
+        "S1.last",
+        "W1",
+        "IA2"
+      ],
+      "inputTemplate": "你现在是状态维护师。根据当前故事概览、最终章节内容和交互分析文本，更新状态书。\n\n故事概览：\n【】\n最终章节内容：\n【】\n交互分析：\n【】\n\n请为当前状态书生成续写锁定协议，格式如下：\n===续写锁定协议===\n\n**类别1:好感度**\n- 灵梦好感: 值（变化说明）\n- 魔理沙好感: 值（变化说明）\n\n**类别2:剧情flag**\n- flagA: 值（变化说明）\n...",
+      "inputMode": [
+        "txt",
+        "txt",
+        "txt"
+      ],
+      "autoConfig": [
+        0,
+        0,
+        0
+      ],
+      "inputPrompts": [
+        "",
+        "",
+        ""
+      ],
+      "description": "",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "role": "updater",
+      "review": false
+    }
+  },
+  "workflowStages": [
+    {
+      "stage": 1,
+      "id": "planning",
+      "name": "策划（用户参与）",
+      "color": "#9b59b6",
+      "mode": "serial",
+      "agents": [
+        "P1",
+        "R1"
+      ],
+      "description": "负责整体剧情策划与规则设计"
+    },
+    {
+      "stage": 2,
+      "id": "writing",
+      "name": "场景创作",
+      "color": "#f39c12",
+      "mode": "serial",
+      "agents": [
+        "W1"
+      ],
+      "description": "生成场景文本"
+    },
+    {
+      "stage": 3,
+      "id": "typeset",
+      "name": "排版（并行）",
+      "color": "#1abc9c",
+      "mode": "parallel",
+      "agents": [
+        "T_html",
+        "T_css"
+      ],
+      "description": "生成HTML骨架和CSS样式（并行）"
+    },
+    {
+      "stage": 4,
+      "id": "interaction",
+      "name": "交互",
+      "color": "#e74c3c",
+      "mode": "serial",
+      "agents": [
+        "IA"
+      ],
+      "description": "处理用户交互"
+    },
+    {
+      "stage": 5,
+      "id": "analysis",
+      "name": "分析",
+      "color": "#ff8c00",
+      "mode": "serial",
+      "agents": [
+        "IA2"
+      ],
+      "description": "生成带状态草稿的分析文本"
+    },
+    {
+      "stage": 6,
+      "id": "summary",
+      "name": "概览",
+      "color": "#3498db",
+      "mode": "serial",
+      "agents": [
+        "S1"
+      ],
+      "description": "生成累积故事概览"
+    },
+    {
+      "stage": 7,
+      "id": "state_opt",
+      "name": "优化",
+      "color": "#27ae60",
+      "mode": "serial",
+      "agents": [
+        "M1"
+      ],
+      "description": "状态优化"
+    },
+    {
+      "stage": 8,
+      "id": "state_maint",
+      "name": "维护",
+      "color": "#27ae60",
+      "mode": "serial",
+      "agents": [
+        "M2"
+      ],
+      "description": "状态维护"
+    }
+  ],
+  "categories": {
+    "chapterType": {
+      "name": "章节类型",
+      "description": "选择本章的类型",
+      "selectionMode": "single",
+      "options": {
+        "normal": {
+          "name": "普通剧情",
+          "description": "推进主线或日常",
+          "icon": "📖",
+          "agents": [
+            "R1",
+            "W1",
+            "T_html",
+            "T_css",
+            "IA",
+            "IA2",
+            "S1",
+            "M1",
+            "M2"
+          ]
+        },
+        "event": {
+          "name": "重要事件",
+          "description": "关键剧情节点",
+          "icon": "⚡",
+          "agents": [
+            "R1",
+            "W1",
+            "T_html",
+            "T_css",
+            "IA",
+            "IA2",
+            "S1",
+            "M1",
+            "M2"
+          ]
+        }
+      }
+    }
+  },
+  "categoryGroups": [],
+  "extensions": {}
+}
