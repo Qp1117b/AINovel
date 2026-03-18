@@ -17,7 +17,6 @@
       "stage": "planning",
       "order": 3,
       "required": true,
-      "parallel": false,
       "apiConfigId": "",
       "inputs": [
         "user",
@@ -49,13 +48,12 @@
       "stage": "planning",
       "order": 6,
       "required": true,
-      "parallel": false,
       "apiConfigId": "",
       "inputs": [
         "P1",
         "S1.last"
       ],
-      "inputTemplate": "【职能】你现在是互动小说规则设计师，请根据以下剧情策划和上一章累积故事概览，设计本章的交互规则。输出必须为严格的JSON格式，包含两部分：`controls` 数组（定义每个交互使用的控件类型和配置）和 `effects` 数组（定义每个交互的效果范围、描述和状态变化）。\n\n【支持的控件类型】\n- `choice`：选项按钮组，配置为 `{\"options\": [\"选项1\", \"选项2\"]}`\n- `dice`：掷骰子，配置为 `{\"range\": \"1-6\"}`（或 `\"1-100\"` 等）\n- `input`：文本输入，配置为 `{\"prompt\": \"提示语\", \"placeholder\": \"占位符\"}`\n- `slider`：滑块，配置为 `{\"min\": 0, \"max\": 100, \"step\": 1, \"default\": 50}`\n- `timer`：计时器，配置为 `{\"seconds\": 30}`\n- `confirm`：确认对话框，配置为 `{\"title\": \"标题\", \"message\": \"消息\", \"confirmText\": \"确认\", \"cancelText\": \"取消\"}`\n- `toggle`：开关，配置为 `{\"onText\": \"开启\", \"offText\": \"关闭\", \"default\": true}`\n\n【职能规则】\n1. `controls` 数组中的每个元素必须包含 `type` 和 `config` 字段，`type` 必须是上述支持的类型之一，`config` 为对应配置对象。\n2. `effects` 数组中的每个元素必须包含 `range`（字符串，如 \"1-2\"）、`description`（描述文本）、`stateChanges`（对象，点号表示嵌套属性，如 `{\"好感度\": 5}`）。\n3. 如果某个交互没有对应的效果（如纯推进剧情），可省略 `effects` 中的对应项。\n4. 输出仅JSON对象，不要包含任何额外文字。\n\n【唯一输出格式】\n{\n  \"controls\": [\n    {\"type\": \"choice\", \"config\": {\"options\": [\"约她出去玩\", \"保持沉默\"]}},\n    {\"type\": \"dice\", \"config\": {\"range\": \"1-6\"}}\n  ],\n  \"effects\": [\n    {\"range\": \"1-2\", \"description\": \"受伤\", \"stateChanges\": {\"体力\": -10}},\n    {\"range\": \"3-6\", \"description\": \"躲避成功\", \"stateChanges\": {}}\n  ]\n}\n\n【输入】\n剧情策划：\n【】\n上一章累积故事概览：\n【】\n\n请严格按照上述格式输出JSON。",
+      "inputTemplate": "【职能】你现在是互动小说规则设计师，请根据以下剧情策划和上一章累积故事概览，设计本章的交互规则。输出必须为严格的JSON格式，包含两部分：`controls` 数组（定义每个交互使用的控件类型和配置）和 `effects` 数组（定义每个交互的效果范围、描述和状态变化）。\n\n【支持的控件类型】\n- `choice`：选项按钮组，配置为 `{\"options\": [\"选项1\", \"选项2\"]}`\n- `dice`：掷骰子，配置为 `{\"range\": \"1-6\"}`（或 `\"1-100\"` 等）\n- `input`：文本输入，配置为 `{\"prompt\": \"提示语\", \"placeholder\": \"占位符\"}`\n- `slider`：滑块，配置为 `{\"min\": 0, \"max\": 100, \"step\": 1, \"default\": 50}`\n- `timer`：计时器，配置为 `{\"seconds\": 30}`\n- `confirm`：确认对话框，配置为 `{\"title\": \"标题\", \"message\": \"消息\", \"confirmText\": \"确认\", \"cancelText\": \"取消\"}`\n- `toggle`：开关，配置为 `{\"onText\": \"开启\", \"offText\": \"关闭\", \"default\": true}`\n\n【职能规则】\n1. `controls` 数组中的每个元素必须包含 `type` 和 `config` 字段，`type` 必须是上述支持的类型之一，`config` 为对应配置对象。\n2. `effects` 数组中的每个元素必须包含 `range`（字符串，如 \"1-2\"）、`description`（描述文本）、`stateChanges`（对象，点号表示嵌套属性，如 `{\"好感度\": 5}`）。\n3. 如果某个交互没有对应的效果（如纯推进剧情），可省略 `effects` 中的对应项。\n4. 输出仅JSON对象，不要包含任何额外文字。\n5. 每次只设计一个控件\n\n【唯一输出格式】\n{\n  \"controls\": [\n    {\"type\": \"choice\", \"config\": {\"options\": [\"约她出去玩\", \"保持沉默\"]}}\n  ],\n  \"effects\": [\n    {\"range\": \"1-2\", \"description\": \"受伤\", \"stateChanges\": {\"体力\": -10}}\n  ]\n}\n\n【输入】\n剧情策划：\n【】\n上一章累积故事概览：\n【】\n\n请严格按照上述格式输出JSON。",
       "inputMode": [
         "txt",
         "txt"
@@ -81,7 +79,6 @@
       "stage": "writing",
       "order": 10,
       "required": true,
-      "parallel": false,
       "apiConfigId": "",
       "inputs": [
         "R1",
@@ -113,7 +110,6 @@
       "stage": "typeset",
       "order": 30,
       "required": true,
-      "parallel": true,
       "apiConfigId": "",
       "inputs": [
         "W1"
@@ -141,7 +137,6 @@
       "stage": "typeset",
       "order": 31,
       "required": true,
-      "parallel": true,
       "apiConfigId": "",
       "inputs": [
         "W1"
@@ -169,7 +164,6 @@
       "stage": "interaction",
       "order": 35,
       "required": true,
-      "parallel": false,
       "apiConfigId": "",
       "inputs": [
         "T_css",
@@ -205,7 +199,6 @@
       "stage": "analysis",
       "order": 40,
       "required": true,
-      "parallel": false,
       "apiConfigId": "",
       "inputs": [
         "IA",
@@ -241,7 +234,6 @@
       "stage": "summary",
       "order": 45,
       "required": true,
-      "parallel": false,
       "apiConfigId": "",
       "inputs": [
         "W1",
@@ -277,7 +269,6 @@
       "stage": "state_opt",
       "order": 50,
       "required": true,
-      "parallel": false,
       "apiConfigId": "",
       "inputs": [
         "S1.last"
@@ -305,7 +296,6 @@
       "stage": "state_maint",
       "order": 55,
       "required": true,
-      "parallel": false,
       "apiConfigId": "",
       "inputs": [
         "S1.last",

@@ -17,12 +17,154 @@
 (function () {
     'use strict';
 
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 01：全局常量与配置                                          ║
+    // ║  CONFIG 配置对象与预定义角色列表                                  ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 配置 ====================
+
+    const CONFIG = {
+        VERSION: '1.0',
+        NAME: '自动化小说创作系统',
+
+        WORLD_BOOK_NAME: '状态书',
+        SETTING_BOOK_NAME: '设定书',
+        STATE_ENTRY_PREFIX: '状态-',
+        STATE_BOOK_PREFIX: '状态书-',
+        STATE_TEMPLATE_PREFIX: '状态模板-',
+        MAX_STATE_BOOKS: 5,
+        STATE_TYPE_LIMIT: 20,
+        MAX_IMAGES_PER_BOOK: 20,
+        MAX_AUDIOS_PER_BOOK: 20,
+
+        // 新增：回流次数控制
+        MAX_CONSECUTIVE_REFLOWS: 3,    // 同一源连续触发同一目标的最大次数
+        MAX_REFLOOP_DEPTH: 100,        // 全局回流处理的最大迭代次数
+
+        STORAGE_KEY: 'novel_creator_chapters_v1',
+        SETTINGS_KEY: 'novel_creator_settings_v1',
+        STORAGE: {
+            maxChapters: 10000,
+            warningThreshold: 10000,
+            criticalThreshold: 10000
+        },
+
+        AGENT_SWITCH_DELAY: 1000,
+        MAX_PROGRESS_LINES: 500,
+
+        PROTOCOL_PATTERN: /===第([^章]+)章续写锁定协议===([\s\S]*?)(?:===|$)/,
+        CHAPTER_PREFIX_RE: /^(?:第?\d+章|第?(?:[零一二三四五六七八九十百千万]+)章)[\s:：]*/,
+
+        UI: {
+            panelId: 'nc-panel',
+            overlayId: 'nc-overlay',
+            historyPanelId: 'nc-history-panel',
+            historyOverlayId: 'nc-history-overlay',
+            buttonId: 'nc-float-btn'
+        },
+
+        AGENT_STATUS_COLORS: {
+            idle: {
+                bg: 'rgba(102, 126, 234, 0.15)',
+                border: 'rgba(102, 126, 234, 0.4)',
+                text: '#667eea',
+                glow: 'none'
+            },
+            running: {
+                bg: 'rgba(245, 158, 11, 0.15)',
+                border: '#f59e0b',
+                text: '#fbbf24',
+                glow: '0 0 15px rgba(245, 158, 11, 0.3)'
+            },
+            pending: {
+                bg: 'rgba(147, 51, 234, 0.15)',
+                border: '#9333ea',
+                text: '#c084fc',
+                glow: '0 0 15px rgba(147, 51, 234, 0.4)'
+            },
+            waiting_input: {
+                bg: 'linear-gradient(135deg, #06b6d4, #0891b2)',
+                border: '#06b6d4',
+                text: '#ffffff',
+                glow: '0 0 15px rgba(6, 182, 212, 0.4)'
+            },
+            reflow_processing: {
+                bg: 'linear-gradient(135deg, #ec4899, #db2777)',
+                border: '#ec4899',
+                text: '#ffffff',
+                glow: '0 0 25px rgba(236, 72, 153, 0.6)'
+            },
+            reflow_waiting: {
+                bg: 'rgba(251, 113, 133, 0.12)',
+                border: 'rgba(251, 113, 133, 0.5)',
+                text: '#fb7185',
+                glow: 'none'
+            },
+            completed: {
+                bg: 'linear-gradient(135deg, #10b981, #059669)',
+                border: '#10b981',
+                text: '#ffffff',
+                glow: '0 0 20px rgba(16, 185, 129, 0.5)'
+            },
+            error: {
+                bg: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                border: '#ef4444',
+                text: '#ffffff',
+                glow: '0 0 20px rgba(239, 68, 68, 0.6)'
+            }
+        }
+    };
+
+
     const PREDEFINED_ROLES = [
         'finalChapter', 'optimizer', 'updater', 'storySummarizer',
         'imageGenerator', 'typesetter', 'interactiveAgent', 'saver',
         'fusionGenerator', 'imageLibrarian', 'imageVariator',
         'musicGenerator', 'voiceCloner', 'audioEditor', 'audioLibrarian'
     ];
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 02：错误类                                                 ║
+    // ║  UserInterruptError / ExistingBranchError / AbortChapterError    ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 用户中断专用错误 ====================
+
+    class UserInterruptError extends Error {
+        constructor() {
+            super('用户中断');
+            this.name = 'UserInterruptError';
+        }
+    }
+
+
+    // ==================== 新增：分支冲突专用错误 ====================
+
+    class ExistingBranchError extends Error {
+        constructor() {
+            super('分支冲突：该互动结果已存在对应章节');
+            this.name = 'ExistingBranchError';
+        }
+    }
+
+    // ==================== 新增：互动映射管理器 ====================
+
+    class AbortChapterError extends Error {
+        constructor(message) {
+            // 若未传入消息，使用默认回流超限消息
+            super(message || '本章因连续回流超过3次被标记为废章，已终止');
+            this.name = 'AbortChapterError';
+        }
+    }
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 03：全局状态                                                ║
+    // ║  WORKFLOW_STATE / HISTORY_CACHE / stateTemplatesByBook / 全局 keydown 监听║
+    // ╚══════════════════════════════════════════════════════════════════╝
 
     // ==================== 状态模板解析 ====================
 
@@ -37,7 +179,7 @@
         startTime: null,
         currentChapter: 1,
         shouldStop: false,
-        tokenStats: {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0},
+        tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
         discarded: false,
         discardedChapter: null,
         userInputCache: '',
@@ -81,7 +223,7 @@
         currentInteractionResult: null,   // 暂存本章的互动结果
     };
 
-    let HISTORY_CACHE = {chapters: [], lastUpdate: null};
+    let HISTORY_CACHE = { chapters: [], lastUpdate: null };
 
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
@@ -92,179 +234,166 @@
         }
     });
 
-    // ==================== 从 JSON 加载配置 ====================
 
-    function loadConfigFromJson(json, fileName, fileSize) {
-        const validation = validateConfig(json);
-        if (!validation.valid) {
-            console.error('配置校验失败:', validation.errors);
-            const errorMessage = validation.errors.map(err => `• ${err}`).join('\n');
-            UI.showErrorPanel('配置文件校验失败：\n\n' + errorMessage);
-            return false;
-        }
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 04：工具函数                                                ║
+    // ║  deepMerge / getNestedValue / setNestedValue / parseConfigLine / convertArrayValues / countTokens║
+    // ╚══════════════════════════════════════════════════════════════════╝
 
-        // 保存原始配置值
-        CONFIG.MAX_STATE_BOOKS = Number(json.maxStateBooks);
-        CONFIG.STATE_TYPE_LIMIT = Number(json.stateTypeLimit);
-        CONFIG.MAX_CONSECUTIVE_REFLOWS = Number(json.maxConsecutiveReflows);
-        CONFIG.MAX_REFLOOP_DEPTH = Number(json.maxReflowDepth);
-        CONFIG.MAX_IMAGES_PER_BOOK = json.maxImagesPerBook !== undefined ? Number(json.maxImagesPerBook) : CONFIG.STATE_TYPE_LIMIT;
-        CONFIG.MAX_AUDIOS_PER_BOOK = json.maxAudiosPerBook !== undefined ? Number(json.maxAudiosPerBook) : CONFIG.MAX_IMAGES_PER_BOOK;
-
-        // 解析 apiConfigs
-        CONFIG.apiConfigs = json.apiConfigs || {};
-
-        CONFIG.stages = []; // 设为空数组，避免旧代码报错，但后续不应使用
-
-        if (json.agents) {
-            const newAgents = {};
-            for (const [key, agent] of Object.entries(json.agents)) {
-                // 处理 inputMode
-                let inputMode = agent.inputMode || [];
-                if (!Array.isArray(inputMode)) inputMode = [inputMode];
-                while (inputMode.length < agent.inputs.length) inputMode.push('txt');
-                if (inputMode.length > agent.inputs.length) inputMode = inputMode.slice(0, agent.inputs.length);
-
-                // 处理 autoConfig
-                let autoConfig = agent.autoConfig || [];
-                if (!Array.isArray(autoConfig)) autoConfig = [autoConfig];
-                while (autoConfig.length < agent.inputs.length) autoConfig.push(0);
-                if (autoConfig.length > agent.inputs.length) autoConfig = autoConfig.slice(0, agent.inputs.length);
-                autoConfig = autoConfig.map(v => Number(v) || 0);
-
-                // 处理 reflowConditions
-                let reflowConditions = agent.reflowConditions || [];
-                if (!Array.isArray(reflowConditions)) reflowConditions = [reflowConditions];
-                reflowConditions = reflowConditions.map(c => String(c));
-
-                // 处理 inputPrompts
-                let inputPrompts = agent.inputPrompts || [];
-                if (!Array.isArray(inputPrompts)) inputPrompts = [inputPrompts];
-                while (inputPrompts.length < agent.inputs.length) inputPrompts.push('');
-                if (inputPrompts.length > agent.inputs.length) inputPrompts = inputPrompts.slice(0, agent.inputs.length);
-                inputPrompts = inputPrompts.map(p => String(p));
-
-                const review = agent.review !== undefined ? Boolean(agent.review) : false;
-
-                // 注意：移除了 agent.parallel 的处理，不再设置 parallel 字段
-                newAgents[key] = {
-                    name: agent.name,
-                    displayName: agent.displayName || '',
-                    hover: agent.hover,
-                    stage: agent.stage || '',
-                    order: agent.order,
-                    required: agent.required || false,
-                    // parallel 字段不再使用，但为了兼容旧配置，可以保留读取但不赋值，或者不保留。这里选择不保留。
-                    inputs: agent.inputs || [],
-                    inputTemplate: agent.inputTemplate || '',
-                    reflowConditions: reflowConditions,
-                    inputMode: inputMode,
-                    autoConfig: autoConfig,
-                    description: agent.description || '',
-                    inputPrompts: inputPrompts,
-                    role: agent.role || '',
-                    executeInterval: agent.executeInterval !== undefined ? Number(agent.executeInterval) : 0,
-                    apiConfigId: agent.apiConfigId || '',
-                    review: review,
-                };
+    function deepMerge(target, source) {
+        console.debug('[deepMerge] 合并: target type=', typeof target, '| source type=', typeof source);
+        if (source === null || typeof source !== 'object') return source;
+        if (typeof target !== 'object') target = {};
+        for (let key in source) {
+            if (source.hasOwnProperty(key)) {
+                if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
+                    target[key] = deepMerge(target[key] || {}, source[key]);
+                } else {
+                    target[key] = source[key];
+                }
             }
-            CONFIG.AGENTS = newAgents;
         }
-
-        if (json.workflowStages && Array.isArray(json.workflowStages)) {
-            CONFIG.WORKFLOW_STAGES = json.workflowStages.map(stage => ({
-                stage: stage.stage,
-                name: stage.name,
-                agents: stage.agents,
-                mode: stage.mode,
-                id: stage.id,
-                color: stage.color,
-                description: stage.description,
-            }));
-        }
-
-        if (json.categories) {
-            CONFIG.categories = json.categories;
-        }
-        if (json.categoryGroups && Array.isArray(json.categoryGroups)) {
-            CONFIG.categoryGroups = json.categoryGroups;
-        }
-
-        WORKFLOW_STATE.currentConfigFile = { name: fileName, size: fileSize };
-
-        // 重置预选状态，使用新配置的 categories 生成全 null 的 selectionState
-        const newSelection = {};
-        if (CONFIG.categories) {
-            Object.keys(CONFIG.categories).forEach(cat => {
-                newSelection[cat] = null;
-            });
-        }
-        console.log('[loadConfigFromJson] 新 selectionState:', newSelection);
-
-        const enforceUniqueBranches = json.enforceUniqueBranches === true; // 默认为 false
-
-        // 重新构建 WORKFLOW_STATE
-        WORKFLOW_STATE = {
-            isRunning: false,
-            currentStep: '',
-            outputs: {},
-            startTime: null,
-            currentChapter: 1,
-            shouldStop: false,
-            tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
-            discarded: false,
-            discardedChapter: null,
-            userInputCache: '',
-            progressLog: [],
-            currentProfile: 'standard',
-            enabledAgents: [],
-            agentExecutionOrder: [],
-            currentConfigFile: WORKFLOW_STATE.currentConfigFile,
-            selectionState: newSelection,
-            awaitingInput: false,
-            inputResolver: null,
-            pendingUserInput: '',
-            currentWaitingAgent: null,
-            currentWaitingInputIndex: null,
-            autoMode: false,
-            chapterMemory: {},
-            lastSerialOutput: null,
-            inputRequestQueue: [],
-            isProcessingInput: false,
-            currentUserInput: '',
-            lastInputCache: {},
-            pendingInputBySrc: {},
-            agentInputCache: {},
-            agentRawOutputs: {},
-            reflowInputCache: {},
-            reflowCacheStack: [],
-            currentReflowCache: null,
-            reflowMap: {},
-            reflowWaiting: {},
-            reflowTargetLastSource: {},
-            reflowTargetCount: {},
-            apiStatus: {},
-            activeChapterNum: undefined,
-            currentBranchStart: undefined,
-            currentBranchLatest: undefined,
-            galProject: null,
-            galProjectId: null,
-            enforceUniqueBranches: enforceUniqueBranches,
-            configVersion: json.version || CONFIG.VERSION,
-            configDescription: json.description || '',
-            configMode: json.mode || 'normal',
-        };
-
-        Storage.saveSelectionState(newSelection);
-        AgentStateManager.init();
-        WORKFLOW_STATE.lastCheckFailed = false;
-        WORKFLOW_STATE.lastCheckErrorMessage = '';
-        console.log('[loadConfigFromJson] 配置模式:', WORKFLOW_STATE.configMode);
-        console.log('[loadConfigFromJson] 配置版本:', WORKFLOW_STATE.configVersion);
-        console.log('[loadConfigFromJson] 配置描述:', WORKFLOW_STATE.configDescription);
-
-        return true;
+        return target;
     }
+
+
+    // 辅助函数：获取嵌套对象的值
+    function getNestedValue(obj, path) {
+        const result = path.split('.').reduce((o, p) => o?.[p], obj);
+        console.debug(`[getNestedValue] path="${path}" => ${JSON.stringify(result)}`);
+        return result;
+    }
+
+    // 辅助函数：设置嵌套对象的值
+    function setNestedValue(obj, path, value) {
+        console.debug(`[setNestedValue] path="${path}" value=${JSON.stringify(value)}`);
+        const parts = path.split('.');
+        const last = parts.pop();
+        const target = parts.reduce((o, p) => o[p] = o[p] || {}, obj);
+        target[last] = value;
+    }
+
+
+    /**
+     * 解析优化师输出的属性配置行
+     * 规则：中文分号；分隔属性，中文逗号，分隔数组元素（保持原样不分割）
+     * @param {string} configStr - 属性配置行文本
+     * @returns {Object} 解析后的属性对象，数组值保持中文逗号分隔的字符串形式
+     */
+    function parseConfigLine(configStr) {
+        const config = {};
+        // 定义数组字段集合（这些字段的值应该被视为数组）
+        const arrayFields = new Set(['key', 'keysecondary', 'triggers', 'characterFilter.names', 'characterFilter.tags']);
+
+        // 按中文分号；分割属性对（核心分隔符）
+        // 注意：只使用中文分号，不支持英文分号，确保严格符合规范
+        const pairs = configStr.split('；').map(p => p.trim()).filter(p => p !== '');
+
+        for (let pair of pairs) {
+            // 查找冒号分隔符（支持中英文冒号）
+            const colonIndex = pair.search(/[：:]/);
+            if (colonIndex === -1) {
+                continue; // 没有冒号，跳过此对
+            }
+
+            const key = pair.substring(0, colonIndex).trim();
+            let value = pair.substring(colonIndex + 1).trim();
+
+            if (value === '') continue;
+
+            // 检查是否为数组字段
+            const isArrayField = arrayFields.has(key) ||
+                (key.startsWith('characterFilter.') &&
+                    (key.endsWith('.names') || key.endsWith('.tags')));
+
+            if (isArrayField) {
+                // 数组字段：保持原始字符串值（包含中文逗号），不进行分割
+                // 后续由 convertArrayValues 处理转换
+                config[key] = value;
+            } else {
+                // 单值处理：布尔值、数字、字符串
+                if (value === 'true') {
+                    config[key] = true;
+                } else if (value === 'false') {
+                    config[key] = false;
+                } else if (!isNaN(value) && value && value !== '') {
+                    config[key] = Number(value);
+                } else {
+                    // 去除可能的引号包裹
+                    config[key] = value.replace(/^["']|["']$/g, '');
+                }
+            }
+        }
+
+        return config;
+    }
+
+    /**
+     * 将属性对象中的中文逗号数组转换为英文逗号格式
+     * 用于最终注入状态书前的格式转换
+     * @param {Object} config - parseConfigLine 返回的属性对象
+     * @returns {Object} 转换后的属性对象，数组字段使用英文逗号分隔
+     */
+
+    function convertArrayValues(config) {
+        console.debug('[convertArrayValues] 入参 keys:', Object.keys(config));
+        const converted = {};
+        // 定义数组字段集合
+        const arrayFields = new Set(['key', 'keysecondary', 'triggers', 'characterFilter.names', 'characterFilter.tags']);
+
+        for (const [key, value] of Object.entries(config)) {
+            // 检查是否为数组字段且值为字符串
+            const isArrayField = arrayFields.has(key) ||
+                (key.startsWith('characterFilter.') &&
+                    (key.endsWith('.names') || key.endsWith('.tags')));
+
+            if (isArrayField && typeof value === 'string') {
+                // 将中文逗号，转为英文逗号,
+                // 注意：只转换中文逗号，保留其他内容不变
+                converted[key] = value.replace(/，/g, ',');
+            } else {
+                converted[key] = value;
+            }
+        }
+
+        console.debug('[convertArrayValues] 结果 keys:', Object.keys(converted));
+        return converted;
+    }
+
+
+    // ==================== Token 计数 ====================
+
+    /**
+     * 获取精确 token 计数（如果可用）
+     * @param {string} text - 要计数的文本
+     * @param {string} source - API 类型 ('openai', 'claude', 'custom', 'default')
+     * @param {string} model - 模型名称（仅用于日志和未来可能的编码选择）
+     * @returns {Promise<number>} token 数
+     */
+    async function countTokens(text, source = 'unknown', model = '') {
+        console.debug(`[countTokens] source=${source}, model=${model}, textLen=${text?.length ?? 0}`);
+        if (!text) return 0;
+
+        // 1. 尝试使用 gpt-tokenizer（适用于 OpenAI 兼容模型）
+        if (window.GPTTokenizer_cl100k_base && (source === 'openai' || source === 'custom')) {
+            try {
+                const tokens = window.GPTTokenizer_cl100k_base.encode(text);
+                return tokens.length;
+            } catch (e) {
+            }
+        }
+
+        // 2. 如果无法精确计数，则使用估算
+        const estimated = Math.ceil(text.length / 3.35);
+        console.debug(`[countTokens] 使用估算 => ${estimated} tokens (textLen=${text.length})`);
+        return estimated;
+    }
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 05：配置解析                                                ║
+    // ║  parseCategoryFromContent / buildTemplateContentFromCategories / validateConfig / loadConfigFromJson║
+    // ╚══════════════════════════════════════════════════════════════════╝
 
     // ==================== 新增辅助函数 ====================
 
@@ -276,10 +405,10 @@
      * @returns {Object|null} { catId, catName, definition } 或 null（若解析失败）
      */
     function parseCategoryFromContent(content, uid) {
-
+        console.debug('[parseCategoryFromContent] uid=', uid, 'content前50字:', String(content).substring(0, 50));
         const lines = content.split('\n');
         if (lines.length === 0) {
-
+            console.warn('[parseCategoryFromContent] content 为空，返回 null');
             return null;
         }
         const firstLine = lines[0].trim();
@@ -290,14 +419,14 @@
             const catId = match[1];
             const catName = match[2].trim();
 
-            return {catId, catName, definition: content};
+            return { catId, catName, definition: content };
         }
         // 否则，尝试匹配任何 **名称** 格式，使用 uid 作为 catId
         match = firstLine.match(/^\*\*([^*]+)\*\*.*$/);
         if (match && uid !== undefined) {
             const catName = match[1].trim();
 
-            return {catId: String(uid), catName, definition: content};
+            return { catId: String(uid), catName, definition: content };
         }
 
         return null;
@@ -309,14 +438,15 @@
      * @returns {string} 拼接后的模板内容
      */
     function buildTemplateContentFromCategories(categories) {
-
+        console.debug('[buildTemplateContentFromCategories] 类别数量:', categories.size);
         const sorted = Array.from(categories.entries()).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
         return sorted.map(([_, def]) => def).join('\n\n');
     }
 
+
     function validateConfig(json) {
-        console.log('[validateConfig] ========== 开始校验配置文件 ==========');
-        console.log('[validateConfig] 配置文件内容概览:', json);
+
+
         const errors = [];
 
         // 辅助函数：添加错误
@@ -324,7 +454,7 @@
 
         // ---------- 1. 校验全局数值配置 ----------
         (function validateGlobal() {
-            console.log('[validateConfig] 开始校验全局数值配置');
+
             if (json.maxStateBooks === undefined) addError('缺少必填字段 maxStateBooks');
             else {
                 const val = Number(json.maxStateBooks);
@@ -367,7 +497,7 @@
                 addError('mode 必须是 "normal"、"datafication" 或 "interactive" 之一');
             }
 
-            console.log('[validateConfig] 全局数值配置校验完成');
+
         })();
 
         // ---------- 2. 校验 apiConfigs ----------
@@ -377,7 +507,7 @@
         const imageModes = new Set();
 
         (function validateApiConfigBase() {
-            console.log('[validateConfig] 开始校验 apiConfigs');
+
             if (!json.apiConfigs) {
                 addError('缺少必填字段 apiConfigs（必须存在，可为空对象 {}）');
                 hasValidApiConfigs = false;
@@ -391,7 +521,7 @@
 
             const apiConfigs = json.apiConfigs;
             for (const [id, config] of Object.entries(apiConfigs)) {
-                console.log(`[validateConfig] 校验 API 配置: ${id}`);
+
                 if (id.trim() === '') {
                     addError(`apiConfigs 中存在空字符串作为 ID，不允许`);
                     continue;
@@ -469,7 +599,7 @@
 
                 if (config.type === 'image') imageConfigCount++;
             }
-            console.log(`[validateConfig] apiConfigs 校验完成，图像配置数量: ${imageConfigCount}`);
+
         })();
 
         // ---------- 3. 收集所有阶段ID ----------
@@ -515,14 +645,14 @@
         const roleCount = {};
 
         (function validateAgents() {
-            console.log('[validateConfig] 开始校验 agents');
+
             if (!json.agents || typeof json.agents !== 'object') {
                 addError('配置缺少 agents 对象或 agents 无效');
                 return;
             }
 
             for (const [key, agent] of Object.entries(json.agents)) {
-                console.log(`[validateConfig] 校验 Agent: ${key}`);
+
 
                 const requiredFields = [
                     'name', 'displayName', 'hover', 'order', 'required',
@@ -716,7 +846,7 @@
                 }
             }
 
-            console.log('[validateConfig] agents 校验完成，检测到的角色分布:', roleCount);
+
         })();
 
         // ---------- 6. 校验 workflowStages 中的 agents 列表 ----------
@@ -733,7 +863,7 @@
 
         // ---------- 7. 图像配置数量唯一性校验 ----------
         (function validateImageConfigCount() {
-            console.log('[validateConfig] 开始校验图像配置数量');
+
             const hasImageGenerator = roleCount['imageGenerator'] > 0;
             if (hasImageGenerator) {
                 if (imageConfigCount !== 1) {
@@ -744,12 +874,12 @@
                     addError(`最多只能有一个 type 为 "image" 的 API 配置，当前有 ${imageConfigCount} 个`);
                 }
             }
-            console.log('[validateConfig] 图像配置数量校验完成');
+
         })();
 
         // ---------- 8. 角色唯一性校验 ----------
         (function validateRoleUniqueness() {
-            console.log('[validateConfig] 开始校验角色唯一性');
+
             const uniqueRoles = [
                 'finalChapter',
                 'optimizer',
@@ -772,19 +902,1057 @@
                     addError(`role "${role}" 出现 ${roleCount[role]} 次，必须唯一`);
                 }
             }
-            console.log('[validateConfig] 角色唯一性校验完成');
+
         })();
 
         if (errors.length > 0) {
             console.warn('[validateConfig] 校验失败，错误详情:', errors);
         } else {
-            console.log('[validateConfig] 配置文件校验成功');
+
         }
         return { valid: errors.length === 0, errors };
     }
 
+
+    // ==================== 从 JSON 加载配置 ====================
+
+    function loadConfigFromJson(json, fileName, fileSize) {
+        const validation = validateConfig(json);
+        if (!validation.valid) {
+            console.error('配置校验失败:', validation.errors);
+            const errorMessage = validation.errors.map(err => `• ${err}`).join('\n');
+            UI.showErrorPanel('配置文件校验失败：\n\n' + errorMessage);
+            return false;
+        }
+
+        // 保存原始配置值
+        CONFIG.MAX_STATE_BOOKS = Number(json.maxStateBooks);
+        CONFIG.STATE_TYPE_LIMIT = Number(json.stateTypeLimit);
+        CONFIG.MAX_CONSECUTIVE_REFLOWS = Number(json.maxConsecutiveReflows);
+        CONFIG.MAX_REFLOOP_DEPTH = Number(json.maxReflowDepth);
+        CONFIG.MAX_IMAGES_PER_BOOK = json.maxImagesPerBook !== undefined ? Number(json.maxImagesPerBook) : CONFIG.STATE_TYPE_LIMIT;
+        CONFIG.MAX_AUDIOS_PER_BOOK = json.maxAudiosPerBook !== undefined ? Number(json.maxAudiosPerBook) : CONFIG.MAX_IMAGES_PER_BOOK;
+
+        // 解析 apiConfigs
+        CONFIG.apiConfigs = json.apiConfigs || {};
+
+        CONFIG.stages = []; // 设为空数组，避免旧代码报错，但后续不应使用
+
+        if (json.agents) {
+            const newAgents = {};
+            for (const [key, agent] of Object.entries(json.agents)) {
+                // 处理 inputMode
+                let inputMode = agent.inputMode || [];
+                if (!Array.isArray(inputMode)) inputMode = [inputMode];
+                while (inputMode.length < agent.inputs.length) inputMode.push('txt');
+                if (inputMode.length > agent.inputs.length) inputMode = inputMode.slice(0, agent.inputs.length);
+
+                // 处理 autoConfig
+                let autoConfig = agent.autoConfig || [];
+                if (!Array.isArray(autoConfig)) autoConfig = [autoConfig];
+                while (autoConfig.length < agent.inputs.length) autoConfig.push(0);
+                if (autoConfig.length > agent.inputs.length) autoConfig = autoConfig.slice(0, agent.inputs.length);
+                autoConfig = autoConfig.map(v => Number(v) || 0);
+
+                // 处理 reflowConditions
+                let reflowConditions = agent.reflowConditions || [];
+                if (!Array.isArray(reflowConditions)) reflowConditions = [reflowConditions];
+                reflowConditions = reflowConditions.map(c => String(c));
+
+                // 处理 inputPrompts
+                let inputPrompts = agent.inputPrompts || [];
+                if (!Array.isArray(inputPrompts)) inputPrompts = [inputPrompts];
+                while (inputPrompts.length < agent.inputs.length) inputPrompts.push('');
+                if (inputPrompts.length > agent.inputs.length) inputPrompts = inputPrompts.slice(0, agent.inputs.length);
+                inputPrompts = inputPrompts.map(p => String(p));
+
+                const review = agent.review !== undefined ? Boolean(agent.review) : false;
+
+                // 注意：移除了 agent.parallel 的处理，不再设置 parallel 字段
+                newAgents[key] = {
+                    name: agent.name,
+                    displayName: agent.displayName || '',
+                    hover: agent.hover,
+                    stage: agent.stage || '',
+                    order: agent.order,
+                    required: agent.required || false,
+                    // parallel 字段不再使用，但为了兼容旧配置，可以保留读取但不赋值，或者不保留。这里选择不保留。
+                    inputs: agent.inputs || [],
+                    inputTemplate: agent.inputTemplate || '',
+                    reflowConditions: reflowConditions,
+                    inputMode: inputMode,
+                    autoConfig: autoConfig,
+                    description: agent.description || '',
+                    inputPrompts: inputPrompts,
+                    role: agent.role || '',
+                    executeInterval: agent.executeInterval !== undefined ? Number(agent.executeInterval) : 0,
+                    apiConfigId: agent.apiConfigId || '',
+                    review: review,
+                };
+            }
+            CONFIG.AGENTS = newAgents;
+        }
+
+        if (json.workflowStages && Array.isArray(json.workflowStages)) {
+            CONFIG.WORKFLOW_STAGES = json.workflowStages.map(stage => ({
+                stage: stage.stage,
+                name: stage.name,
+                agents: stage.agents,
+                mode: stage.mode,
+                id: stage.id,
+                color: stage.color,
+                description: stage.description,
+            }));
+        }
+
+        if (json.categories) {
+            CONFIG.categories = json.categories;
+        }
+        if (json.categoryGroups && Array.isArray(json.categoryGroups)) {
+            CONFIG.categoryGroups = json.categoryGroups;
+        }
+
+        WORKFLOW_STATE.currentConfigFile = { name: fileName, size: fileSize };
+
+        // 重置预选状态，使用新配置的 categories 生成全 null 的 selectionState
+        const newSelection = {};
+        if (CONFIG.categories) {
+            Object.keys(CONFIG.categories).forEach(cat => {
+                newSelection[cat] = null;
+            });
+        }
+
+
+        const enforceUniqueBranches = json.enforceUniqueBranches === true; // 默认为 false
+
+        // 重新构建 WORKFLOW_STATE
+        WORKFLOW_STATE = {
+            isRunning: false,
+            currentStep: '',
+            outputs: {},
+            startTime: null,
+            currentChapter: 1,
+            shouldStop: false,
+            tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
+            discarded: false,
+            discardedChapter: null,
+            userInputCache: '',
+            progressLog: [],
+            currentProfile: 'standard',
+            enabledAgents: [],
+            agentExecutionOrder: [],
+            currentConfigFile: WORKFLOW_STATE.currentConfigFile,
+            selectionState: newSelection,
+            awaitingInput: false,
+            inputResolver: null,
+            pendingUserInput: '',
+            currentWaitingAgent: null,
+            currentWaitingInputIndex: null,
+            autoMode: false,
+            chapterMemory: {},
+            lastSerialOutput: null,
+            inputRequestQueue: [],
+            isProcessingInput: false,
+            currentUserInput: '',
+            lastInputCache: {},
+            pendingInputBySrc: {},
+            agentInputCache: {},
+            agentRawOutputs: {},
+            reflowInputCache: {},
+            reflowCacheStack: [],
+            currentReflowCache: null,
+            reflowMap: {},
+            reflowWaiting: {},
+            reflowTargetLastSource: {},
+            reflowTargetCount: {},
+            apiStatus: {},
+            activeChapterNum: undefined,
+            currentBranchStart: undefined,
+            currentBranchLatest: undefined,
+            galProject: null,
+            galProjectId: null,
+            enforceUniqueBranches: enforceUniqueBranches,
+            configVersion: json.version || CONFIG.VERSION,
+            configDescription: json.description || '',
+            configMode: json.mode || 'normal',
+        };
+
+        Storage.saveSelectionState(newSelection);
+        AgentStateManager.init();
+        WORKFLOW_STATE.lastCheckFailed = false;
+        WORKFLOW_STATE.lastCheckErrorMessage = '';
+
+
+
+
+        return true;
+    }
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 06：数据库层 (IndexedDB)                                   ║
+    // ║  DB 常量 / openDB / loadFromIndexedDB / saveToIndexedDB          ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== IndexedDB 初始化与辅助函数 ====================
+
+    const DB_NAME = 'NovelCreatorDB';
+    const DB_VERSION = 2;
+    const STORE_NAME = 'chapters';
+    const DB_KEY = CONFIG.STORAGE_KEY;
+
+
+    /**
+     * 打开 IndexedDB 数据库（增强版）
+     * @returns {Promise<IDBDatabase>}
+     */
+    function openDB() {
+        console.debug(`[openDB] 打开数据库 "${DB_NAME}" v${DB_VERSION}`);
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(DB_NAME, DB_VERSION);
+            request.onerror = (event) => {
+                const error = event.target.error;
+                console.error('[Storage][IndexedDB] 打开失败', error);
+                // 详细错误输出
+                console.error(`[openDB] 错误详情: 名称=${error.name}, 消息=${error.message}, 堆栈=${error.stack}`);
+                reject(error);
+            };
+            request.onsuccess = (event) => {
+                const db = event.target.result;
+                console.debug('[openDB] 数据库打开成功');
+                resolve(db);
+            };
+            request.onupgradeneeded = (event) => {
+
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains(STORE_NAME)) {
+                    db.createObjectStore(STORE_NAME);
+
+                }
+                // 新增：创建 galProjects 存储
+                if (!db.objectStoreNames.contains('galProjects')) {
+                    db.createObjectStore('galProjects', { keyPath: 'id' });
+
+                }
+            };
+        });
+    }
+
+    /**
+     * 从 IndexedDB 加载数据（增强版）
+     * @returns {Promise<Object>} 返回 { chapters: [] } 或默认空结构
+     */
+    async function loadFromIndexedDB() {
+
+        let db;
+        try {
+            db = await openDB();
+        } catch (err) {
+            console.error('[loadFromIndexedDB] 打开数据库失败，返回默认空章节', err);
+            return { chapters: [] };
+        }
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction(STORE_NAME, 'readonly');
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.get(DB_KEY);
+            request.onsuccess = () => {
+                const result = request.result || { chapters: [] };
+
+                resolve(result);
+            };
+            request.onerror = (event) => {
+                const error = event.target.error;
+                console.error('[Storage][IndexedDB] 加载失败', error);
+                console.error(`[loadFromIndexedDB] 错误详情: ${error.name} - ${error.message}`, error);
+                reject(error);
+            };
+            transaction.oncomplete = () => {
+                db.close();
+                console.debug('[loadFromIndexedDB] 事务完成，数据库已关闭');
+            };
+            transaction.onerror = (event) => {
+                const error = event.target.error;
+                console.error('[loadFromIndexedDB] 事务错误', error);
+                reject(error);
+            };
+        });
+    }
+
+    /**
+     * 保存数据到 IndexedDB（异步，增强版）
+     * @param {Object} data 包含 chapters 的对象
+     */
+    async function saveToIndexedDB(data) {
+
+        let db;
+        try {
+            db = await openDB();
+        } catch (err) {
+            console.error('[saveToIndexedDB] 打开数据库失败', err);
+            throw new Error(`无法打开数据库: ${err.message}`);
+        }
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction(STORE_NAME, 'readwrite');
+            const store = transaction.objectStore(STORE_NAME);
+            const request = store.put(data, DB_KEY);
+            request.onsuccess = () => {
+
+                resolve();
+            };
+            request.onerror = (event) => {
+                const error = event.target.error;
+                console.error('[Storage][IndexedDB] 保存失败', error);
+                console.error(`[saveToIndexedDB] 错误详情: 名称=${error.name}, 消息=${error.message}, 堆栈=${error.stack}`);
+                console.error(`[saveToIndexedDB] 失败时数据摘要: 章节数=${data?.chapters?.length ?? 0}`);
+                reject(error);
+            };
+            transaction.oncomplete = () => {
+                db.close();
+                console.debug('[saveToIndexedDB] 事务完成，数据库已关闭');
+            };
+            transaction.onerror = (event) => {
+                const error = event.target.error;
+                console.error('[saveToIndexedDB] 事务错误', error);
+                reject(error);
+            };
+        });
+    }
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 07：存储层                                                 ║
+    // ║  Storage — 内存缓存 + IndexedDB 写入队列                         ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 存储管理 ====================
+
+    const Storage = {
+        _writeQueue: Promise.resolve(),
+
+        /**
+         * 初始化：从 IndexedDB 加载数据到内存缓存 HISTORY_CACHE
+         * 必须在任何读写操作前调用，并等待完成
+         */
+        async init() {
+
+            try {
+                const data = await loadFromIndexedDB();
+                HISTORY_CACHE = {
+                    chapters: data.chapters || [],
+                    lastUpdate: Date.now()
+                };
+
+            } catch (e) {
+                console.error('[Storage] 初始化失败，使用空缓存', e);
+                HISTORY_CACHE = { chapters: [], lastUpdate: Date.now() };
+            }
+        },
+
+        /**
+         * 同步保存数据（更新内存缓存并通过队列异步写入 IndexedDB）（增强版）
+         */
+        save(data) {
+
+            if (!data || !Array.isArray(data.chapters)) {
+                console.warn('[Storage.save] 收到无效数据，保存失败', data);
+                return false;
+            }
+            // 更新内存缓存
+            HISTORY_CACHE.chapters = data.chapters.sort((a, b) => a.num - b.num);
+            HISTORY_CACHE.lastUpdate = Date.now();
+
+
+
+            // 将写入操作加入队列
+            this._writeQueue = this._writeQueue.then(() => {
+                console.time('IndexedDB写入');
+                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
+                    .then(() => {
+                        console.timeEnd('IndexedDB写入');
+
+                    })
+                    .catch(err => {
+                        console.timeEnd('IndexedDB写入');
+                        console.error('[Storage.save] 异步写入 IndexedDB 失败', err);
+                        // 详细错误输出
+                        console.error(`[Storage.save] 失败详情: ${err.name} - ${err.message}`);
+                        if (err.stack) console.error(err.stack);
+                        Notify.error('章节数据保存失败，请检查浏览器存储权限。若持续失败，请导出备份后刷新页面。');
+                        // 虽然写入失败，但内存缓存仍在，后续操作可基于内存继续，但需用户手动处理
+                        // 这里不抛出异常，仅通知用户，保证队列继续
+                    });
+            }).catch(err => {
+                console.error('[Storage.save] 写入队列处理出错', err);
+            });
+
+            return true;
+        },
+
+        /**
+         * 加载章节列表（同步返回内存缓存）
+         */
+        loadChapters() {
+
+            return [...(HISTORY_CACHE.chapters || [])].sort((a, b) => a.num - b.num);
+        },
+
+        /**
+         * 构建章节的紧凑路径（供 sourcePath 存储使用）
+         * @param {number} num - 章节号
+         * @param {Array} chapters - 所有章节数组
+         * @returns {string|null} 路径字符串，如 "3" 或 "1#1#2"
+         */
+        _buildChapterPath(num, chapters) {
+
+            console.time(`_buildChapterPath_${num}`);
+
+            const chapter = chapters.find(c => c.num === num);
+            if (!chapter) {
+                console.warn(`[Storage._buildChapterPath] 章节 ${num} 不存在，返回 null`);
+                console.timeEnd(`_buildChapterPath_${num}`);
+                return null;
+            }
+
+            // 构建章节映射和子节点映射
+            const chapterMap = {};
+            const childrenMap = {};
+            chapters.forEach(ch => {
+                chapterMap[ch.num] = ch;
+                const p = ch.parent;
+                if (p !== null && p !== undefined) {
+                    if (!childrenMap[p]) childrenMap[p] = [];
+                    childrenMap[p].push(ch);
+                }
+            });
+
+            // 对每个父节点的子节点按章节号排序（确保顺序稳定）
+            for (const p in childrenMap) {
+                childrenMap[p].sort((a, b) => a.num - b.num);
+
+            }
+
+            // 向上回溯，收集每一步的选择序号（从目标节点到根的方向）
+            const segments = [];
+            let currentNum = num;
+            let current = chapter;
+
+
+
+            while (current.parent !== null && current.parent !== undefined) {
+                const parentNum = current.parent;
+                const parent = chapterMap[parentNum];
+                if (!parent) {
+                    console.warn(`[Storage._buildChapterPath] 父节点 ${parentNum} 不存在，终止回溯`);
+                    break;
+                }
+
+                const siblings = childrenMap[parentNum] || [];
+                if (!siblings.length) {
+                    console.warn(`[Storage._buildChapterPath] 父节点 ${parentNum} 的子节点列表为空，终止回溯`);
+                    break;
+                }
+
+                const index = siblings.findIndex(c => c.num === currentNum) + 1;
+                if (index === 0) {
+                    console.warn(`[Storage._buildChapterPath] 在父节点 ${parentNum} 的子节点中未找到当前节点 ${currentNum}`);
+                    break;
+                }
+
+
+                segments.push(index);
+
+                currentNum = parentNum;
+                current = parent;
+
+            }
+
+            const rootNum = currentNum;
+
+
+            // 反转得到从根到目标的顺序
+            const pathSegments = segments.reverse();
+
+
+            // 构建路径
+            let path = String(rootNum);
+            for (const idx of pathSegments) {
+                path += '#'.repeat(idx) + idx;
+            }
+
+
+            console.timeEnd(`_buildChapterPath_${num}`);
+            return path;
+        },
+
+        /**
+         * 保存单章（更新内存缓存并通过队列异步写入 IndexedDB）（增强版）
+         */
+        saveChapter(chapterData, chapterNum, snapshot, parentNum, interactionResult) {
+
+            const chapters = [...(HISTORY_CACHE.chapters || [])];
+            const timestamp = new Date().toLocaleString('zh-CN');
+
+            // ---------- 修改点：不再自动添加标题行 ----------
+            // 直接使用传入的 content，保持原样
+            const content = chapterData.content || '无';
+            // ---------- 结束修改 ----------
+
+            // ========== 新增：计算来源路径 sourcePath ==========
+            let sourcePath = null;
+            if (parentNum) {
+                sourcePath = this._buildChapterPath(parentNum, chapters);
+            } else {
+                // 无父章节，默认为 "1"（第一章的路径）
+                sourcePath = "1";
+            }
+
+            // ========== 结束计算 ==========
+
+            const entry = {
+                num: chapterNum,
+                parent: parentNum || null,
+                sourcePath: sourcePath,                // 新增：来源路径
+                interactionResult: interactionResult || null, // 新增：互动结果
+                title: chapterData.title || `第${chapterNum}章`,
+                content,
+                snapshot,
+                timestamp,
+                size: content.length
+            };
+
+            // 合并其他自定义属性（如 interactive 标志等）
+            for (const key in chapterData) {
+                if (!['title', 'content'].includes(key)) {
+                    entry[key] = chapterData[key];
+                }
+            }
+
+            const idx = chapters.findIndex(c => c.num === chapterNum);
+            if (idx !== -1) chapters[idx] = entry;
+            else chapters.push(entry);
+            chapters.sort((a, b) => a.num - b.num);
+
+            HISTORY_CACHE.chapters = chapters;
+            HISTORY_CACHE.lastUpdate = Date.now();
+
+
+            // ===== 新增：如果唯一性约束开启且有互动结果，记录映射 =====
+            if (WORKFLOW_STATE.enforceUniqueBranches && parentNum && interactionResult) {
+                this._writeQueue = this._writeQueue.then(async () => {
+                    try {
+                        await MappingManager.recordMapping(parentNum, interactionResult, chapterNum);
+                    } catch (e) {
+                        console.error('[Storage.saveChapter] 记录映射失败', e);
+                        Notify.error(`分支映射保存失败: ${e.message}，但章节已保存，请稍后手动处理。`);
+                    }
+                });
+            }
+            // ===== 结束新增 =====
+
+            this._writeQueue = this._writeQueue.then(() => {
+                console.time('IndexedDB写入');
+                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
+                    .then(() => {
+                        console.timeEnd('IndexedDB写入');
+
+                    })
+                    .catch(err => {
+                        console.timeEnd('IndexedDB写入');
+                        console.error('[Storage.saveChapter] 异步写入 IndexedDB 失败', err);
+                        console.error(`[Storage.saveChapter] 失败详情: ${err.name} - ${err.message}`);
+                        if (err.stack) console.error(err.stack);
+                        Notify.error('章节数据保存失败，请检查浏览器存储权限');
+                    });
+            }).catch(err => {
+                console.error('[Storage.saveChapter] 写入队列处理出错', err);
+            });
+
+            return true;
+        },
+
+        /**
+         * 删除指定章节之后的所有章节（包括该章）（增强版）
+         */
+        deleteAfter(chapterNum) {
+
+            const chapters = [...(HISTORY_CACHE.chapters || [])];
+            const remaining = chapters.filter(c => c.num < chapterNum);
+            const deletedCount = chapters.length - remaining.length;
+            HISTORY_CACHE.chapters = remaining;
+            HISTORY_CACHE.lastUpdate = Date.now();
+
+
+            this._writeQueue = this._writeQueue.then(() => {
+                console.time('IndexedDB写入');
+                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
+                    .then(() => {
+                        console.timeEnd('IndexedDB写入');
+
+                    })
+                    .catch(err => {
+                        console.timeEnd('IndexedDB写入');
+                        console.error('[Storage.deleteAfter] 写入失败', err);
+                        console.error(`[Storage.deleteAfter] 失败详情: ${err.name} - ${err.message}`);
+                        if (err.stack) console.error(err.stack);
+                        Notify.error('删除章节失败');
+                    });
+            }).catch(err => {
+                console.error('[Storage.deleteAfter] 写入队列处理出错', err);
+            });
+            return { success: true, count: deletedCount };
+        },
+
+        /**
+         * 清空所有章节（增强版）
+         */
+        clear() {
+
+            HISTORY_CACHE.chapters = [];
+            HISTORY_CACHE.lastUpdate = Date.now();
+
+
+            this._writeQueue = this._writeQueue.then(() => {
+                console.time('IndexedDB写入');
+                return saveToIndexedDB({ chapters: [] })
+                    .then(() => {
+                        console.timeEnd('IndexedDB写入');
+
+                    })
+                    .catch(err => {
+                        console.timeEnd('IndexedDB写入');
+                        console.error('[Storage.clear] 写入失败', err);
+                        console.error(`[Storage.clear] 失败详情: ${err.name} - ${err.message}`);
+                        if (err.stack) console.error(err.stack);
+                        Notify.error('清空章节失败');
+                    });
+            }).catch(err => {
+                console.error('[Storage.clear] 写入队列处理出错', err);
+            });
+            return true;
+        },
+
+        // 以下方法保持不变，仅作示意
+        loadSettings() {
+            try {
+                return JSON.parse(localStorage.getItem(CONFIG.SETTINGS_KEY) || '{"profile":"standard"}');
+            } catch (_) {
+                return { profile: 'standard' };
+            }
+        },
+
+        saveSettings(settings) {
+            try {
+                localStorage.setItem(CONFIG.SETTINGS_KEY, JSON.stringify(settings));
+                return true;
+            } catch (_) {
+                return false;
+            }
+        },
+
+        saveCustomAgents(agents) {
+            const settings = this.loadSettings();
+            settings.customAgents = agents;
+            return this.saveSettings(settings);
+        },
+
+        loadCustomAgents() {
+            const settings = this.loadSettings();
+            return settings.customAgents || [];
+        },
+
+        saveSelectionState(state) {
+            const settings = this.loadSettings();
+            settings.selectionState = state;
+            return this.saveSettings(settings);
+        },
+
+        loadSelectionState() {
+            const settings = this.loadSettings();
+            const saved = settings.selectionState || {};
+            if (CONFIG.categories) {
+                const filtered = {};
+                Object.keys(CONFIG.categories).forEach(cat => {
+                    filtered[cat] = saved[cat] || null;
+                });
+                return filtered;
+            }
+            return saved;
+        },
+
+        saveTokenStats(stats) {
+            try {
+                localStorage.setItem('novel_creator_token_stats_v1', JSON.stringify(stats));
+            } catch (_) {
+            }
+        },
+
+        loadAutoMode() {
+            const settings = this.loadSettings();
+            return settings.autoMode || false;
+        },
+
+        async listGalgameProjects() {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('galProjects', 'readonly');
+                const store = transaction.objectStore('galProjects');
+                const request = store.getAll();
+                request.onsuccess = () => {
+                    const projects = request.result.map(item => ({
+                        id: item.id,
+                        name: item.data.name,
+                        thumbnail: item.data.thumbnail,
+                        updatedAt: item.data.updatedAt
+                    }));
+                    resolve(projects);
+                };
+                request.onerror = () => reject(request.error);
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        async loadGalgameProject(id) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('galProjects', 'readonly');
+                const store = transaction.objectStore('galProjects');
+                const request = store.get(id);
+                request.onsuccess = () => {
+                    if (request.result) resolve(request.result.data);
+                    else resolve(null);
+                };
+                request.onerror = () => reject(request.error);
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        async saveGalgameProject(id, data) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('galProjects', 'readwrite');
+                const store = transaction.objectStore('galProjects');
+                const request = store.put({ id, data });
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        async deleteGalgameProject(id) {
+            const db = await openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction('galProjects', 'readwrite');
+                const store = transaction.objectStore('galProjects');
+                const request = store.delete(id);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+                transaction.oncomplete = () => db.close();
+            });
+        }
+    };
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 08：互动映射管理器                                          ║
+    // ║  MappingManager — 互动结果 <-> 章节号的持久化映射                 ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 新增：互动映射管理器 ====================
+
+    const MappingManager = {
+        DB_NAME: 'NovelCreatorMappingsDB',
+        DB_VERSION: 1,
+        STORE_NAME: 'mappings',
+        cache: new Map(), // 内存缓存，键为 "parentNum|interactionResult"，值为 targetChapterNum
+
+        async _openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+            });
+        },
+
+        // 生成映射 ID
+        _makeId(parentNum, interactionResult) {
+            return `${parentNum}|${interactionResult}`;
+        },
+
+        // 加载所有映射到缓存
+        async loadAll() {
+
+
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readonly');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.getAll();
+                request.onsuccess = () => {
+                    const mappings = request.result || [];
+                    this.cache.clear();
+                    mappings.forEach(m => {
+                        const key = this._makeId(m.parentChapterNum, m.interactionResult);
+                        this.cache.set(key, m.targetChapterNum);
+                    });
+
+                    resolve();
+                };
+                request.onerror = () => reject(request.error);
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        // 查询映射
+        getMapping(parentNum, interactionResult) {
+            if (!parentNum || !interactionResult) return null;
+            const key = this._makeId(parentNum, interactionResult);
+            const target = this.cache.get(key);
+
+            if (target) {
+                return { targetChapterNum: target };
+            }
+            return null;
+        },
+
+        /**
+         * 记录映射（增强版）
+         */
+        async recordMapping(parentNum, interactionResult, targetChapterNum) {
+
+            if (!parentNum || !interactionResult || !targetChapterNum) {
+                console.warn('[MappingManager.recordMapping] 参数不完整，跳过', { parentNum, interactionResult, targetChapterNum });
+                return;
+            }
+            const key = this._makeId(parentNum, interactionResult);
+            if (this.cache.has(key)) {
+                console.warn(`[MappingManager.recordMapping] 映射已存在 (parent=${parentNum}, result="${interactionResult}")，跳过`);
+                return;
+            }
+            let db;
+            try {
+                db = await this._openDB();
+            } catch (err) {
+                console.error('[MappingManager.recordMapping] 打开数据库失败', err);
+                throw err;
+            }
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const entry = {
+                    id: key,
+                    parentChapterNum: parentNum,
+                    interactionResult: interactionResult,
+                    targetChapterNum: targetChapterNum,
+                    createdAt: Date.now(),
+                    updatedAt: Date.now()
+                };
+                const request = store.put(entry);
+                request.onsuccess = () => {
+                    this.cache.set(key, targetChapterNum);
+
+                    resolve();
+                };
+                request.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[MappingManager.recordMapping] 保存失败', error);
+                    console.error(`[MappingManager.recordMapping] 错误详情: ${error.name} - ${error.message}`);
+                    if (error.stack) console.error(error.stack);
+                    reject(error);
+                };
+                transaction.oncomplete = () => {
+                    db.close();
+                    console.debug('[MappingManager.recordMapping] 事务完成，数据库已关闭');
+                };
+                transaction.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[MappingManager.recordMapping] 事务错误', error);
+                    reject(error);
+                };
+            });
+        },
+
+        /**
+         * 删除与指定章节相关的映射（作为源或目标）（增强版）
+         */
+        async deleteMappingsByChapters(chapterNums) {
+
+            const chapterSet = new Set(chapterNums);
+            let db;
+            try {
+                db = await this._openDB();
+            } catch (err) {
+                console.error('[MappingManager.deleteMappingsByChapters] 打开数据库失败', err);
+                throw err;
+            }
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.getAll();
+                request.onsuccess = () => {
+                    const mappings = request.result || [];
+                    const toDelete = mappings.filter(m =>
+                        chapterSet.has(m.parentChapterNum) || chapterSet.has(m.targetChapterNum)
+                    ).map(m => m.id);
+
+
+                    let deleteCount = 0;
+                    const deletePromises = toDelete.map(id => {
+                        return new Promise((res, rej) => {
+                            const delReq = store.delete(id);
+                            delReq.onsuccess = () => {
+                                this.cache.delete(id);
+                                deleteCount++;
+
+                                res();
+                            };
+                            delReq.onerror = (e) => {
+                                console.error(`[MappingManager] 删除映射 ${id} 失败`, e.target.error);
+                                rej(e.target.error);
+                            };
+                        });
+                    });
+
+                    Promise.allSettled(deletePromises).then(results => {
+                        const failed = results.filter(r => r.status === 'rejected').length;
+                        if (failed > 0) {
+                            console.warn(`[MappingManager.deleteMappingsByChapters] 有 ${failed} 条映射删除失败`);
+                        }
+
+                        resolve();
+                    }).catch(reject);
+                };
+                request.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[MappingManager.deleteMappingsByChapters] 获取映射失败', error);
+                    reject(error);
+                };
+                transaction.oncomplete = () => {
+                    db.close();
+                    console.debug('[MappingManager.deleteMappingsByChapters] 事务完成，数据库已关闭');
+                };
+                transaction.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[MappingManager.deleteMappingsByChapters] 事务错误', error);
+                    reject(error);
+                };
+            });
+        },
+
+        /**
+         * 清空所有映射（增强版）
+         */
+        async clear() {
+
+            let db;
+            try {
+                db = await this._openDB();
+            } catch (err) {
+                console.error('[MappingManager.clear] 打开数据库失败', err);
+                throw err;
+            }
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.clear();
+                request.onsuccess = () => {
+                    this.cache.clear();
+
+                    resolve();
+                };
+                request.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[MappingManager.clear] 清空失败', error);
+                    console.error(`[MappingManager.clear] 错误详情: ${error.name} - ${error.message}`);
+                    reject(error);
+                };
+                transaction.oncomplete = () => {
+                    db.close();
+                    console.debug('[MappingManager.clear] 事务完成，数据库已关闭');
+                };
+                transaction.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[MappingManager.clear] 事务错误', error);
+                    reject(error);
+                };
+            });
+        },
+
+        // 导出所有映射（用于备份）
+        async exportAll() {
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readonly');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.getAll();
+                request.onsuccess = () => resolve(request.result || []);
+                request.onerror = () => reject(request.error);
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        /**
+         * 批量导入映射（用于恢复）（增强版）
+         */
+        async importAll(mappings) {
+
+            let db;
+            try {
+                db = await this._openDB();
+            } catch (err) {
+                console.error('[MappingManager.importAll] 打开数据库失败', err);
+                throw err;
+            }
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                let count = 0;
+                const errors = [];
+                mappings.forEach(m => {
+                    const req = store.put(m);
+                    req.onsuccess = () => {
+                        const key = this._makeId(m.parentChapterNum, m.interactionResult);
+                        this.cache.set(key, m.targetChapterNum);
+                        count++;
+
+                    };
+                    req.onerror = (e) => {
+                        const error = e.target.error;
+                        console.error('[MappingManager.importAll] 导入失败', error);
+                        errors.push({ mapping: m, error: error.message });
+                    };
+                });
+                transaction.oncomplete = () => {
+
+                    if (errors.length > 0) {
+                        console.warn('[MappingManager.importAll] 失败详情:', errors);
+                    }
+                    db.close();
+                    resolve();
+                };
+                transaction.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[MappingManager.importAll] 事务错误', error);
+                    reject(error);
+                };
+            });
+        }
+    };
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 09：世界书工具                                              ║
+    // ║  状态书 / 图库 / 音频库 的读写、解析与更新                        ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
     function getInitialStateContent() {
         const timestamp = new Date().toLocaleString('zh-CN');
+
         return `【状态已重置 - ${timestamp}】\n\n[初始状态：待更新]\n\n本条目由脚本自动维护，请勿手动修改。`;
     }
 
@@ -793,11 +1961,11 @@
      * @returns {Promise<Array<string>>} 图库书名称数组
      */
     async function getAllImageLibraryBooks() {
-        console.log('[getAllImageLibraryBooks] ========== 开始获取图库书列表 ==========');
+
         const allBooks = await getAllStateBooks();
-        console.log(`[getAllImageLibraryBooks] 获取到所有状态书: ${allBooks.join(', ')} (共 ${allBooks.length} 本)`);
+
         const libraryBooks = allBooks.filter(bookName => bookName.includes('图库'));
-        console.log(`[getAllImageLibraryBooks] 过滤得到图库书: ${libraryBooks.join(', ')} (共 ${libraryBooks.length} 本)`);
+
         return libraryBooks;
     }
 
@@ -806,7 +1974,7 @@
      * @returns {Promise<Array>} 条目数组，每个元素包含 book, uid, 以及所有元数据
      */
     async function getLibraryEntries() {
-        console.log('[getLibraryEntries] ========== 开始获取图库条目 ==========');
+
         const libraryBooks = await getAllImageLibraryBooks();
         const allEntries = [];
 
@@ -824,13 +1992,13 @@
                         ...entry // 包含所有字段（key, keysecondary, content, selective, position, order 等）
                     });
                 }
-                console.log(`[getLibraryEntries] 从 ${bookName} 获取到 ${entries.length} 个条目`);
+
             } catch (e) {
                 console.error(`[getLibraryEntries] 读取世界书 ${bookName} 失败:`, e);
             }
         }
 
-        console.log(`[getLibraryEntries] 总共获取到 ${allEntries.length} 个图库条目`);
+
         return allEntries;
     }
 
@@ -839,10 +2007,10 @@
      * @returns {Promise<Array<string>>}
      */
     async function getAllAudioLibraryBooks() {
-        console.log('[getAllAudioLibraryBooks] ========== 开始获取音频库书列表 ==========');
+
         const allBooks = await getAllStateBooks();
         const libraryBooks = allBooks.filter(bookName => bookName.includes('音频库'));
-        console.log(`[getAllAudioLibraryBooks] 获取到音频库书: ${libraryBooks.join(', ')} (共 ${libraryBooks.length} 本)`);
+
         return libraryBooks;
     }
 
@@ -851,7 +2019,7 @@
      * @returns {Promise<Array>} 条目数组
      */
     async function getAudioLibraryEntries() {
-        console.log('[getAudioLibraryEntries] ========== 开始获取音频库条目 ==========');
+
         const libraryBooks = await getAllAudioLibraryBooks();
         const allEntries = [];
 
@@ -868,15 +2036,883 @@
                         ...entry
                     });
                 }
-                console.log(`[getAudioLibraryEntries] 从 ${bookName} 获取到 ${entries.length} 个条目`);
+
             } catch (e) {
                 console.error(`[getAudioLibraryEntries] 读取世界书 ${bookName} 失败:`, e);
             }
         }
 
-        console.log(`[getAudioLibraryEntries] 总共获取到 ${allEntries.length} 个音频库条目`);
+
         return allEntries;
     }
+
+    // 获取所有存在的状态书名称（按序号递增）
+    async function getAllStateBooks() {
+
+        const books = [];
+
+        // 【关键修复】使用 getGlobalWorldbookNames 获取当前激活的世界书
+        let globalBooks = [];
+        try {
+            if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
+                globalBooks = await TavernHelper.getGlobalWorldbookNames();
+            } else if (typeof window.getGlobalWorldbookNames === 'function') {
+                globalBooks = await window.getGlobalWorldbookNames();
+            }
+
+        } catch (e) {
+            console.warn('[DEBUG][getAllStateBooks] 获取全局世界书列表失败:', e);
+        }
+
+        // 从全局列表中筛选出状态书
+        for (const bookName of globalBooks) {
+            if (bookName.startsWith(CONFIG.STATE_BOOK_PREFIX)) {
+                const match = bookName.match(/状态书-(\d+)$/);
+                if (match) {
+                    if (!books.includes(bookName)) {
+                        books.push(bookName);
+                    }
+                }
+            }
+        }
+
+        // 如果没有从全局列表找到，回退到旧的检测方式
+        if (books.length === 0) {
+
+            let index = 1;
+            while (index <= CONFIG.MAX_STATE_BOOKS) {
+                const bookName = `${CONFIG.STATE_BOOK_PREFIX}${index}`;
+                try {
+                    const book = await API.getWorldbook(bookName);
+                    if (book && (Array.isArray(book) ? book.length : (book.entries && Object.keys(book.entries).length) > 0)) {
+                        books.push(bookName);
+
+                    } else {
+                        break; // 遇到不存在的状态书即停止
+                    }
+                } catch (e) {
+
+                    break;
+                }
+                index++;
+            }
+        }
+
+        // 按序号排序
+        books.sort((a, b) => {
+            const matchA = a.match(/状态书-(\d+)$/);
+            const matchB = b.match(/状态书-(\d+)$/);
+            const numA = matchA ? parseInt(matchA[1]) : 0;
+            const numB = matchB ? parseInt(matchB[1]) : 0;
+            return numA - numB;
+        });
+
+
+        return books;
+    }
+
+    // 加载所有状态书中的状态模板，返回数组 [{ bookIndex, templateContent, categoryMap }]
+    async function loadAllStateTemplates() {
+
+        const templates = [];
+        let bookIndex = 1;
+        while (bookIndex <= CONFIG.MAX_STATE_BOOKS) {
+            const bookName = `${CONFIG.STATE_BOOK_PREFIX}${bookIndex}`;
+
+            try {
+                const book = await API.getWorldbook(bookName);
+                const entries = Array.isArray(book) ? book : (book.entries || []);
+
+                const templateEntry = entries.find(e => e.name === `${CONFIG.STATE_TEMPLATE_PREFIX}${bookIndex}`);
+                if (templateEntry) {
+
+                    const content = templateEntry.content;
+
+                    const categoryRegex = /\*\*类别(\d+):([^*]+)\*\*\n([\s\S]*?)(?=\n\*\*类别\d+:|$)/g;
+                    const categoryMap = {};
+                    const seenCatIds = new Set();
+                    let match;
+                    while ((match = categoryRegex.exec(content)) !== null) {
+                        const id = match[1];
+                        const name = match[2].trim();
+                        const definition = match[3].trim();
+                        if (seenCatIds.has(id)) {
+                            console.warn(`[DEBUG][loadAllStateTemplates] ⚠️ 在 ${bookName} 的模板中检测到重复的类别编号 ${id}，可能模板已损坏`);
+                        }
+                        seenCatIds.add(id);
+                        categoryMap[id] = { name, definition };
+
+                    }
+
+                    templates.push({ bookIndex, templateContent: content, categoryMap });
+                } else {
+
+                    break;
+                }
+            } catch (e) {
+
+                break;
+            }
+            bookIndex++;
+        }
+
+        return templates;
+    }
+
+    // 获取所有状态条目的属性配置，返回格式化文本
+    async function getAllStateEntriesConfig() {
+
+        const books = await getAllStateBooks();
+        let configText = '';
+        for (const bookName of books) {
+            const book = await API.getWorldbook(bookName);
+            const entries = Array.isArray(book) ? book : (book.entries || []);
+            // 过滤出状态条目（名称以 STATE_ENTRY_PREFIX 开头）
+            const stateEntries = entries.filter(e => e?.name?.startsWith(CONFIG.STATE_ENTRY_PREFIX));
+            for (const entry of stateEntries) {
+                // 提取关键属性：uid, order, group, selective, probability, position, depth, scanDepth 等
+                configText += `【${bookName}】条目：${entry.name}\n`;
+                configText += `uid: ${entry.uid}\n`;
+                configText += `order: ${entry.order !== undefined ? entry.order : ''}\n`;
+                configText += `group: ${entry.group || ''}\n`;
+                configText += `selective: ${entry.selective}\n`;
+                configText += `probability: ${entry.probability}\n`;
+                configText += `position: ${entry.position}\n`;
+                configText += `depth: ${entry.depth}\n`;
+                configText += `scanDepth: ${entry.scanDepth}\n`;
+                configText += `---\n`;
+            }
+        }
+        return configText;
+    }
+
+    /**
+     * 将扁平配置应用到嵌套格式的世界书条目
+     */
+    function applyFlatConfigToEntry(entry, flatConfig) {
+        if (!flatConfig) return;
+
+        // 字段映射表
+        const fieldMappings = [
+            { flat: 'enabled', path: 'enabled', transform: v => v === undefined ? entry.enabled : v },
+            { flat: 'content', path: 'content', transform: v => v === undefined ? entry.content : v },
+
+            // 触发策略
+            {
+                flat: 'key',
+                path: 'strategy.keys',
+                transform: v => typeof v === 'string' ? v.split(',').map(s => s.trim()).filter(s => s) : v
+            },
+            {
+                flat: 'keysecondary',
+                path: 'strategy.keys_secondary.keys',
+                transform: v => typeof v === 'string' ? v.split(',').map(s => s.trim()).filter(s => s) : v
+            },
+            {
+                flat: 'scanDepth',
+                path: 'strategy.scan_depth',
+                transform: v => v !== undefined ? v : entry.strategy.scan_depth
+            },
+            {
+                flat: 'scan_depth',
+                path: 'strategy.scan_depth',
+                transform: v => v !== undefined ? v : entry.strategy.scan_depth
+            },
+
+            // 概率（0-100 -> 0-1）
+            { flat: 'probability', path: 'probability', transform: v => v !== undefined ? v / 100 : entry.probability },
+
+            // 位置
+            {
+                flat: 'position', path: 'position.type', transform: v => {
+                    if (v === undefined) return entry.position.type;
+                    const map = {
+                        '0': 'before_character_definition',
+                        '1': 'after_character_definition',
+                        '2': 'before_example_messages',
+                        '3': 'after_example_messages',
+                        '4': 'before_author_note',
+                        '5': 'after_author_note',
+                        '6': 'at_depth',
+                        '7': 'at_depth',
+                        '8': 'at_depth'
+                    };
+                    return map[v] || entry.position.type;
+                }
+            },
+            { flat: 'depth', path: 'position.depth', transform: v => v !== undefined ? v : entry.position.depth },
+            { flat: 'order', path: 'position.order', transform: v => v !== undefined ? v : entry.position.order },
+
+            // 递归控制
+            {
+                flat: 'excludeRecursion',
+                path: 'recursion.prevent_incoming',
+                transform: v => v !== undefined ? v : entry.recursion.prevent_incoming
+            },
+            {
+                flat: 'preventRecursion',
+                path: 'recursion.prevent_outgoing',
+                transform: v => v !== undefined ? v : entry.recursion.prevent_outgoing
+            },
+            {
+                flat: 'delayUntilRecursion',
+                path: 'recursion.delay_until',
+                transform: v => v === undefined ? entry.recursion.delay_until : (v === false ? null : v)
+            },
+
+            // 效果
+            {
+                flat: 'sticky',
+                path: 'effect.sticky',
+                transform: v => v === undefined ? entry.effect.sticky : (v === 0 ? null : v)
+            },
+            {
+                flat: 'cooldown',
+                path: 'effect.cooldown',
+                transform: v => v === undefined ? entry.effect.cooldown : (v === 0 ? null : v)
+            },
+            {
+                flat: 'delay',
+                path: 'effect.delay',
+                transform: v => v === undefined ? entry.effect.delay : (v === 0 ? null : v)
+            },
+        ];
+
+        fieldMappings.forEach(mapping => {
+            const value = flatConfig[mapping.flat];
+            if (value !== undefined) {
+                setNestedValue(entry, mapping.path, mapping.transform(value));
+            }
+        });
+
+        // 处理 constant/selective/vectorized
+        if (flatConfig.constant === true) {
+            setNestedValue(entry, 'strategy.type', 'constant');
+        } else if (flatConfig.selective === true) {
+            setNestedValue(entry, 'strategy.type', 'selective');
+        } else if (flatConfig.vectorized === true) {
+            setNestedValue(entry, 'strategy.type', 'vectorized');
+        }
+
+        // 处理 logic 字符串
+        if (flatConfig.logic) {
+            const logicMap = {
+                'and_any': 'and_any',
+                'and_all': 'and_all',
+                'not_all': 'not_all',
+                'not_any': 'not_any'
+            };
+            const mappedLogic = logicMap[flatConfig.logic] || 'and_any';
+            setNestedValue(entry, 'strategy.keys_secondary.logic', mappedLogic);
+        } else if (flatConfig.selectiveLogic !== undefined) {
+            const logicArray = ['and_any', 'and_all', 'not_all', 'not_any'];
+            const idx = parseInt(flatConfig.selectiveLogic);
+            if (idx >= 0 && idx < logicArray.length) {
+                setNestedValue(entry, 'strategy.keys_secondary.logic', logicArray[idx]);
+            }
+        }
+
+        // 根据 position.type 设置 role
+        const positionType = getNestedValue(entry, 'position.type');
+        if (positionType === 'at_depth') {
+            const posFlat = flatConfig.position;
+            if (posFlat) {
+                const roleMap = { '6': 'system', '7': 'assistant', '8': 'user' };
+                const role = roleMap[posFlat] || 'system';
+                setNestedValue(entry, 'position.role', role);
+            }
+        }
+
+        // 处理 characterFilter
+        if (flatConfig.characterFilter && typeof flatConfig.characterFilter === 'object') {
+            const currentFilter = getNestedValue(entry, 'characterFilter') || { isExclude: false, names: [], tags: [] };
+            const newFilter = deepMerge(currentFilter, flatConfig.characterFilter);
+            setNestedValue(entry, 'characterFilter', newFilter);
+        }
+
+        // 处理其他布尔字段
+        const boolFields = [
+            'matchPersonaDescription', 'matchCharacterDescription', 'matchCharacterPersonality',
+            'matchCharacterDepthPrompt', 'matchScenario', 'matchCreatorNotes', 'ignoreBudget', 'addMemo'
+        ];
+        boolFields.forEach(field => {
+            if (flatConfig[field] !== undefined) {
+                setNestedValue(entry, field, flatConfig[field]);
+            }
+        });
+
+        // 处理 automation_id
+        if (flatConfig.automation_id !== undefined) {
+            setNestedValue(entry, 'automation_id', flatConfig.automation_id);
+        }
+    }
+
+    /**
+     * 获取默认的嵌套格式世界书条目
+     */
+    function getDefaultWorldbookEntry(definition) {
+        return {
+            name: definition ? definition.slice(0, 20) : '新条目',
+            content: definition,
+            enabled: true,
+            strategy: {
+                type: 'selective',
+                keys: [],
+                keys_secondary: {
+                    logic: 'and_any',
+                    keys: []
+                },
+                scan_depth: 4
+            },
+            position: {
+                type: 'after_character_definition',
+                role: 'system',
+                depth: 0,
+                order: 0
+            },
+            probability: 1.0,
+            recursion: {
+                prevent_incoming: false,
+                prevent_outgoing: false,
+                delay_until: null
+            },
+            effect: {
+                sticky: null,
+                cooldown: null,
+                delay: null
+            },
+            characterFilter: {
+                isExclude: false,
+                names: [],
+                tags: []
+            },
+            matchPersonaDescription: false,
+            matchCharacterDescription: false,
+            matchCharacterPersonality: false,
+            matchCharacterDepthPrompt: false,
+            matchScenario: false,
+            matchCreatorNotes: false,
+            ignoreBudget: false,
+            addMemo: true,
+            automation_id: ''
+        };
+    }
+
+    // ==================== parseOptimizerOutput ====================
+
+    function parseOptimizerOutput(output) {
+
+        const actions = [];
+        const lines = output.split('\n');
+        let currentAction = null;
+        let contentLines = [];
+        let configLines = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const rawLine = lines[i];
+            const trimmedLine = rawLine.trim();
+
+            if (trimmedLine.startsWith('---需调整的状态模板---')) {
+
+                continue;
+            }
+
+            const startMatch = trimmedLine.match(/^(\d+)-(\d+)[：:]?(.*)$/);
+            if (startMatch && startMatch[1] && startMatch[2]) {
+                // 保存上一个动作
+                if (currentAction) {
+                    if (contentLines.join('\n').trim() === 'delete') {
+                        currentAction.config = '';
+                        currentAction.rawConfig = {};
+                        currentAction.convertedConfig = {};
+
+                    } else if (configLines.length > 0) {
+                        currentAction.config = configLines.join('；');
+                        currentAction.rawConfig = parseConfigLine(currentAction.config);
+                        currentAction.convertedConfig = convertArrayValues(currentAction.rawConfig);
+
+                    } else {
+                        currentAction.config = '';
+                        currentAction.rawConfig = {};
+                        currentAction.convertedConfig = {};
+
+                    }
+                    currentAction.content = contentLines.join('\n');
+
+                    actions.push(currentAction);
+                }
+
+                // 开始新动作
+                const bookIndex = parseInt(startMatch[1]);
+                const uid = parseInt(startMatch[2]);
+                const contentStart = startMatch[3] ? startMatch[3].trim() : '';
+
+
+                currentAction = {
+                    bookIndex,
+                    uid,
+                    content: '',
+                    config: '',
+                    rawConfig: {},
+                    convertedConfig: {}
+                };
+                contentLines = contentStart ? [contentStart] : [];
+                configLines = [];
+
+            } else if (currentAction) {
+                // 如果当前动作内容已确定为 'delete'，则后续所有行都忽略
+                const currentContent = contentLines.join('\n').trim();
+                if (currentContent === 'delete') {
+                    continue;
+                }
+
+                const isConfigLine = !trimmedLine.startsWith('-') &&
+                    !trimmedLine.startsWith('*') &&
+                    trimmedLine.length > 0 &&
+                    (trimmedLine.includes(':') || trimmedLine.includes('：'));
+
+                if (isConfigLine) {
+                    const parsed = parseConfigLine(rawLine);
+                    if (parsed && Object.keys(parsed).length > 0) {
+                        configLines.push(rawLine);
+
+                    } else {
+                        contentLines.push(rawLine);
+
+                    }
+                } else {
+                    contentLines.push(rawLine);
+                }
+            }
+        }
+
+        // 处理最后一个动作
+        if (currentAction) {
+            const finalContent = contentLines.join('\n').trim();
+            if (finalContent === 'delete') {
+                currentAction.config = '';
+                currentAction.rawConfig = {};
+                currentAction.convertedConfig = {};
+
+            } else if (configLines.length > 0) {
+                currentAction.config = configLines.join('；');
+                currentAction.rawConfig = parseConfigLine(currentAction.config);
+                currentAction.convertedConfig = convertArrayValues(currentAction.rawConfig);
+
+            } else {
+                currentAction.config = '';
+                currentAction.rawConfig = {};
+                currentAction.convertedConfig = {};
+
+            }
+            currentAction.content = contentLines.join('\n');
+
+            actions.push(currentAction);
+        }
+
+
+        return actions;
+    }
+
+    async function updateStateBooksFromOptimizerOutput(actions) {
+
+        // --- 获取当前状态书列表（用于创建缺失书）---
+        let stateBooks = await getAllStateBooks();
+        let currentBookCount = stateBooks.length;
+        UI.updateProgress(`  当前状态书: ${stateBooks.join(', ') || '无'} (共 ${currentBookCount} 本)`);
+
+        // 收集需要创建的状态书
+        const booksToCreate = new Set();
+        for (const action of actions) {
+            const bookIndex = Number(action.bookIndex);
+            if (bookIndex > currentBookCount && bookIndex <= CONFIG.MAX_STATE_BOOKS) {
+                booksToCreate.add(bookIndex);
+            }
+        }
+
+        // 创建缺失的状态书
+        for (const bookIndex of booksToCreate) {
+            const bookName = `${CONFIG.STATE_BOOK_PREFIX}${bookIndex}`;
+            try {
+                const result = await createAndActivateStateBook(bookName);
+                if (result && result.success) {
+                    UI.updateProgress(`  ✅ 状态书 ${bookName} 创建并激活成功`);
+                } else {
+                    UI.updateProgress(`  ⚠️ 状态书 ${bookName} 创建可能未成功`, true);
+                }
+            } catch (e) {
+                UI.updateProgress(`  ✗ 处理 ${bookName} 时发生异常: ${e.message}`, true);
+            }
+        }
+
+        // 重新获取状态书列表
+        stateBooks = await getAllStateBooks();
+        currentBookCount = stateBooks.length;
+        UI.updateProgress(`  更新后状态书: ${stateBooks.join(', ') || '无'} (共 ${currentBookCount} 本)`);
+        const availableBooksSet = new Set(stateBooks);
+
+        // ==================== 第一步：将动作按书号分类 ====================
+        const actionsByBook = {};
+        for (const action of actions) {
+            const bookIndex = action.bookIndex;
+            const bookName = `${CONFIG.STATE_BOOK_PREFIX}${bookIndex}`;
+
+            if (bookIndex > CONFIG.MAX_STATE_BOOKS) {
+                UI.updateProgress(`⚠️ 动作指定的状态书序号 ${bookIndex} 超过最大限制，已跳过`, true);
+                continue;
+            }
+            if (!availableBooksSet.has(bookName)) {
+                UI.updateProgress(`⚠️ 状态书 ${bookName} 不存在，跳过该动作`, true);
+                continue;
+            }
+
+            if (!actionsByBook[bookName]) {
+                actionsByBook[bookName] = { create: [], update: [], delete: [] };
+            }
+
+            if (action.content.trim() === 'delete') {
+                actionsByBook[bookName].delete.push(action);
+            } else {
+                // 判断是更新还是创建需要知道当前是否存在该 uid，但我们稍后会统一处理，先暂存
+                actionsByBook[bookName][action.uid ? 'update' : 'create'].push(action);
+            }
+        }
+
+        // ==================== 第二步：按书号依次处理 ====================
+        for (const bookName in actionsByBook) {
+            const bookActions = actionsByBook[bookName];
+
+
+            // 读取当前世界书一次（获取最新数据）
+            let book = await API.getWorldbook(bookName);
+            let entries = Array.isArray(book) ? book : (book.entries || []);
+            let modified = false; // 标记是否有修改
+
+            // 先处理删除（从 entries 中移除）
+            for (const action of bookActions.delete) {
+                const index = entries.findIndex(e => e.uid === action.uid);
+                if (index !== -1) {
+                    entries.splice(index, 1);
+                    modified = true;
+                    UI.updateProgress(`  → 已从 ${bookName} 中删除 uid=${action.uid}`);
+                } else {
+                    UI.updateProgress(`  ⚠️ ${bookName} 中未找到 uid=${action.uid}，跳过删除`, true);
+                }
+            }
+
+            // 合并更新和创建动作（统一处理）
+            const upsertActions = [...bookActions.update, ...bookActions.create];
+            for (const action of upsertActions) {
+                const parsed = parseCategoryFromContent(action.content, action.uid);
+                if (!parsed) {
+                    UI.updateProgress(`  ⚠️ 无法解析类别定义，跳过动作: ${action.content.substring(0, 30)}...`, true);
+                    continue;
+                }
+
+                const { catId, catName, definition } = parsed;
+                let config = action.convertedConfig || {};
+                delete config.uid;
+                delete config.id;
+                delete config.name;
+
+                const entryName = `状态-${bookName.split('-')[1]}-${catId.padStart(2, '0')}-${catName}`;
+
+                // ==================== 处理模板条目（累积更新）====================
+                const bookIndex = parseInt(bookName.split('-')[1]);
+                const templateEntryName = `${CONFIG.STATE_TEMPLATE_PREFIX}${bookIndex}`;
+                let templateEntry = entries.find(e => e.name === templateEntryName);
+                let templateContent = templateEntry ? templateEntry.content : '';
+
+                // 解析现有模板（使用改进后的正则，确保匹配所有类别）
+                const existingCategories = new Map();
+                const categoryRegex = /(?:^|\n)\s*\*\*类别(\d+):([^*]+)\*\*\s*\r?\n([\s\S]*?)(?=\r?\n\s*\*\*类别\d+\s*:|$)/g;
+                let match;
+                while ((match = categoryRegex.exec(templateContent)) !== null) {
+                    const existingCatId = match[1];
+                    const fullDefinition = match[0].trim();
+                    existingCategories.set(existingCatId, fullDefinition);
+                }
+
+
+                // 添加或替换当前类别
+                existingCategories.set(catId, definition);
+
+                // 重新构建模板内容（按编号排序）
+                const newTemplateContent = buildTemplateContentFromCategories(existingCategories);
+
+                if (newTemplateContent !== templateContent) {
+                    if (templateEntry) {
+                        templateEntry.content = newTemplateContent;
+                    } else {
+                        // 创建新模板条目
+                        const defaultTemplateEntry = {
+                            uid: 9999,
+                            name: templateEntryName,
+                            content: newTemplateContent,
+                            enabled: true,
+                            strategy: {
+                                type: 'selective',
+                                keys: [],
+                                keys_secondary: { logic: 'and_any', keys: [] },
+                                scan_depth: 0
+                            },
+                            position: { type: 'before_character_definition', role: 'system', depth: 0, order: 0 },
+                            probability: 1.0,
+                            recursion: { prevent_incoming: false, prevent_outgoing: false, delay_until: null },
+                            effect: { sticky: null, cooldown: null, delay: null },
+                            characterFilter: { isExclude: false, names: [], tags: [] },
+                            matchPersonaDescription: false,
+                            matchCharacterDescription: false,
+                            matchCharacterPersonality: false,
+                            matchCharacterDepthPrompt: false,
+                            matchScenario: false,
+                            matchCreatorNotes: false,
+                            ignoreBudget: false,
+                            addMemo: true,
+                            automation_id: ''
+                        };
+                        entries.push(defaultTemplateEntry);
+                        templateEntry = defaultTemplateEntry;
+                    }
+                    modified = true;
+
+                }
+
+                // ==================== 处理状态条目 ====================
+                const existingIndex = entries.findIndex(e => e.uid === action.uid);
+                if (existingIndex !== -1) {
+                    // 更新
+                    let targetEntry = entries[existingIndex];
+                    if (targetEntry.name !== entryName) {
+                        targetEntry.name = entryName;
+                    }
+                    applyFlatConfigToEntry(targetEntry, config);
+                    targetEntry.content = definition; // 状态条目的内容也用优化师提供的定义（字段占位符）
+                    entries[existingIndex] = targetEntry;
+                } else {
+                    // 创建
+                    let newEntry = getDefaultWorldbookEntry(definition);
+                    newEntry.uid = action.uid;
+                    newEntry.name = entryName;
+                    applyFlatConfigToEntry(newEntry, config);
+                    entries.push(newEntry);
+                }
+                modified = true;
+            }
+
+            // 如果这本书有任何修改，统一保存
+            if (modified) {
+
+                await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
+                UI.updateProgress(`  ✓ ${bookName} 已更新`);
+            } else {
+
+            }
+        }
+    }
+
+    async function updateWorldState(bookName, data) {
+
+        const successIds = [];
+        const errorIds = [];
+        const bookIndex = parseInt(bookName.split('-')[1]); // 从 "状态书-1" 提取 1
+
+        await API.updateWorldbook(bookName, (worldbook) => {
+            const entries = Array.isArray(worldbook) ? [...worldbook] : [...(worldbook.entries || [])];
+
+            for (const [catId, catData] of Object.entries(data)) {
+                // 条目名称格式：状态-{书号}-{类别编号}-{类别名}
+                const entryName = `状态-${bookIndex}-${catId.padStart(2, '0')}-${catData.name}`;
+                const entryIndex = entries.findIndex(e => e?.name === entryName);
+
+                // 直接使用协议中的字段内容，它已包含完整的字段列表（含缩进）
+                const content = catData.content;
+
+                if (content && content.trim().length > 0) {
+                    if (entryIndex !== -1) {
+                        entries[entryIndex].content = content;
+                    } else {
+                        entries.push({
+                            uid: Date.now() + parseInt(catId) * 1000,
+                            name: entryName,
+                            content: content,
+                            enabled: true
+                        });
+                    }
+                    successIds.push(`类别${catId}`);
+                } else {
+                    errorIds.push(`类别${catId}`);
+                }
+            }
+
+            return Array.isArray(worldbook) ? entries : { ...worldbook, entries, settings: worldbook.settings || {} };
+        }, { render: 'immediate' });
+
+        return { successIds, errorIds };
+    }
+
+    // ==================== 清空状态书 ====================
+
+    async function resetWorldStateToInitial() {
+
+        UI.updateProgress('开始按模板重置所有状态书...');
+        const books = await getAllStateBooks();
+        if (books.length === 0) {
+            UI.updateProgress('没有状态书需要重置');
+            return true;
+        }
+
+        for (const bookName of books) {
+            const bookIndex = parseInt(bookName.split('-')[1]);
+            const book = await API.getWorldbook(bookName);
+            const entries = Array.isArray(book) ? book : (book.entries || []);
+
+            // 获取该状态书中的模板条目
+            const templateEntryName = `${CONFIG.STATE_TEMPLATE_PREFIX}${bookIndex}`;
+            const templateEntry = entries.find(e => e.name === templateEntryName);
+            let categoryMap = {};
+            if (templateEntry) {
+                // 解析模板内容，构建类别ID -> 定义的映射
+                const content = templateEntry.content;
+                const categoryRegex = /\*\*类别(\d+):([^*]+)\*\*\n([\s\S]*?)(?=\n\*\*类别\d+:|$)/g;
+                let match;
+                while ((match = categoryRegex.exec(content)) !== null) {
+                    const catId = match[1];
+                    categoryMap[catId] = match[3].trim();
+                }
+            }
+
+            // 过滤出所有状态条目
+            const stateEntries = entries.filter(e => e?.name?.startsWith(CONFIG.STATE_ENTRY_PREFIX));
+
+            // 为每个状态条目重新生成内容
+            for (const entry of stateEntries) {
+                // 尝试从条目名称中提取类别ID（格式：状态-{bookIndex}-{catId}-{catName}）
+                const nameMatch = entry.name.match(new RegExp(`^状态-${bookIndex}-(\\d+)-`));
+                const catId = nameMatch ? nameMatch[1] : null;
+                let newContent;
+
+                if (catId && categoryMap[catId]) {
+                    // 有模板定义，使用模板定义作为基础，但保留字段值为空（或可自定义）
+                    // 这里简单使用模板定义，也可根据需要清空具体字段值
+                    newContent = categoryMap[catId];
+                } else {
+                    // 无模板或类别ID无法提取，使用默认初始内容
+                    newContent = getInitialStateContent();
+                }
+
+                entry.content = newContent;
+            }
+
+            // 保存更新后的世界书
+            await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
+            UI.updateProgress(`  ✓ 已重置 ${bookName} (${stateEntries.length} 个条目)`);
+        }
+
+        UI.updateProgress('✓ 所有状态书重置完成');
+        return true;
+    }
+
+    // ==================== 创建并激活状态书的辅助函数 ====================
+
+    async function createAndActivateStateBook(bookName) {
+
+        UI.updateProgress(`  创建状态书: ${bookName}...`);
+
+        // 1. 创建世界书
+        try {
+            if (typeof TavernHelper?.createWorldbook === 'function') {
+
+                await TavernHelper.createWorldbook(bookName);
+            } else if (typeof window.createWorldbook === 'function') {
+
+                await window.createWorldbook(bookName);
+            } else {
+                throw new Error('createWorldbook API 不可用');
+            }
+            UI.updateProgress(`  ✓ 已创建 ${bookName}`);
+
+        } catch (e) {
+            console.error(`[DEBUG][createAndActivateStateBook] 创建世界书失败: ${e.message}`, e);
+            throw new Error(`创建失败: ${e.message}`);
+        }
+
+        // 2. 等待确保创建完成
+
+        await API.sleep(300);
+
+        // 3. 获取当前已激活的全局世界书（创建前）
+        let originalGlobalBooks = [];
+        try {
+            if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
+
+                originalGlobalBooks = await TavernHelper.getGlobalWorldbookNames();
+            } else if (typeof window.getGlobalWorldbookNames === 'function') {
+
+                originalGlobalBooks = await window.getGlobalWorldbookNames();
+            }
+
+        } catch (e) {
+            UI.updateProgress(`  ⚠️ 获取当前全局世界书失败: ${e.message}`, true);
+            console.warn(`[DEBUG][createAndActivateStateBook] 获取全局世界书列表失败: ${e.message}`);
+        }
+
+        // 4. 激活世界书 - 保留原有世界书并添加新书
+        UI.updateProgress(`  正在激活 ${bookName}...`);
+        try {
+            // 将新书添加到原有列表中（如果不存在）
+            const newGlobalBooks = [...new Set([...originalGlobalBooks, bookName])];
+
+
+            if (typeof TavernHelper?.rebindGlobalWorldbooks === 'function') {
+
+                await TavernHelper.rebindGlobalWorldbooks(newGlobalBooks);
+            } else if (typeof window.rebindGlobalWorldbooks === 'function') {
+
+                await window.rebindGlobalWorldbooks(newGlobalBooks);
+            } else {
+                throw new Error('rebindGlobalWorldbooks API 不可用');
+            }
+
+            // 等待后重新获取全局世界书列表，验证激活是否成功
+            await API.sleep(500);
+            let updatedGlobalBooks = [];
+            try {
+                if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
+                    updatedGlobalBooks = await TavernHelper.getGlobalWorldbookNames();
+                } else if (typeof window.getGlobalWorldbookNames === 'function') {
+                    updatedGlobalBooks = await window.getGlobalWorldbookNames();
+                }
+            } catch (e) {
+                UI.updateProgress(`  ⚠️ 验证激活状态失败: ${e.message}`, true);
+                console.warn(`[DEBUG][createAndActivateStateBook] 验证激活状态失败: ${e.message}`);
+            }
+
+
+            // 检查新书是否在激活列表中
+            const isActivated = updatedGlobalBooks.includes(bookName);
+            if (isActivated) {
+                UI.updateProgress(`  ✓ 已激活 ${bookName}`);
+
+            } else {
+                UI.updateProgress(`  ⚠️ ${bookName} 可能未成功激活`, true);
+                console.warn(`[DEBUG][createAndActivateStateBook] 状态书 ${bookName} 未出现在激活列表中`);
+            }
+
+            // 返回更新后的全局世界书列表，供上层函数使用
+            return { success: true, globalBooks: updatedGlobalBooks };
+        } catch (e) {
+            UI.updateProgress(`  ✗ 激活失败: ${e.message}`, true);
+            console.error(`[DEBUG][createAndActivateStateBook] 激活世界书失败: ${e.message}`, e);
+            throw e;
+        }
+    }
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 10：分支系统辅助函数                                        ║
+    // ║  extractImageIds / extractOtherFileIds / extractAudioIds / collectDescendants / buildTreeMaps / getBranchPath║
+    // ╚══════════════════════════════════════════════════════════════════╝
 
     // ==================== 分支系统辅助函数 ====================
 
@@ -886,7 +2922,7 @@
      * @returns {Array<string>} 图片 ID 数组
      */
     function extractImageIds(content) {
-        console.log(`[extractImageIds] 输入内容长度: ${content?.length}`);
+
         const ids = new Set();
         const regex = /id:([a-zA-Z0-9_]+)/g;
         let match;
@@ -894,7 +2930,7 @@
             ids.add(match[1]);
         }
         const result = Array.from(ids);
-        console.log(`[extractImageIds] 提取到图片 ID: ${result.join(', ')}`);
+
         return result;
     }
 
@@ -904,8 +2940,8 @@
      * @returns {Array<string>} 其余文件 ID 数组
      */
     function extractOtherFileIds(content) {
-        console.log(`[extractOtherFileIds] ===== 开始提取其余文件 ID =====`);
-        console.log(`[extractOtherFileIds] 输入内容长度: ${content?.length}`);
+
+
         const ids = new Set();
         const regex = /id:(other_[a-zA-Z0-9_]+)/g;
         let match;
@@ -913,10 +2949,10 @@
         while ((match = regex.exec(content))) {
             ids.add(match[1]);
             count++;
-            console.log(`[extractOtherFileIds] 发现其余文件 ID: ${match[1]}`);
+
         }
         const result = Array.from(ids);
-        console.log(`[extractOtherFileIds] 共提取到 ${count} 个其余文件 ID: ${result.join(', ')}`);
+
         return result;
     }
 
@@ -926,7 +2962,7 @@
      * @returns {Array<string>} 音频 ID 数组
      */
     function extractAudioIds(content) {
-        console.log(`[extractAudioIds] 输入内容长度: ${content?.length}`);
+
         const ids = new Set();
         const regex = /id:(audio_[a-zA-Z0-9_]+)/g;
         let match;
@@ -934,7 +2970,7 @@
             ids.add(match[1]);
         }
         const result = Array.from(ids);
-        console.log(`[extractAudioIds] 提取到音频 ID: ${result.join(', ')}`);
+
         return result;
     }
 
@@ -946,7 +2982,7 @@
      * @returns {Array<number>} 后代章节号数组
      */
     function collectDescendants(startNum, chapters, includeSelf = false) {
-        console.log(`[collectDescendants] startNum=${startNum}, includeSelf=${includeSelf}`);
+
         const result = [];
         const stack = [startNum];
         const visited = new Set();
@@ -957,7 +2993,7 @@
             if (current !== startNum || includeSelf) result.push(current);
             chapters.filter(c => c.parent === current).forEach(child => stack.push(child.num));
         }
-        console.log(`[collectDescendants] 收集到后代: ${result.join(', ')}`);
+
         return result;
     }
 
@@ -967,7 +3003,7 @@
      * @returns {Object} { childrenMap, chapterMap }
      */
     function buildTreeMaps(chapters) {
-        console.log('[buildTreeMaps] 开始构建树映射');
+
         const childrenMap = {};
         const chapterMap = {};
         chapters.forEach(ch => {
@@ -981,8 +3017,8 @@
         });
         // 按 num 排序子节点
         Object.values(childrenMap).forEach(list => list.sort((a, b) => a.num - b.num));
-        console.log('[buildTreeMaps] 构建完成');
-        return {childrenMap, chapterMap};
+
+        return { childrenMap, chapterMap };
     }
 
     /**
@@ -994,7 +3030,7 @@
      * @returns {string} 紧凑路径
      */
     function getBranchPath(num, chapterMap, childrenMap) {
-        console.log(`[getBranchPath] ===== 开始计算章节 ${num} 的紧凑路径 =====`);
+
         console.time(`getBranchPath_${num}`);
 
         const chapter = chapterMap[num];
@@ -1009,7 +3045,7 @@
         let currentNum = num;
         let current = chapter;
 
-        console.log(`[getBranchPath] 开始回溯，当前节点: ${currentNum}, 父节点: ${current.parent}`);
+
 
         while (current.parent !== null && current.parent !== undefined) {
             const parentNum = current.parent;
@@ -1033,22 +3069,22 @@
                 break;
             }
 
-            console.log(`[getBranchPath] 父节点 ${parentNum} 有 ${siblings.length} 个子节点，当前节点 ${currentNum} 的序号为 ${index}`);
+
             segments.push(index);
 
             // 向上移动
             currentNum = parentNum;
             current = parent;
-            console.log(`[getBranchPath] 向上移动到父节点: ${currentNum}`);
+
         }
 
         // 当前节点已无父节点，即为根节点
         const rootNum = currentNum;
-        console.log(`[getBranchPath] 回溯结束，根节点号为 ${rootNum}`);
+
 
         // 将 segments 反转，得到从根到目标节点的顺序
         const pathSegments = segments.reverse();
-        console.log(`[getBranchPath] 从根到目标的顺序序号: [${pathSegments.join(', ')}]`);
+
 
         // 构建紧凑路径
         let path = String(rootNum);
@@ -1056,10 +3092,1512 @@
             path += '#'.repeat(idx) + idx;
         }
 
-        console.log(`[getBranchPath] 最终路径: ${path}`);
+
         console.timeEnd(`getBranchPath_${num}`);
         return path;
     }
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 11：Agent 状态管理                                          ║
+    // ║  AgentStateManager / getAgentDisplayName / getAgentHoverText     ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== Agent状态管理 ====================
+
+    const AgentStateManager = {
+        states: {},
+
+        init() {
+            // 保护性检查：如果 CONFIG.AGENTS 不存在或不是对象，则初始化为空对象
+            if (!CONFIG.AGENTS || typeof CONFIG.AGENTS !== 'object') {
+                console.warn('CONFIG.AGENTS 无效，已重置为空对象');
+                this.states = {};
+                return;
+            }
+            Object.keys(CONFIG.AGENTS).forEach(key => {
+                this.states[key] = 'idle';
+            });
+        },
+
+        setState(agentKey, state) {
+            if (CONFIG.AGENTS[agentKey]) {
+                if (this.states[agentKey] !== state) { // 仅当状态变化时才更新
+                    this.states[agentKey] = state;
+                    UI.updateAgentStatusButton(agentKey);
+                }
+            }
+        },
+
+        getState(agentKey) {
+            return this.states[agentKey] || 'idle';
+        },
+
+        reset() {
+            Object.keys(CONFIG.AGENTS).forEach(key => {
+                this.states[key] = 'idle';
+            });
+            UI.updateAllAgentStatusButtons();
+        },
+    };
+
+    // ==================== 前置检测 ====================
+
+    // ==================== 辅助函数：获取Agent显示名称 ====================
+
+    function getAgentDisplayName(agentKey) {
+        const agent = CONFIG.AGENTS[agentKey];
+        if (!agent) {
+            console.warn(`[getAgentDisplayName] 未找到 agentKey="${agentKey}"`);
+            return agentKey;
+        }
+        console.debug(`[getAgentDisplayName] ${agentKey} => "${agent.displayName}"`);
+        return agent.displayName; // 可能为空字符串
+    }
+
+    // ==================== 辅助函数：获取Agent悬浮提示 ====================
+
+    function getAgentHoverText(agentKey) {
+        const agent = CONFIG.AGENTS[agentKey];
+        if (!agent) {
+            console.warn(`[getAgentHoverText] 未找到 agentKey="${agentKey}"`);
+            return '';
+        }
+        console.debug(`[getAgentHoverText] ${agentKey} hover="${(agent.hover || '').substring(0, 40)}"`);
+        return agent.hover || ''; // 若 hover 为 undefined/null 则返回空字符串
+    }
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 12：API 适配层                                              ║
+    // ║  API 对象 + testAPIConnection — TavernHelper 封装与外部 API 测试  ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== API 适配层 ====================
+
+    const API = {
+        getContext() {
+            if (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.getContext) {
+                return window.SillyTavern.getContext();
+            }
+            throw new Error('无法获取 SillyTavern 上下文');
+        },
+
+        async selectCharacter(agentName) {
+            if (typeof TavernHelper?.triggerSlash === 'function') {
+                await TavernHelper.triggerSlash(`/go ${agentName}`);
+                return;
+            }
+            throw new Error('TavernHelper.triggerSlash 不可用');
+        },
+
+        async generate(message, options = {}) {
+            if (typeof TavernHelper?.generate !== 'function') throw new Error('TavernHelper.generate 不可用');
+            const context = this.getContext();
+            const result = await TavernHelper.generate({
+                user_input: message, max_chat_history: 1, should_silence: true, ...options
+            });
+            let text = '';
+            if (typeof result === 'string') {
+                text = result;
+            } else if (result && typeof result === 'object') {
+                text = result.text || result.message || result.response || '';
+            }
+            if (!text) {
+                const last = [...(context.chat || [])].reverse().find(m => !m.is_user);
+                if (last) text = last.mes;
+            }
+            return { mes: text, name: context.name2 || 'Assistant', is_user: false, extra: result?.extra || {} };
+        },
+
+        async getWorldbook(name) {
+            if (typeof TavernHelper?.getWorldbook === 'function') return TavernHelper.getWorldbook(name);
+            if (typeof window.getWorldbook === 'function') return window.getWorldbook(name);
+            throw new Error('getWorldbook 不可用');
+        },
+
+        async updateWorldbook(name, callback, options = {}) {
+            if (typeof TavernHelper?.updateWorldbookWith === 'function') return TavernHelper.updateWorldbookWith(name, callback, options);
+            if (typeof window.updateWorldbookWith === 'function') return window.updateWorldbookWith(name, callback, options);
+            throw new Error('updateWorldbookWith 不可用');
+        },
+
+        async stopGeneration() {
+            if (typeof TavernHelper?.stopAllGeneration === 'function') {
+                try {
+
+                    await TavernHelper.stopAllGeneration();
+                } catch (e) {
+                    console.error('[API.stopGeneration] 调用 stopAllGeneration 失败:', e);
+                }
+            } else {
+                console.warn('[API.stopGeneration] TavernHelper.stopAllGeneration 不可用');
+                // 可以保留原有的降级方案，例如调用 SillyTavern 的停止方法
+                // if (typeof SillyTavern?.getContext?.()?.stopGenerating === 'function') { ... }
+            }
+        },
+
+        sleep: (ms) => new Promise(r => setTimeout(r, ms))
+    };
+
+
+    /**
+     * 测试单个API配置的连通性
+     * @param {Object} config - API配置对象，包含 source, apiUrl, key, model, timeout 等
+     * @returns {Promise<{ok: boolean, error?: string}>}
+     */
+    async function testAPIConnection(config) {
+        const { type, source, apiUrl, key, model, timeout = 10000 } = config;
+        const url = apiUrl.replace(/\/+$/, ''); // 去除末尾多余的斜杠
+
+        // ========== 调试日志：函数入口 ==========
+
+
+
+        // 检查密钥是否包含非ASCII字符（中文等）
+        if (/[^\x00-\x7F]/.test(key)) {
+            const errorMsg = 'API密钥包含非ASCII字符（如中文），请使用有效的密钥';
+            console.error(`[testAPIConnection] ${errorMsg}`);
+            return { ok: false, error: errorMsg };
+        }
+
+        if (type === 'text') {
+            // 文本平台统一测试 GET /models （用户已提供版本前缀，如 /v1）
+            const modelsUrl = url + '/models';
+
+
+            const options = {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json',
+                },
+                signal: AbortSignal.timeout(timeout),
+            };
+
+
+            try {
+
+                const response = await fetch(modelsUrl, options);
+
+
+                if (response.ok) {
+
+                    return { ok: true };
+                } else {
+                    const errorText = await response.text();
+                    console.error(`[testAPIConnection][text] 响应错误文本:`, errorText);
+                    return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                }
+            } catch (err) {
+                console.error(`[testAPIConnection][text] 请求异常:`, err);
+                return { ok: false, error: err.message };
+            }
+        } else if (type === 'image') {
+
+
+            if (source === 'openai') {
+                // OpenAI 图像 API 测试：尝试 GET /models
+                const modelsUrl = url + '/models';
+
+
+                const options = {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                        'Content-Type': 'application/json',
+                    },
+                    signal: AbortSignal.timeout(timeout),
+                };
+
+
+                try {
+
+                    const response = await fetch(modelsUrl, options);
+
+
+                    if (response.ok) {
+
+                        return { ok: true };
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`[testAPIConnection][openai] 响应错误文本:`, errorText);
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                    }
+                } catch (err) {
+                    console.error(`[testAPIConnection][openai] 请求异常:`, err);
+                    return { ok: false, error: err.message };
+                }
+            } else if (source === 'stability') {
+                // Stability AI 测试：尝试 GET /user/account
+                const accountUrl = url + '/user/account';
+
+
+                const options = {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                    },
+                    signal: AbortSignal.timeout(timeout),
+                };
+
+
+                try {
+
+                    const response = await fetch(accountUrl, options);
+
+
+                    if (response.ok) {
+
+                        return { ok: true };
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`[testAPIConnection][stability] 响应错误文本:`, errorText);
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                    }
+                } catch (err) {
+                    console.error(`[testAPIConnection][stability] 请求异常:`, err);
+                    return { ok: false, error: err.message };
+                }
+            } else if (source === 'midjourney') {
+                // Midjourney 测试：尝试 GET /mj/ping（假设有此端点）
+                const pingUrl = url + '/mj/ping';
+
+
+                const options = {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                    },
+                    signal: AbortSignal.timeout(timeout),
+                };
+
+
+                try {
+
+                    const response = await fetch(pingUrl, options);
+
+
+                    if (response.ok) {
+
+                        return { ok: true };
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`[testAPIConnection][midjourney] 响应错误文本:`, errorText);
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                    }
+                } catch (err) {
+                    console.warn('[testAPIConnection][midjourney] ping 失败，尝试轻量任务...');
+                    console.error('[testAPIConnection][midjourney] 异常详情:', err);
+                    return { ok: false, error: `无法验证 Midjourney 连通性: ${err.message}` };
+                }
+            } else if (source === 'flux') {
+                // Flux 测试：尝试 GET /models（假设兼容 OpenAI）
+                const modelsUrl = url + '/models';
+
+
+                const options = {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                    },
+                    signal: AbortSignal.timeout(timeout),
+                };
+
+
+                try {
+
+                    const response = await fetch(modelsUrl, options);
+
+
+                    if (response.ok) {
+
+                        return { ok: true };
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`[testAPIConnection][flux] 响应错误文本:`, errorText);
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                    }
+                } catch (err) {
+                    console.error(`[testAPIConnection][flux] 请求异常:`, err);
+                    return { ok: false, error: err.message };
+                }
+            } else if (source === 'picsart') {
+                // Picsart 测试：尝试 GET /health（假设）
+                const healthUrl = url + '/health';
+
+
+                const options = {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                    },
+                    signal: AbortSignal.timeout(timeout),
+                };
+
+
+                try {
+
+                    const response = await fetch(healthUrl, options);
+
+
+                    if (response.ok) {
+
+                        return { ok: true };
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`[testAPIConnection][picsart] 响应错误文本:`, errorText);
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                    }
+                } catch (err) {
+                    console.error(`[testAPIConnection][picsart] 请求异常:`, err);
+                    return { ok: false, error: err.message };
+                }
+            } else if (source === 'siliconflow') {
+                // SiliconFlow 图像：尝试 GET /models（假设兼容 OpenAI）
+                const modelsUrl = url + '/models';
+
+
+                const options = {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                    },
+                    signal: AbortSignal.timeout(timeout),
+                };
+
+
+                try {
+
+                    const response = await fetch(modelsUrl, options);
+
+
+                    if (response.ok) {
+
+                        return { ok: true };
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`[testAPIConnection][siliconflow] 响应错误文本:`, errorText);
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                    }
+                } catch (err) {
+                    console.error(`[testAPIConnection][siliconflow] 请求异常:`, err);
+                    return { ok: false, error: err.message };
+                }
+            } else if (source === 'sdwebui') {
+                // Stable Diffusion WebUI 测试：尝试 GET /sdapi/v1/sd-models
+                const testUrl = url + '/sdapi/v1/sd-models';
+
+
+                const options = {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(timeout),
+                };
+
+
+                try {
+
+                    const response = await fetch(testUrl, options);
+
+
+                    if (response.ok) {
+
+                        return { ok: true };
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`[testAPIConnection][sdwebui] 响应错误文本:`, errorText);
+                        return { ok: false, error: `SD WebUI 未正确响应 (${response.status}): ${errorText}` };
+                    }
+                } catch (err) {
+                    console.error(`[testAPIConnection][sdwebui] 请求异常:`, err);
+                    return { ok: false, error: `无法连接到 SD WebUI: ${err.message}` };
+                }
+            } else if (source === 'other') {
+                // 其他图像 API：尝试 OPTIONS 请求或简单 GET
+
+                try {
+                    const response = await fetch(url, {
+                        method: 'OPTIONS',
+                        signal: AbortSignal.timeout(timeout),
+                    });
+
+
+                    if (response.status < 500) {
+
+                        return { ok: true, warning: '仅验证了URL可达性，密钥有效性未确认' };
+                    } else {
+                        const errorText = await response.text();
+                        console.error(`[testAPIConnection][other] 响应错误文本:`, errorText);
+                        return { ok: false, error: `OPTIONS 请求失败 (${response.status})` };
+                    }
+                } catch (err) {
+                    console.error(`[testAPIConnection][other] 请求异常:`, err);
+                    return { ok: false, error: `无法验证图像API连通性，请手动检查URL和密钥。详细错误: ${err.message}` };
+                }
+            } else {
+                console.error(`[testAPIConnection] 不支持的图像平台: ${source}`);
+                return { ok: false, error: `不支持的图像平台: ${source}` };
+            }
+        }
+        // ========== 新增：音频平台测试 ==========
+        else if (type === 'audio') {
+
+
+
+            // 根据不同的 source 构造不同的测试端点
+            let testUrl = url; // 默认使用根 URL
+            let method = 'GET';
+            let headers = {};
+
+            // 需要认证的平台添加 Authorization 头
+            const authSources = ['elevenlabs', 'minimax', 'minimax-music', 'minimax-speech', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'stableaudio', 'riffusion', 'custom'];
+            if (authSources.includes(source) && key && key.trim() !== '') {
+                if (source === 'azure-tts') {
+                    headers['Ocp-Apim-Subscription-Key'] = key;
+                } else {
+                    headers['Authorization'] = `Bearer ${key}`;
+                }
+                headers['Content-Type'] = 'application/json';
+
+            }
+
+            // 针对已知平台选择更合适的健康检查端点
+            switch (source) {
+                case 'elevenlabs':
+                    testUrl = url + '/voices'; // 获取声音列表，需要认证
+                    break;
+                case 'minimax':
+                case 'minimax-music':
+                case 'minimax-speech':
+                    // MiniMax 可能使用 /voice/list
+                    testUrl = url + '/voice/list';
+                    break;
+                case 'huggingface':
+                    testUrl = url + '/api/models'; // 获取模型列表
+                    break;
+                case 'openai-tts':
+                    testUrl = url + '/models'; // 兼容 OpenAI 的模型列表
+                    break;
+                case 'azure-tts':
+                    // Azure TTS 的语音列表端点：/cognitiveservices/voices/list
+                    testUrl = url + '/cognitiveservices/voices/list';
+                    // 认证头已在上面设置
+                    break;
+                case 'google-tts':
+                    // Google TTS 需要将 key 放在 URL 参数中
+                    testUrl = url + '/voices?key=' + encodeURIComponent(key);
+                    headers = {}; // 移除 Authorization 头
+                    break;
+                case 'stableaudio':
+                    testUrl = url + '/v2beta/audio/health'; // 假设有此端点
+                    break;
+                case 'riffusion':
+                    testUrl = url; // 直接根路径，可能返回 200 或 404 但可用于连通性
+                    method = 'HEAD';
+                    break;
+                case 'custom':
+                case 'other':
+                    // 对于自定义，尝试 OPTIONS 请求或 GET 根路径
+                    method = 'OPTIONS';
+                    testUrl = url;
+                    break;
+                default:
+                    testUrl = url;
+            }
+
+
+            const options = {
+                method: method,
+                headers: headers,
+                signal: AbortSignal.timeout(timeout),
+            };
+
+            try {
+                const startTime = Date.now();
+                const response = await fetch(testUrl, options);
+                const elapsed = Date.now() - startTime;
+
+
+                if (response.ok) {
+
+                    return { ok: true };
+                } else {
+                    const errorText = await response.text();
+                    console.error(`[testAPIConnection][audio] 错误响应:`, errorText);
+                    return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                }
+            } catch (err) {
+                console.error(`[testAPIConnection][audio] 请求异常:`, err);
+                return { ok: false, error: err.message };
+            }
+        }
+        // ========== 结束音频平台测试 ==========
+        else {
+            console.error(`[testAPIConnection] 未知的 type: ${type}`);
+            return { ok: false, error: `未知的 type: ${type}` };
+        }
+    }
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 13：前置检测                                               ║
+    // ║  PreCheck — 运行前环境验证（状态书 / 配置 / API 连通性）          ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 前置检测 ====================
+
+    const PreCheck = {
+        checkAll: async function () {
+            const configLoaded = Object.keys(CONFIG.AGENTS).length > 0;
+            const results = {
+                configLoaded,
+                stateBook: await this.checkStateBook(),
+                settingBook: await this.checkSettingBook(),
+                agents: null,
+                apiStatus: null,
+            };
+
+            if (configLoaded) {
+                results.agents = await this.checkAgents();
+                results.apiStatus = await this.checkAPIConnections();
+            } else {
+                results.agents = {
+                    allExist: false,
+                    configNotLoaded: true,
+                    error: '请先加载配置文件'
+                };
+            }
+
+            // 只要存在任何一个API配置不可用，allPassed 即为 false
+            let apiAllOk = true;
+            if (results.apiStatus) {
+                for (const [id, status] of Object.entries(results.apiStatus)) {
+                    if (!status.ok) {
+                        apiAllOk = false;
+                        console.warn(`[PreCheck.checkAll] API ${id} 不可用:`, status.error);
+                    }
+                }
+            }
+
+            results.allPassed = configLoaded && results.agents?.allExist === true && apiAllOk;
+            return results;
+        },
+
+        checkAPIConnections: async function () {
+            const apiConfigs = CONFIG.apiConfigs || {};
+            const allConfigIds = Object.keys(apiConfigs);
+
+            const status = {};
+            for (const id of allConfigIds) {
+                const config = apiConfigs[id];
+                const result = await testAPIConnection(config);
+                status[id] = {
+                    ok: result.ok,
+                    error: result.error,
+                    lastTest: Date.now(),
+                };
+            }
+            return status;
+        },
+
+        async checkStateBook() {
+            try {
+                const books = await getAllStateBooks(); // 获取所有存在的状态书
+                let totalStateEntries = 0;
+                let hasAnyStates = false;
+                let hasAnyTemplate = false;
+
+                for (const bookName of books) {
+                    const book = await API.getWorldbook(bookName);
+                    const entries = Array.isArray(book) ? book : (book.entries || []);
+                    const stateEntries = entries.filter(e => e?.name?.startsWith(CONFIG.STATE_ENTRY_PREFIX));
+                    if (stateEntries.length > 0) {
+                        hasAnyStates = true;
+                        totalStateEntries += stateEntries.length;
+                    }
+                    // 检查该状态书是否有对应的模板条目
+                    const bookIndex = parseInt(bookName.split('-')[1]);
+                    const templateEntry = entries.find(e => e.name === `${CONFIG.STATE_TEMPLATE_PREFIX}${bookIndex}`);
+                    if (templateEntry) hasAnyTemplate = true;
+                }
+
+                return {
+                    exists: books.length > 0,
+                    hasStates: hasAnyStates,
+                    hasTemplate: hasAnyTemplate,
+                    stateCount: totalStateEntries,
+                    error: books.length === 0 ? '未找到任何状态书（如 状态书-1、状态书-2 等）' :
+                        !hasAnyStates ? '状态书存在但没有状态条目' :
+                            !hasAnyTemplate ? '所有状态书均缺少模板条目（状态模板-N）' : null
+                };
+            } catch (e) {
+                return { exists: false, error: `读取状态书失败: ${e.message}` };
+            }
+        },
+
+        async checkSettingBook() {
+            try {
+                // 获取当前激活的全局世界书列表
+                let globalBooks = [];
+                try {
+                    if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
+                        globalBooks = await TavernHelper.getGlobalWorldbookNames();
+                    } else if (typeof window.getGlobalWorldbookNames === 'function') {
+                        globalBooks = await window.getGlobalWorldbookNames();
+                    }
+                } catch (e) {
+                    console.warn('[PreCheck.checkSettingBook] 获取全局激活列表失败:', e);
+                }
+
+                // 检查设定书是否在激活列表中
+                if (!globalBooks.includes(CONFIG.SETTING_BOOK_NAME)) {
+                    return { exists: false, error: '设定书未激活' };
+                }
+
+                // 如果激活，再读取内容
+                const book = await API.getWorldbook(CONFIG.SETTING_BOOK_NAME);
+                const entries = Array.isArray(book) ? book : (book.entries || []);
+
+                return {
+                    exists: entries.length > 0,
+                    entryCount: entries.length,
+                    error: entries.length === 0 ? '设定书为空' : null
+                };
+            } catch (e) {
+                return { exists: false, error: `读取设定书失败: ${e.message}` };
+            }
+        },
+
+        async checkAgents() {
+            const context = API.getContext();
+            const characters = context.characters || [];
+            const characterNames = characters.map(c => c?.name || c?.data?.name || '');
+
+            const missingAgents = [];
+            const foundAgents = [];
+
+            // 遍历动态加载的 CONFIG.AGENTS
+            for (const [, agent] of Object.entries(CONFIG.AGENTS)) {
+                const found = characterNames.some(name => name === agent.name);
+                if (found) {
+                    foundAgents.push(agent.name);
+                } else {
+                    missingAgents.push(agent.name);
+                }
+            }
+
+            return {
+                allExist: missingAgents.length === 0,
+                foundCount: foundAgents.length,
+                totalCount: Object.keys(CONFIG.AGENTS).length,
+                foundAgents,
+                missingAgents,
+                error: missingAgents.length > 0 ? `缺少以下Agent角色卡:\n${missingAgents.join('\n')}` : null
+            };
+        },
+
+        formatErrorMessage: function (results) {
+            const errors = [];
+
+            // 状态书
+            if (!results.stateBook.exists) {
+                errors.push(`📚 状态书: ⚠️ 未找到，系统将在需要时自动创建`);
+            } else if (!results.stateBook.hasStates) {
+                errors.push(`📚 状态书: ⚠️ 存在但没有状态条目，系统将在需要时自动创建`);
+            } else {
+                errors.push(`📚 状态书: ✓ 已找到 (${results.stateBook.stateCount}个状态条目)`);
+            }
+
+            // 设定书
+            if (!results.settingBook.exists) {
+                errors.push(`📖 设定书: ⚠️ 未找到（可选）`);
+            } else {
+                errors.push(`📖 设定书: ✓ 已找到 (${results.settingBook.entryCount}个条目)`);
+            }
+
+            // Agent 部分
+            if (results.agents) {
+                if (results.agents.configNotLoaded) {
+                    errors.push(`🤖 Agent配置: 未加载`);
+                } else {
+                    // 统计每个角色卡名称的出现次数和缺失情况
+                    const nameCount = {};
+                    const nameMissing = {};
+                    const foundSet = new Set(results.agents.foundAgents || []);
+
+                    for (const [key, agent] of Object.entries(CONFIG.AGENTS)) {
+                        const name = agent.name;
+                        nameCount[name] = (nameCount[name] || 0) + 1;
+                        if (!foundSet.has(name)) {
+                            nameMissing[name] = (nameMissing[name] || 0) + 1;
+                        }
+                    }
+
+                    let agentLines = ['🤖 Agent角色卡:'];
+                    const uniqueNames = [...new Set(Object.values(CONFIG.AGENTS).map(a => a.name))];
+                    for (const name of uniqueNames) {
+                        const total = nameCount[name];
+                        const missing = nameMissing[name] || 0;
+                        const present = total - missing;
+                        const status = missing === 0 ? '✓' : '✗';
+                        let line = `  ${status} ${name}`;
+                        if (total > 1) {
+                            line += ` (${present}/${total}个Agent可用)`;
+                        }
+                        agentLines.push(line);
+                    }
+                    errors.push(agentLines.join('\n'));
+                }
+            } else {
+                errors.push(`🤖 Agent信息: 无法获取`);
+            }
+
+            // API 状态
+            if (results.apiStatus) {
+                const failedApis = [];
+                for (const [id, status] of Object.entries(results.apiStatus)) {
+                    if (!status.ok) {
+                        const errorMsg = (status.error || '未知错误').replace(/\n/g, ' ');
+                        failedApis.push(`  ❌ ${id}: ${errorMsg}`);
+                    }
+                }
+                if (failedApis.length > 0) {
+                    errors.push(`🔌 API连通性测试失败：\n${failedApis.join('\n')}`);
+                }
+            }
+
+            // 最终判断：只要有任何失败，就返回错误信息
+            if (results.configLoaded && results.agents?.allExist === true && (!results.apiStatus || Object.values(results.apiStatus).every(s => s.ok))) {
+                return null;
+            }
+
+            return errors.join('\n');
+        }
+    };
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 14：通知                                                   ║
+    // ║  Notify — toastr 封装                                            ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 通知 ====================
+
+    const Notify = {
+        _call(type, msg, title, opts) {
+            // 确保 msg 和 title 是字符串
+            const safeMsg = (msg === null || msg === undefined) ? '' : String(msg);
+            const safeTitle = (title === null || title === undefined) ? '' : String(title);
+            const formattedMsg = safeMsg.replace(/\n/g, '<br>');
+
+            if (typeof window.toastr !== 'undefined') {
+                const defaultOptions = {
+                    escapeHtml: false,          // 允许 HTML，使 <br> 生效
+                    closeButton: true,
+                    progressBar: true,
+                    timeOut: 5000,
+                    extendedTimeOut: 5000,
+                    positionClass: 'toast-top-right',
+                    preventDuplicates: true,
+                };
+                const userOptions = opts || {};
+                const options = { ...defaultOptions, ...userOptions };
+                toastr[type](formattedMsg, safeTitle, options);
+            } else {
+                console[type === 'error' ? 'error' : type === 'warning' ? 'warn' : 'log'](`[${type.toUpperCase()}]`, safeTitle, safeMsg);
+                if (type === 'error' || type === 'success') {
+                    alert((safeTitle ? safeTitle + '\n' : '') + safeMsg);
+                }
+            }
+        },
+        success: (msg, title, opts) => Notify._call('success', msg, title, opts),
+        error: (msg, title, opts) => Notify._call('error', msg, title, opts),
+        warning: (msg, title, opts) => Notify._call('warning', msg, title, opts),
+        info: (msg, title, opts) => Notify._call('info', msg, title, opts)
+    };
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 15：模态框栈                                               ║
+    // ║  ModalStack — 管理多层模态框的 ESC 关闭顺序                       ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 模态框栈 ====================
+
+    const ModalStack = {
+        _stack: [],
+        push(overlay) {
+            this._stack.push(overlay);
+        },
+        remove(overlay) {
+            const idx = this._stack.indexOf(overlay);
+            if (idx !== -1) this._stack.splice(idx, 1);
+        },
+        closeTop() {
+            const top = this._stack.pop();
+            if (!top) return;
+            const isHistoryPanel = top.querySelector('.nc-history-panel') !== null;
+            top.style.opacity = '0';
+            top.style.transition = 'opacity .2s';
+            setTimeout(() => {
+                top.remove();
+                if (isHistoryPanel && this._stack.length === 0) {
+                    UI.createPanel();
+                }
+            }, 200);
+        }
+    };
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 16：状态快照                                                ║
+    // ║  Snapshot — 世界书快照的创建与恢复                                ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 状态快照 ====================
+
+    const Snapshot = {
+        /**
+         * 创建增强快照：保存所有状态书的全部条目（包括模板）
+         */
+        async create() {
+            console.time('Snapshot.create');
+
+            const books = await getAllStateBooks();
+
+            const booksData = {};
+
+            for (const bookName of books) {
+                console.time(`读取 ${bookName}`);
+                const book = await API.getWorldbook(bookName);
+                const entries = Array.isArray(book) ? book : (book.entries || []);
+                console.timeEnd(`读取 ${bookName}`);
+
+                // 使用深拷贝，但记录条目数大小
+                booksData[bookName] = entries.map(e => {
+                    // 粗略估计 JSON 字符串长度
+                    const size = JSON.stringify(e).length;
+
+                    return JSON.parse(JSON.stringify(e));
+                });
+            }
+
+            const snapshot = {
+                timestamp: new Date().toISOString(),
+                books: booksData
+            };
+            console.timeEnd('Snapshot.create');
+
+            return snapshot;
+        },
+
+        /**
+         * 彻底回滚：删除所有现有状态书，并按快照精确重建
+         */
+        async restore(snapshot) {
+            if (!snapshot?.books) return false;
+            UI.updateProgress(`开始彻底回滚状态书...`);
+
+            // 获取当前所有状态书
+            const currentBooks = await getAllStateBooks();
+            const snapshotBookNames = Object.keys(snapshot.books);
+
+            // 获取当前全局激活的世界书列表（用于后续恢复激活状态）
+            let currentGlobalBooks = [];
+            try {
+                if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
+                    currentGlobalBooks = await TavernHelper.getGlobalWorldbookNames();
+                } else if (typeof window.getGlobalWorldbookNames === 'function') {
+                    currentGlobalBooks = await window.getGlobalWorldbookNames();
+                }
+            } catch (e) {
+                UI.updateProgress(`  ⚠️ 获取当前全局世界书失败: ${e.message}`, true);
+            }
+
+            // 1. 删除所有现有的状态书
+            for (const bookName of currentBooks) {
+                UI.updateProgress(`  删除状态书: ${bookName}...`);
+                try {
+                    if (typeof deleteWorldbook === 'function') {
+                        await deleteWorldbook(bookName);
+                    } else if (typeof TavernHelper?.deleteWorldbook === 'function') {
+                        await TavernHelper.deleteWorldbook(bookName);
+                    } else {
+                        throw new Error('deleteWorldbook API 不可用');
+                    }
+                } catch (e) {
+                    UI.updateProgress(`    ✗ 删除失败: ${e.message}`, true);
+                }
+            }
+
+            // 2. 重建快照中的状态书
+            for (const bookName of snapshotBookNames) {
+                UI.updateProgress(`  重建 ${bookName} (${snapshot.books[bookName].length} 个条目)...`);
+                try {
+                    // 创建世界书（如果已存在则可能失败，但我们已经删除了，所以通常不存在）
+                    if (typeof createWorldbook === 'function') {
+                        await createWorldbook(bookName);
+                    } else if (typeof TavernHelper?.createWorldbook === 'function') {
+                        await TavernHelper.createWorldbook(bookName);
+                    } else {
+                        throw new Error('createWorldbook API 不可用');
+                    }
+                    // 写入条目（snapshot.books[bookName] 已是完整的嵌套结构）
+                    await API.updateWorldbook(bookName, () => snapshot.books[bookName], { render: 'immediate' });
+                } catch (e) {
+                    UI.updateProgress(`    ✗ 重建失败: ${e.message}`, true);
+                }
+            }
+
+            // 3. 重新设置全局激活世界书列表
+            // 保留原有的非状态书（如设定书），并添加快照中的所有状态书
+            const nonStateBooks = currentGlobalBooks.filter(name => !name.startsWith(CONFIG.STATE_BOOK_PREFIX));
+            const newGlobalBooks = [...new Set([...nonStateBooks, ...snapshotBookNames])];
+            try {
+                if (typeof TavernHelper?.rebindGlobalWorldbooks === 'function') {
+                    await TavernHelper.rebindGlobalWorldbooks(newGlobalBooks);
+                } else if (typeof window.rebindGlobalWorldbooks === 'function') {
+                    await window.rebindGlobalWorldbooks(newGlobalBooks);
+                } else {
+                    throw new Error('rebindGlobalWorldbooks API 不可用');
+                }
+            } catch (e) {
+                UI.updateProgress(`  ⚠️ 重新激活世界书失败: ${e.message}`, true);
+            }
+
+            UI.updateProgress('✓ 状态书彻底回滚完成');
+            return true;
+        }
+    };
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 17：媒体文件存储                                           ║
+    // ║  ImageStore / OtherFileStore / AudioStore — 独立 IndexedDB 存储  ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 图片存储管理器 ====================
+
+    const ImageStore = {
+        DB_NAME: 'NovelCreatorImagesDB',
+        DB_VERSION: 1,
+        STORE_NAME: 'images',
+
+        async _openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+            });
+        },
+
+        /**
+        * 保存图片（接受 Blob/File 或 base64 字符串）（增强版）
+        */
+        async save(imageData, format, providedId) {
+
+
+            let id = providedId;
+            if (!id) {
+                id = `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            } else {
+
+            }
+            let blob;
+            if (typeof imageData === 'string' && imageData.startsWith('data:')) {
+                try {
+                    const response = await fetch(imageData);
+                    blob = await response.blob();
+
+                } catch (err) {
+                    console.error('[ImageStore.save] 从 data URL 转换失败', err);
+                    throw err;
+                }
+            } else if (imageData instanceof Blob) {
+                blob = imageData;
+
+            } else {
+                throw new Error('不支持的图片数据格式');
+            }
+
+            let db;
+            try {
+                db = await this._openDB();
+            } catch (err) {
+                console.error('[ImageStore.save] 打开数据库失败', err);
+                throw err;
+            }
+
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.put({ id, blob });
+                request.onsuccess = () => {
+
+                    resolve(id);
+                };
+                request.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[ImageStore.save] 保存失败', error);
+                    console.error(`[ImageStore.save] 错误详情: ${error.name} - ${error.message}`);
+                    if (error.stack) console.error(error.stack);
+                    reject(error);
+                };
+                transaction.oncomplete = () => {
+                    db.close();
+                    console.debug('[ImageStore.save] 事务完成，数据库已关闭');
+                };
+                transaction.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[ImageStore.save] 事务错误', error);
+                    reject(error);
+                };
+            });
+        },
+
+        /**
+         * 根据 ID 获取图片 Blob
+         * @param {string} id
+         * @returns {Promise<Blob|null>}
+         */
+        async get(id) {
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readonly');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.get(id);
+                request.onsuccess = () => resolve(request.result ? request.result.blob : null);
+                request.onerror = () => reject(request.error);
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        /**
+         * 获取所有图片（用于导出）
+         * @returns {Promise<Array<{id: string, blob: Blob}>>}
+         */
+        async getAll() {
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readonly');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.getAll();
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        /**
+         * 删除指定 ID 的图片
+         * @param {string} id
+         * @returns {Promise<void>}
+         */
+        async delete(id) {
+
+            let db;
+            try {
+                db = await this._openDB();
+            } catch (err) {
+                console.error('[ImageStore.delete] 打开数据库失败', err);
+                throw err;
+            }
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.delete(id);
+                request.onsuccess = () => {
+
+                    resolve();
+                };
+                request.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[ImageStore.delete] 删除失败', error);
+                    console.error(`[ImageStore.delete] 错误详情: ${error.name} - ${error.message}`);
+                    reject(error);
+                };
+                transaction.oncomplete = () => {
+                    db.close();
+                    console.debug('[ImageStore.delete] 事务完成，数据库已关闭');
+                };
+                transaction.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[ImageStore.delete] 事务错误', error);
+                    reject(error);
+                };
+            });
+        },
+
+        /**
+         * 清空所有图片
+         * @returns {Promise<void>}
+         */
+        async clear() {
+
+            let db;
+            try {
+                db = await this._openDB();
+            } catch (err) {
+                console.error('[ImageStore.clear] 打开数据库失败', err);
+                throw err;
+            }
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.clear();
+                request.onsuccess = () => {
+
+                    resolve();
+                };
+                request.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[ImageStore.clear] 清空失败', error);
+                    console.error(`[ImageStore.clear] 错误详情: ${error.name} - ${error.message}`);
+                    reject(error);
+                };
+                transaction.oncomplete = () => {
+                    db.close();
+                    console.debug('[ImageStore.clear] 事务完成，数据库已关闭');
+                };
+                transaction.onerror = (event) => {
+                    const error = event.target.error;
+                    console.error('[ImageStore.clear] 事务错误', error);
+                    reject(error);
+                };
+            });
+        }
+    };
+
+
+    // ==================== 其余文件存储管理器 ====================
+
+    const OtherFileStore = {
+        DB_NAME: 'NovelCreatorTextsDB',       // 保持原数据库名，避免数据丢失
+        DB_VERSION: 1,
+        STORE_NAME: 'texts',                   // 保持原存储名，避免数据丢失
+
+        async _openDB() {
+
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+                request.onerror = () => {
+                    console.error('[OtherFileStore._openDB] 打开失败', request.error);
+                    reject(request.error);
+                };
+                request.onsuccess = () => {
+
+                    resolve(request.result);
+                };
+                request.onupgradeneeded = (event) => {
+
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+            });
+        },
+
+        /**
+         * 保存其余文件内容（如 HTML、JS、CSS、纯文本等）
+         * @param {string} text - 文件内容
+         * @param {string} format - 格式，如 'txt', 'html', 'js'
+         * @param {string} [providedId] - 可选，指定ID
+         * @returns {Promise<string>} 文件ID（格式：other_时间戳_随机数）
+         */
+        async save(text, format, providedId) {
+
+
+            let id = providedId;
+            if (!id) {
+                id = `other_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+            } else {
+
+            }
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const entry = { id, text, format, timestamp: Date.now() };
+
+                const request = store.put(entry);
+                request.onsuccess = () => {
+
+                    resolve(id);
+                };
+                request.onerror = () => {
+                    console.error('[OtherFileStore.save] 保存失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => {
+
+                    db.close();
+                };
+            });
+        },
+
+        /**
+         * 根据ID获取其余文件内容
+         * @param {string} id
+         * @returns {Promise<{text: string, format: string}|null>}
+         */
+        async get(id) {
+
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readonly');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.get(id);
+                request.onsuccess = () => {
+                    const result = request.result;
+                    if (result) {
+
+                        resolve(result);
+                    } else {
+                        console.warn(`[OtherFileStore.get] 未找到id=${id}`);
+                        resolve(null);
+                    }
+                };
+                request.onerror = () => {
+                    console.error('[OtherFileStore.get] 获取失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        /**
+         * 删除指定ID的其余文件
+         * @param {string} id
+         */
+        async delete(id) {
+
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.delete(id);
+                request.onsuccess = () => {
+
+                    resolve();
+                };
+                request.onerror = () => {
+                    console.error('[OtherFileStore.delete] 删除失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        /**
+         * 清空所有其余文件
+         */
+        async clear() {
+
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.clear();
+                request.onsuccess = () => {
+
+                    resolve();
+                };
+                request.onerror = () => {
+                    console.error('[OtherFileStore.clear] 清空失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        async getAll() {
+
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readonly');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.getAll();
+                request.onsuccess = () => {
+
+                    resolve(request.result);
+                };
+                request.onerror = () => {
+                    console.error('[OtherFileStore.getAll] 获取失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => db.close();
+            });
+        }
+    };
+
+
+    // ==================== 音频存储管理器 ====================
+
+    const AudioStore = {
+        DB_NAME: 'NovelCreatorAudiosDB',
+        DB_VERSION: 1,
+        STORE_NAME: 'audios',
+
+        async _openDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(this.STORE_NAME)) {
+                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+            });
+        },
+
+        /**
+         * 保存音频 Blob
+         * @param {Blob} audioBlob - 音频 Blob
+         * @param {string} [providedId] - 可选，指定 ID
+         * @returns {Promise<string>} 音频 ID（格式：audio_时间戳_随机数）
+         */
+        async save(audioBlob, providedId) {
+
+
+
+            let id = providedId;
+            if (!id) {
+                id = `audio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+            }
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.put({ id, blob: audioBlob, timestamp: Date.now() });
+                request.onsuccess = () => {
+
+                    resolve(id);
+                };
+                request.onerror = () => {
+                    console.error('[AudioStore.save] 保存失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        /**
+         * 根据 ID 获取音频 Blob
+         * @param {string} id
+         * @returns {Promise<Blob|null>}
+         */
+        async get(id) {
+
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readonly');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.get(id);
+                request.onsuccess = () => {
+                    const result = request.result;
+                    if (result) {
+
+                        resolve(result.blob);
+                    } else {
+                        console.warn(`[AudioStore.get] 未找到 ID: ${id}`);
+                        resolve(null);
+                    }
+                };
+                request.onerror = () => {
+                    console.error('[AudioStore.get] 获取失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        /**
+         * 获取所有音频（用于导出）
+         * @returns {Promise<Array<{id: string, blob: Blob}>>}
+         */
+        async getAll() {
+
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readonly');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.getAll();
+                request.onsuccess = () => {
+
+                    resolve(request.result);
+                };
+                request.onerror = () => {
+                    console.error('[AudioStore.getAll] 获取失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        /**
+         * 删除指定 ID 的音频
+         * @param {string} id
+         * @returns {Promise<void>}
+         */
+        async delete(id) {
+
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.delete(id);
+                request.onsuccess = () => {
+
+                    resolve();
+                };
+                request.onerror = () => {
+                    console.error('[AudioStore.delete] 删除失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => db.close();
+            });
+        },
+
+        /**
+         * 清空所有音频
+         * @returns {Promise<void>}
+         */
+        async clear() {
+
+            const db = await this._openDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
+                const store = transaction.objectStore(this.STORE_NAME);
+                const request = store.clear();
+                request.onsuccess = () => {
+
+                    resolve();
+                };
+                request.onerror = () => {
+                    console.error('[AudioStore.clear] 清空失败', request.error);
+                    reject(request.error);
+                };
+                transaction.oncomplete = () => db.close();
+            });
+        }
+    };
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 18：样式注入                                                ║
+    // ║  injectStyles — 所有 UI 的 CSS 注入                               ║
+    // ╚══════════════════════════════════════════════════════════════════╝
 
     // ==================== 样式注入（修改版）====================
 
@@ -2221,2766 +5759,11 @@
         document.head.appendChild(style);
     }
 
-    /**
-     * 解析优化师输出的属性配置行
-     * 规则：中文分号；分隔属性，中文逗号，分隔数组元素（保持原样不分割）
-     * @param {string} configStr - 属性配置行文本
-     * @returns {Object} 解析后的属性对象，数组值保持中文逗号分隔的字符串形式
-     */
-    function parseConfigLine(configStr) {
-        const config = {};
-        // 定义数组字段集合（这些字段的值应该被视为数组）
-        const arrayFields = new Set(['key', 'keysecondary', 'triggers', 'characterFilter.names', 'characterFilter.tags']);
 
-        // 按中文分号；分割属性对（核心分隔符）
-        // 注意：只使用中文分号，不支持英文分号，确保严格符合规范
-        const pairs = configStr.split('；').map(p => p.trim()).filter(p => p !== '');
-
-        for (let pair of pairs) {
-            // 查找冒号分隔符（支持中英文冒号）
-            const colonIndex = pair.search(/[：:]/);
-            if (colonIndex === -1) {
-                continue; // 没有冒号，跳过此对
-            }
-
-            const key = pair.substring(0, colonIndex).trim();
-            let value = pair.substring(colonIndex + 1).trim();
-
-            if (value === '') continue;
-
-            // 检查是否为数组字段
-            const isArrayField = arrayFields.has(key) ||
-                (key.startsWith('characterFilter.') &&
-                    (key.endsWith('.names') || key.endsWith('.tags')));
-
-            if (isArrayField) {
-                // 数组字段：保持原始字符串值（包含中文逗号），不进行分割
-                // 后续由 convertArrayValues 处理转换
-                config[key] = value;
-            } else {
-                // 单值处理：布尔值、数字、字符串
-                if (value === 'true') {
-                    config[key] = true;
-                } else if (value === 'false') {
-                    config[key] = false;
-                } else if (!isNaN(value) && value && value !== '') {
-                    config[key] = Number(value);
-                } else {
-                    // 去除可能的引号包裹
-                    config[key] = value.replace(/^["']|["']$/g, '');
-                }
-            }
-        }
-
-        return config;
-    }
-
-    /**
-     * 将属性对象中的中文逗号数组转换为英文逗号格式
-     * 用于最终注入状态书前的格式转换
-     * @param {Object} config - parseConfigLine 返回的属性对象
-     * @returns {Object} 转换后的属性对象，数组字段使用英文逗号分隔
-     */
-    function convertArrayValues(config) {
-        const converted = {};
-        // 定义数组字段集合
-        const arrayFields = new Set(['key', 'keysecondary', 'triggers', 'characterFilter.names', 'characterFilter.tags']);
-
-        for (const [key, value] of Object.entries(config)) {
-            // 检查是否为数组字段且值为字符串
-            const isArrayField = arrayFields.has(key) ||
-                (key.startsWith('characterFilter.') &&
-                    (key.endsWith('.names') || key.endsWith('.tags')));
-
-            if (isArrayField && typeof value === 'string') {
-                // 将中文逗号，转为英文逗号,
-                // 注意：只转换中文逗号，保留其他内容不变
-                converted[key] = value.replace(/，/g, ',');
-            } else {
-                converted[key] = value;
-            }
-        }
-
-        return converted;
-    }
-
-    function deepMerge(target, source) {
-        if (source === null || typeof source !== 'object') return source;
-        if (typeof target !== 'object') target = {};
-        for (let key in source) {
-            if (source.hasOwnProperty(key)) {
-                if (typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
-                    target[key] = deepMerge(target[key] || {}, source[key]);
-                } else {
-                    target[key] = source[key];
-                }
-            }
-        }
-        return target;
-    }
-
-    // ==================== parseOptimizerOutput ====================
-
-    function parseOptimizerOutput(output) {
-
-
-        const actions = [];
-        const lines = output.split('\n');
-        let currentAction = null;
-        let contentLines = [];
-        let configLines = [];
-
-        for (let i = 0; i < lines.length; i++) {
-            const rawLine = lines[i];
-            const trimmedLine = rawLine.trim();
-
-            if (trimmedLine.startsWith('---需调整的状态模板---')) {
-
-                continue;
-            }
-
-            const startMatch = trimmedLine.match(/^(\d+)-(\d+)[：:]?(.*)$/);
-            if (startMatch && startMatch[1] && startMatch[2]) {
-                // 保存上一个动作
-                if (currentAction) {
-                    if (contentLines.join('\n').trim() === 'delete') {
-                        currentAction.config = '';
-                        currentAction.rawConfig = {};
-                        currentAction.convertedConfig = {};
-
-                    } else if (configLines.length > 0) {
-                        currentAction.config = configLines.join('；');
-                        currentAction.rawConfig = parseConfigLine(currentAction.config);
-                        currentAction.convertedConfig = convertArrayValues(currentAction.rawConfig);
-
-                    } else {
-                        currentAction.config = '';
-                        currentAction.rawConfig = {};
-                        currentAction.convertedConfig = {};
-
-                    }
-                    currentAction.content = contentLines.join('\n');
-
-                    actions.push(currentAction);
-                }
-
-                // 开始新动作
-                const bookIndex = parseInt(startMatch[1]);
-                const uid = parseInt(startMatch[2]);
-                const contentStart = startMatch[3] ? startMatch[3].trim() : '';
-
-
-                currentAction = {
-                    bookIndex,
-                    uid,
-                    content: '',
-                    config: '',
-                    rawConfig: {},
-                    convertedConfig: {}
-                };
-                contentLines = contentStart ? [contentStart] : [];
-                configLines = [];
-
-            } else if (currentAction) {
-                // 如果当前动作内容已确定为 'delete'，则后续所有行都忽略
-                const currentContent = contentLines.join('\n').trim();
-                if (currentContent === 'delete') {
-                    continue;
-                }
-
-                const isConfigLine = !trimmedLine.startsWith('-') &&
-                    !trimmedLine.startsWith('*') &&
-                    trimmedLine.length > 0 &&
-                    (trimmedLine.includes(':') || trimmedLine.includes('：'));
-
-                if (isConfigLine) {
-                    const parsed = parseConfigLine(rawLine);
-                    if (parsed && Object.keys(parsed).length > 0) {
-                        configLines.push(rawLine);
-
-                    } else {
-                        contentLines.push(rawLine);
-
-                    }
-                } else {
-                    contentLines.push(rawLine);
-                }
-            }
-        }
-
-        // 处理最后一个动作
-        if (currentAction) {
-            const finalContent = contentLines.join('\n').trim();
-            if (finalContent === 'delete') {
-                currentAction.config = '';
-                currentAction.rawConfig = {};
-                currentAction.convertedConfig = {};
-
-            } else if (configLines.length > 0) {
-                currentAction.config = configLines.join('；');
-                currentAction.rawConfig = parseConfigLine(currentAction.config);
-                currentAction.convertedConfig = convertArrayValues(currentAction.rawConfig);
-
-            } else {
-                currentAction.config = '';
-                currentAction.rawConfig = {};
-                currentAction.convertedConfig = {};
-
-            }
-            currentAction.content = contentLines.join('\n');
-
-            actions.push(currentAction);
-        }
-
-        return actions;
-    }
-
-    // ==================== 辅助函数：获取Agent显示名称 ====================
-
-    function getAgentDisplayName(agentKey) {
-        const agent = CONFIG.AGENTS[agentKey];
-        if (!agent) return agentKey;
-        return agent.displayName; // 可能为空字符串
-    }
-
-    // ==================== 辅助函数：获取Agent悬浮提示 ====================
-
-    function getAgentHoverText(agentKey) {
-        const agent = CONFIG.AGENTS[agentKey];
-        if (!agent) return '';
-        return agent.hover || ''; // 若 hover 为 undefined/null 则返回空字符串
-    }
-
-    // ==================== 打开面板检测函数 ====================
-
-    async function openPanelWithCheck(force = false) {
-        console.log('[openPanelWithCheck] 调用，force =', force);
-        console.log('[openPanelWithCheck] WORKFLOW_STATE.lastCheckFailed =', WORKFLOW_STATE.lastCheckFailed);
-        console.log('[openPanelWithCheck] WORKFLOW_STATE.lastCheckErrorMessage =', WORKFLOW_STATE.lastCheckErrorMessage ? (WORKFLOW_STATE.lastCheckErrorMessage.substring(0, 100) + '...') : 'null');
-
-        // 如果存在上次检查失败的结果且不是强制重新检查，则直接显示错误面板
-        if (!force && WORKFLOW_STATE.lastCheckFailed) {
-            console.log('[openPanelWithCheck] 使用缓存的失败信息，直接显示错误面板');
-            UI.showErrorPanel(WORKFLOW_STATE.lastCheckErrorMessage);
-            return;
-        }
-
-        try {
-            UI.closeAll();
-            console.log('[openPanelWithCheck] 已关闭所有面板');
-
-            console.log('[openPanelWithCheck] 开始执行前置检测 PreCheck.checkAll()...');
-            const checkResults = await PreCheck.checkAll();
-            console.log('[openPanelWithCheck] 前置检测完成，allPassed =', checkResults.allPassed);
-            console.log('[openPanelWithCheck] 检测结果详情：', JSON.stringify(checkResults, null, 2));
-
-            if (!checkResults.allPassed) {
-                const errorMsg = PreCheck.formatErrorMessage(checkResults);
-                console.warn('[openPanelWithCheck] 前置检测未通过，格式化后的错误信息：\n', errorMsg);
-                UI.showErrorPanel(errorMsg);
-                return;
-            }
-
-            WORKFLOW_STATE.apiStatus = checkResults.apiStatus || {};
-            console.log('[openPanelWithCheck] 已更新 apiStatus：', WORKFLOW_STATE.apiStatus);
-
-            try {
-                console.log('[openPanelWithCheck] 开始加载所有状态模板...');
-                const templates = await loadAllStateTemplates();
-                stateTemplatesByBook = {};
-                templates.forEach(t => {
-                    stateTemplatesByBook[t.bookIndex] = t.categoryMap;
-                });
-                console.log('[openPanelWithCheck] 状态模板加载完成，共', templates.length, '本书的模板');
-            } catch (e) {
-                console.warn('[openPanelWithCheck] 加载状态模板失败，状态编辑器可能降级为文本模式', e);
-                stateTemplatesByBook = {};
-            }
-
-            console.log('[openPanelWithCheck] 调用 UI.createPanel() 创建主面板...');
-            await UI.createPanel();
-            console.log('[openPanelWithCheck] 主面板创建完成');
-
-        } catch (e) {
-            console.error('[openPanelWithCheck] 未捕获的错误:', e);
-            UI.showErrorPanel('打开面板时发生错误：\n' + e.message + '\n\n' + e.stack);
-        }
-    }
-
-    // ==================== 创建并激活状态书的辅助函数 ====================
-
-    async function createAndActivateStateBook(bookName) {
-
-        UI.updateProgress(`  创建状态书: ${bookName}...`);
-
-        // 1. 创建世界书
-        try {
-            if (typeof TavernHelper?.createWorldbook === 'function') {
-
-                await TavernHelper.createWorldbook(bookName);
-            } else if (typeof window.createWorldbook === 'function') {
-
-                await window.createWorldbook(bookName);
-            } else {
-                throw new Error('createWorldbook API 不可用');
-            }
-            UI.updateProgress(`  ✓ 已创建 ${bookName}`);
-
-        } catch (e) {
-            console.error(`[DEBUG][createAndActivateStateBook] 创建世界书失败: ${e.message}`, e);
-            throw new Error(`创建失败: ${e.message}`);
-        }
-
-        // 2. 等待确保创建完成
-
-        await API.sleep(300);
-
-        // 3. 获取当前已激活的全局世界书（创建前）
-        let originalGlobalBooks = [];
-        try {
-            if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
-
-                originalGlobalBooks = await TavernHelper.getGlobalWorldbookNames();
-            } else if (typeof window.getGlobalWorldbookNames === 'function') {
-
-                originalGlobalBooks = await window.getGlobalWorldbookNames();
-            }
-
-        } catch (e) {
-            UI.updateProgress(`  ⚠️ 获取当前全局世界书失败: ${e.message}`, true);
-            console.warn(`[DEBUG][createAndActivateStateBook] 获取全局世界书列表失败: ${e.message}`);
-        }
-
-        // 4. 激活世界书 - 保留原有世界书并添加新书
-        UI.updateProgress(`  正在激活 ${bookName}...`);
-        try {
-            // 将新书添加到原有列表中（如果不存在）
-            const newGlobalBooks = [...new Set([...originalGlobalBooks, bookName])];
-
-
-            if (typeof TavernHelper?.rebindGlobalWorldbooks === 'function') {
-
-                await TavernHelper.rebindGlobalWorldbooks(newGlobalBooks);
-            } else if (typeof window.rebindGlobalWorldbooks === 'function') {
-
-                await window.rebindGlobalWorldbooks(newGlobalBooks);
-            } else {
-                throw new Error('rebindGlobalWorldbooks API 不可用');
-            }
-
-            // 等待后重新获取全局世界书列表，验证激活是否成功
-            await API.sleep(500);
-            let updatedGlobalBooks = [];
-            try {
-                if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
-                    updatedGlobalBooks = await TavernHelper.getGlobalWorldbookNames();
-                } else if (typeof window.getGlobalWorldbookNames === 'function') {
-                    updatedGlobalBooks = await window.getGlobalWorldbookNames();
-                }
-            } catch (e) {
-                UI.updateProgress(`  ⚠️ 验证激活状态失败: ${e.message}`, true);
-                console.warn(`[DEBUG][createAndActivateStateBook] 验证激活状态失败: ${e.message}`);
-            }
-
-
-            // 检查新书是否在激活列表中
-            const isActivated = updatedGlobalBooks.includes(bookName);
-            if (isActivated) {
-                UI.updateProgress(`  ✓ 已激活 ${bookName}`);
-
-            } else {
-                UI.updateProgress(`  ⚠️ ${bookName} 可能未成功激活`, true);
-                console.warn(`[DEBUG][createAndActivateStateBook] 状态书 ${bookName} 未出现在激活列表中`);
-            }
-
-            // 返回更新后的全局世界书列表，供上层函数使用
-            return {success: true, globalBooks: updatedGlobalBooks};
-        } catch (e) {
-            UI.updateProgress(`  ✗ 激活失败: ${e.message}`, true);
-            console.error(`[DEBUG][createAndActivateStateBook] 激活世界书失败: ${e.message}`, e);
-            throw e;
-        }
-    }
-
-    // 获取所有存在的状态书名称（按序号递增）
-    async function getAllStateBooks() {
-
-        const books = [];
-
-        // 【关键修复】使用 getGlobalWorldbookNames 获取当前激活的世界书
-        let globalBooks = [];
-        try {
-            if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
-                globalBooks = await TavernHelper.getGlobalWorldbookNames();
-            } else if (typeof window.getGlobalWorldbookNames === 'function') {
-                globalBooks = await window.getGlobalWorldbookNames();
-            }
-
-        } catch (e) {
-            console.warn('[DEBUG][getAllStateBooks] 获取全局世界书列表失败:', e);
-        }
-
-        // 从全局列表中筛选出状态书
-        for (const bookName of globalBooks) {
-            if (bookName.startsWith(CONFIG.STATE_BOOK_PREFIX)) {
-                const match = bookName.match(/状态书-(\d+)$/);
-                if (match) {
-                    if (!books.includes(bookName)) {
-                        books.push(bookName);
-                    }
-                }
-            }
-        }
-
-        // 如果没有从全局列表找到，回退到旧的检测方式
-        if (books.length === 0) {
-
-            let index = 1;
-            while (index <= CONFIG.MAX_STATE_BOOKS) {
-                const bookName = `${CONFIG.STATE_BOOK_PREFIX}${index}`;
-                try {
-                    const book = await API.getWorldbook(bookName);
-                    if (book && (Array.isArray(book) ? book.length : (book.entries && Object.keys(book.entries).length) > 0)) {
-                        books.push(bookName);
-
-                    } else {
-                        break; // 遇到不存在的状态书即停止
-                    }
-                } catch (e) {
-
-                    break;
-                }
-                index++;
-            }
-        }
-
-        // 按序号排序
-        books.sort((a, b) => {
-            const matchA = a.match(/状态书-(\d+)$/);
-            const matchB = b.match(/状态书-(\d+)$/);
-            const numA = matchA ? parseInt(matchA[1]) : 0;
-            const numB = matchB ? parseInt(matchB[1]) : 0;
-            return numA - numB;
-        });
-
-
-        return books;
-    }
-
-    // 加载所有状态书中的状态模板，返回数组 [{ bookIndex, templateContent, categoryMap }]
-    async function loadAllStateTemplates() {
-
-        const templates = [];
-        let bookIndex = 1;
-        while (bookIndex <= CONFIG.MAX_STATE_BOOKS) {
-            const bookName = `${CONFIG.STATE_BOOK_PREFIX}${bookIndex}`;
-
-            try {
-                const book = await API.getWorldbook(bookName);
-                const entries = Array.isArray(book) ? book : (book.entries || []);
-
-                const templateEntry = entries.find(e => e.name === `${CONFIG.STATE_TEMPLATE_PREFIX}${bookIndex}`);
-                if (templateEntry) {
-
-                    const content = templateEntry.content;
-
-                    const categoryRegex = /\*\*类别(\d+):([^*]+)\*\*\n([\s\S]*?)(?=\n\*\*类别\d+:|$)/g;
-                    const categoryMap = {};
-                    const seenCatIds = new Set();
-                    let match;
-                    while ((match = categoryRegex.exec(content)) !== null) {
-                        const id = match[1];
-                        const name = match[2].trim();
-                        const definition = match[3].trim();
-                        if (seenCatIds.has(id)) {
-                            console.warn(`[DEBUG][loadAllStateTemplates] ⚠️ 在 ${bookName} 的模板中检测到重复的类别编号 ${id}，可能模板已损坏`);
-                        }
-                        seenCatIds.add(id);
-                        categoryMap[id] = {name, definition};
-
-                    }
-
-                    templates.push({bookIndex, templateContent: content, categoryMap});
-                } else {
-
-                    break;
-                }
-            } catch (e) {
-
-                break;
-            }
-            bookIndex++;
-        }
-
-        return templates;
-    }
-
-    // 获取所有状态条目的属性配置，返回格式化文本
-    async function getAllStateEntriesConfig() {
-        const books = await getAllStateBooks();
-        let configText = '';
-        for (const bookName of books) {
-            const book = await API.getWorldbook(bookName);
-            const entries = Array.isArray(book) ? book : (book.entries || []);
-            // 过滤出状态条目（名称以 STATE_ENTRY_PREFIX 开头）
-            const stateEntries = entries.filter(e => e?.name?.startsWith(CONFIG.STATE_ENTRY_PREFIX));
-            for (const entry of stateEntries) {
-                // 提取关键属性：uid, order, group, selective, probability, position, depth, scanDepth 等
-                configText += `【${bookName}】条目：${entry.name}\n`;
-                configText += `uid: ${entry.uid}\n`;
-                configText += `order: ${entry.order !== undefined ? entry.order : ''}\n`;
-                configText += `group: ${entry.group || ''}\n`;
-                configText += `selective: ${entry.selective}\n`;
-                configText += `probability: ${entry.probability}\n`;
-                configText += `position: ${entry.position}\n`;
-                configText += `depth: ${entry.depth}\n`;
-                configText += `scanDepth: ${entry.scanDepth}\n`;
-                configText += `---\n`;
-            }
-        }
-        return configText;
-    }
-
-    // 辅助函数：获取嵌套对象的值
-    function getNestedValue(obj, path) {
-        return path.split('.').reduce((o, p) => o?.[p], obj);
-    }
-
-    // 辅助函数：设置嵌套对象的值
-    function setNestedValue(obj, path, value) {
-        const parts = path.split('.');
-        const last = parts.pop();
-        const target = parts.reduce((o, p) => o[p] = o[p] || {}, obj);
-        target[last] = value;
-    }
-
-    /**
-     * 将扁平配置应用到嵌套格式的世界书条目
-     */
-    function applyFlatConfigToEntry(entry, flatConfig) {
-        if (!flatConfig) return;
-
-        // 字段映射表
-        const fieldMappings = [
-            {flat: 'enabled', path: 'enabled', transform: v => v === undefined ? entry.enabled : v},
-            {flat: 'content', path: 'content', transform: v => v === undefined ? entry.content : v},
-
-            // 触发策略
-            {
-                flat: 'key',
-                path: 'strategy.keys',
-                transform: v => typeof v === 'string' ? v.split(',').map(s => s.trim()).filter(s => s) : v
-            },
-            {
-                flat: 'keysecondary',
-                path: 'strategy.keys_secondary.keys',
-                transform: v => typeof v === 'string' ? v.split(',').map(s => s.trim()).filter(s => s) : v
-            },
-            {
-                flat: 'scanDepth',
-                path: 'strategy.scan_depth',
-                transform: v => v !== undefined ? v : entry.strategy.scan_depth
-            },
-            {
-                flat: 'scan_depth',
-                path: 'strategy.scan_depth',
-                transform: v => v !== undefined ? v : entry.strategy.scan_depth
-            },
-
-            // 概率（0-100 -> 0-1）
-            {flat: 'probability', path: 'probability', transform: v => v !== undefined ? v / 100 : entry.probability},
-
-            // 位置
-            {
-                flat: 'position', path: 'position.type', transform: v => {
-                    if (v === undefined) return entry.position.type;
-                    const map = {
-                        '0': 'before_character_definition',
-                        '1': 'after_character_definition',
-                        '2': 'before_example_messages',
-                        '3': 'after_example_messages',
-                        '4': 'before_author_note',
-                        '5': 'after_author_note',
-                        '6': 'at_depth',
-                        '7': 'at_depth',
-                        '8': 'at_depth'
-                    };
-                    return map[v] || entry.position.type;
-                }
-            },
-            {flat: 'depth', path: 'position.depth', transform: v => v !== undefined ? v : entry.position.depth},
-            {flat: 'order', path: 'position.order', transform: v => v !== undefined ? v : entry.position.order},
-
-            // 递归控制
-            {
-                flat: 'excludeRecursion',
-                path: 'recursion.prevent_incoming',
-                transform: v => v !== undefined ? v : entry.recursion.prevent_incoming
-            },
-            {
-                flat: 'preventRecursion',
-                path: 'recursion.prevent_outgoing',
-                transform: v => v !== undefined ? v : entry.recursion.prevent_outgoing
-            },
-            {
-                flat: 'delayUntilRecursion',
-                path: 'recursion.delay_until',
-                transform: v => v === undefined ? entry.recursion.delay_until : (v === false ? null : v)
-            },
-
-            // 效果
-            {
-                flat: 'sticky',
-                path: 'effect.sticky',
-                transform: v => v === undefined ? entry.effect.sticky : (v === 0 ? null : v)
-            },
-            {
-                flat: 'cooldown',
-                path: 'effect.cooldown',
-                transform: v => v === undefined ? entry.effect.cooldown : (v === 0 ? null : v)
-            },
-            {
-                flat: 'delay',
-                path: 'effect.delay',
-                transform: v => v === undefined ? entry.effect.delay : (v === 0 ? null : v)
-            },
-        ];
-
-        fieldMappings.forEach(mapping => {
-            const value = flatConfig[mapping.flat];
-            if (value !== undefined) {
-                setNestedValue(entry, mapping.path, mapping.transform(value));
-            }
-        });
-
-        // 处理 constant/selective/vectorized
-        if (flatConfig.constant === true) {
-            setNestedValue(entry, 'strategy.type', 'constant');
-        } else if (flatConfig.selective === true) {
-            setNestedValue(entry, 'strategy.type', 'selective');
-        } else if (flatConfig.vectorized === true) {
-            setNestedValue(entry, 'strategy.type', 'vectorized');
-        }
-
-        // 处理 logic 字符串
-        if (flatConfig.logic) {
-            const logicMap = {
-                'and_any': 'and_any',
-                'and_all': 'and_all',
-                'not_all': 'not_all',
-                'not_any': 'not_any'
-            };
-            const mappedLogic = logicMap[flatConfig.logic] || 'and_any';
-            setNestedValue(entry, 'strategy.keys_secondary.logic', mappedLogic);
-        } else if (flatConfig.selectiveLogic !== undefined) {
-            const logicArray = ['and_any', 'and_all', 'not_all', 'not_any'];
-            const idx = parseInt(flatConfig.selectiveLogic);
-            if (idx >= 0 && idx < logicArray.length) {
-                setNestedValue(entry, 'strategy.keys_secondary.logic', logicArray[idx]);
-            }
-        }
-
-        // 根据 position.type 设置 role
-        const positionType = getNestedValue(entry, 'position.type');
-        if (positionType === 'at_depth') {
-            const posFlat = flatConfig.position;
-            if (posFlat) {
-                const roleMap = {'6': 'system', '7': 'assistant', '8': 'user'};
-                const role = roleMap[posFlat] || 'system';
-                setNestedValue(entry, 'position.role', role);
-            }
-        }
-
-        // 处理 characterFilter
-        if (flatConfig.characterFilter && typeof flatConfig.characterFilter === 'object') {
-            const currentFilter = getNestedValue(entry, 'characterFilter') || {isExclude: false, names: [], tags: []};
-            const newFilter = deepMerge(currentFilter, flatConfig.characterFilter);
-            setNestedValue(entry, 'characterFilter', newFilter);
-        }
-
-        // 处理其他布尔字段
-        const boolFields = [
-            'matchPersonaDescription', 'matchCharacterDescription', 'matchCharacterPersonality',
-            'matchCharacterDepthPrompt', 'matchScenario', 'matchCreatorNotes', 'ignoreBudget', 'addMemo'
-        ];
-        boolFields.forEach(field => {
-            if (flatConfig[field] !== undefined) {
-                setNestedValue(entry, field, flatConfig[field]);
-            }
-        });
-
-        // 处理 automation_id
-        if (flatConfig.automation_id !== undefined) {
-            setNestedValue(entry, 'automation_id', flatConfig.automation_id);
-        }
-    }
-
-    /**
-     * 获取默认的嵌套格式世界书条目
-     */
-    function getDefaultWorldbookEntry(definition) {
-        return {
-            name: definition ? definition.slice(0, 20) : '新条目',
-            content: definition,
-            enabled: true,
-            strategy: {
-                type: 'selective',
-                keys: [],
-                keys_secondary: {
-                    logic: 'and_any',
-                    keys: []
-                },
-                scan_depth: 4
-            },
-            position: {
-                type: 'after_character_definition',
-                role: 'system',
-                depth: 0,
-                order: 0
-            },
-            probability: 1.0,
-            recursion: {
-                prevent_incoming: false,
-                prevent_outgoing: false,
-                delay_until: null
-            },
-            effect: {
-                sticky: null,
-                cooldown: null,
-                delay: null
-            },
-            characterFilter: {
-                isExclude: false,
-                names: [],
-                tags: []
-            },
-            matchPersonaDescription: false,
-            matchCharacterDescription: false,
-            matchCharacterPersonality: false,
-            matchCharacterDepthPrompt: false,
-            matchScenario: false,
-            matchCreatorNotes: false,
-            ignoreBudget: false,
-            addMemo: true,
-            automation_id: ''
-        };
-    }
-
-    async function updateStateBooksFromOptimizerOutput(actions) {
-
-        // --- 获取当前状态书列表（用于创建缺失书）---
-        let stateBooks = await getAllStateBooks();
-        let currentBookCount = stateBooks.length;
-        UI.updateProgress(`  当前状态书: ${stateBooks.join(', ') || '无'} (共 ${currentBookCount} 本)`);
-
-        // 收集需要创建的状态书
-        const booksToCreate = new Set();
-        for (const action of actions) {
-            const bookIndex = Number(action.bookIndex);
-            if (bookIndex > currentBookCount && bookIndex <= CONFIG.MAX_STATE_BOOKS) {
-                booksToCreate.add(bookIndex);
-            }
-        }
-
-        // 创建缺失的状态书
-        for (const bookIndex of booksToCreate) {
-            const bookName = `${CONFIG.STATE_BOOK_PREFIX}${bookIndex}`;
-            try {
-                const result = await createAndActivateStateBook(bookName);
-                if (result && result.success) {
-                    UI.updateProgress(`  ✅ 状态书 ${bookName} 创建并激活成功`);
-                } else {
-                    UI.updateProgress(`  ⚠️ 状态书 ${bookName} 创建可能未成功`, true);
-                }
-            } catch (e) {
-                UI.updateProgress(`  ✗ 处理 ${bookName} 时发生异常: ${e.message}`, true);
-            }
-        }
-
-        // 重新获取状态书列表
-        stateBooks = await getAllStateBooks();
-        currentBookCount = stateBooks.length;
-        UI.updateProgress(`  更新后状态书: ${stateBooks.join(', ') || '无'} (共 ${currentBookCount} 本)`);
-        const availableBooksSet = new Set(stateBooks);
-
-        // ==================== 第一步：将动作按书号分类 ====================
-        const actionsByBook = {};
-        for (const action of actions) {
-            const bookIndex = action.bookIndex;
-            const bookName = `${CONFIG.STATE_BOOK_PREFIX}${bookIndex}`;
-
-            if (bookIndex > CONFIG.MAX_STATE_BOOKS) {
-                UI.updateProgress(`⚠️ 动作指定的状态书序号 ${bookIndex} 超过最大限制，已跳过`, true);
-                continue;
-            }
-            if (!availableBooksSet.has(bookName)) {
-                UI.updateProgress(`⚠️ 状态书 ${bookName} 不存在，跳过该动作`, true);
-                continue;
-            }
-
-            if (!actionsByBook[bookName]) {
-                actionsByBook[bookName] = {create: [], update: [], delete: []};
-            }
-
-            if (action.content.trim() === 'delete') {
-                actionsByBook[bookName].delete.push(action);
-            } else {
-                // 判断是更新还是创建需要知道当前是否存在该 uid，但我们稍后会统一处理，先暂存
-                actionsByBook[bookName][action.uid ? 'update' : 'create'].push(action);
-            }
-        }
-
-        // ==================== 第二步：按书号依次处理 ====================
-        for (const bookName in actionsByBook) {
-            const bookActions = actionsByBook[bookName];
-
-
-            // 读取当前世界书一次（获取最新数据）
-            let book = await API.getWorldbook(bookName);
-            let entries = Array.isArray(book) ? book : (book.entries || []);
-            let modified = false; // 标记是否有修改
-
-            // 先处理删除（从 entries 中移除）
-            for (const action of bookActions.delete) {
-                const index = entries.findIndex(e => e.uid === action.uid);
-                if (index !== -1) {
-                    entries.splice(index, 1);
-                    modified = true;
-                    UI.updateProgress(`  → 已从 ${bookName} 中删除 uid=${action.uid}`);
-                } else {
-                    UI.updateProgress(`  ⚠️ ${bookName} 中未找到 uid=${action.uid}，跳过删除`, true);
-                }
-            }
-
-            // 合并更新和创建动作（统一处理）
-            const upsertActions = [...bookActions.update, ...bookActions.create];
-            for (const action of upsertActions) {
-                const parsed = parseCategoryFromContent(action.content, action.uid);
-                if (!parsed) {
-                    UI.updateProgress(`  ⚠️ 无法解析类别定义，跳过动作: ${action.content.substring(0, 30)}...`, true);
-                    continue;
-                }
-
-                const {catId, catName, definition} = parsed;
-                let config = action.convertedConfig || {};
-                delete config.uid;
-                delete config.id;
-                delete config.name;
-
-                const entryName = `状态-${bookName.split('-')[1]}-${catId.padStart(2, '0')}-${catName}`;
-
-                // ==================== 处理模板条目（累积更新）====================
-                const bookIndex = parseInt(bookName.split('-')[1]);
-                const templateEntryName = `${CONFIG.STATE_TEMPLATE_PREFIX}${bookIndex}`;
-                let templateEntry = entries.find(e => e.name === templateEntryName);
-                let templateContent = templateEntry ? templateEntry.content : '';
-
-                // 解析现有模板（使用改进后的正则，确保匹配所有类别）
-                const existingCategories = new Map();
-                const categoryRegex = /(?:^|\n)\s*\*\*类别(\d+):([^*]+)\*\*\s*\r?\n([\s\S]*?)(?=\r?\n\s*\*\*类别\d+\s*:|$)/g;
-                let match;
-                while ((match = categoryRegex.exec(templateContent)) !== null) {
-                    const existingCatId = match[1];
-                    const fullDefinition = match[0].trim();
-                    existingCategories.set(existingCatId, fullDefinition);
-                }
-
-
-                // 添加或替换当前类别
-                existingCategories.set(catId, definition);
-
-                // 重新构建模板内容（按编号排序）
-                const newTemplateContent = buildTemplateContentFromCategories(existingCategories);
-
-                if (newTemplateContent !== templateContent) {
-                    if (templateEntry) {
-                        templateEntry.content = newTemplateContent;
-                    } else {
-                        // 创建新模板条目
-                        const defaultTemplateEntry = {
-                            uid: 9999,
-                            name: templateEntryName,
-                            content: newTemplateContent,
-                            enabled: true,
-                            strategy: {
-                                type: 'selective',
-                                keys: [],
-                                keys_secondary: {logic: 'and_any', keys: []},
-                                scan_depth: 0
-                            },
-                            position: {type: 'before_character_definition', role: 'system', depth: 0, order: 0},
-                            probability: 1.0,
-                            recursion: {prevent_incoming: false, prevent_outgoing: false, delay_until: null},
-                            effect: {sticky: null, cooldown: null, delay: null},
-                            characterFilter: {isExclude: false, names: [], tags: []},
-                            matchPersonaDescription: false,
-                            matchCharacterDescription: false,
-                            matchCharacterPersonality: false,
-                            matchCharacterDepthPrompt: false,
-                            matchScenario: false,
-                            matchCreatorNotes: false,
-                            ignoreBudget: false,
-                            addMemo: true,
-                            automation_id: ''
-                        };
-                        entries.push(defaultTemplateEntry);
-                        templateEntry = defaultTemplateEntry;
-                    }
-                    modified = true;
-
-                }
-
-                // ==================== 处理状态条目 ====================
-                const existingIndex = entries.findIndex(e => e.uid === action.uid);
-                if (existingIndex !== -1) {
-                    // 更新
-                    let targetEntry = entries[existingIndex];
-                    if (targetEntry.name !== entryName) {
-                        targetEntry.name = entryName;
-                    }
-                    applyFlatConfigToEntry(targetEntry, config);
-                    targetEntry.content = definition; // 状态条目的内容也用优化师提供的定义（字段占位符）
-                    entries[existingIndex] = targetEntry;
-                } else {
-                    // 创建
-                    let newEntry = getDefaultWorldbookEntry(definition);
-                    newEntry.uid = action.uid;
-                    newEntry.name = entryName;
-                    applyFlatConfigToEntry(newEntry, config);
-                    entries.push(newEntry);
-                }
-                modified = true;
-            }
-
-            // 如果这本书有任何修改，统一保存
-            if (modified) {
-
-                await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
-                UI.updateProgress(`  ✓ ${bookName} 已更新`);
-            } else {
-
-            }
-        }
-    }
-
-    async function updateWorldState(bookName, data) {
-        const successIds = [];
-        const errorIds = [];
-        const bookIndex = parseInt(bookName.split('-')[1]); // 从 "状态书-1" 提取 1
-
-        await API.updateWorldbook(bookName, (worldbook) => {
-            const entries = Array.isArray(worldbook) ? [...worldbook] : [...(worldbook.entries || [])];
-
-            for (const [catId, catData] of Object.entries(data)) {
-                // 条目名称格式：状态-{书号}-{类别编号}-{类别名}
-                const entryName = `状态-${bookIndex}-${catId.padStart(2, '0')}-${catData.name}`;
-                const entryIndex = entries.findIndex(e => e?.name === entryName);
-
-                // 直接使用协议中的字段内容，它已包含完整的字段列表（含缩进）
-                const content = catData.content;
-
-                if (content && content.trim().length > 0) {
-                    if (entryIndex !== -1) {
-                        entries[entryIndex].content = content;
-                    } else {
-                        entries.push({
-                            uid: Date.now() + parseInt(catId) * 1000,
-                            name: entryName,
-                            content: content,
-                            enabled: true
-                        });
-                    }
-                    successIds.push(`类别${catId}`);
-                } else {
-                    errorIds.push(`类别${catId}`);
-                }
-            }
-
-            return Array.isArray(worldbook) ? entries : {...worldbook, entries, settings: worldbook.settings || {}};
-        }, {render: 'immediate'});
-
-        return {successIds, errorIds};
-    }
-
-    // ==================== Token 计数 ====================
-
-    /**
-     * 获取精确 token 计数（如果可用）
-     * @param {string} text - 要计数的文本
-     * @param {string} source - API 类型 ('openai', 'claude', 'custom', 'default')
-     * @param {string} model - 模型名称（仅用于日志和未来可能的编码选择）
-     * @returns {Promise<number>} token 数
-     */
-    async function countTokens(text, source = 'unknown', model = '') {
-        if (!text) return 0;
-
-        // 1. 尝试使用 gpt-tokenizer（适用于 OpenAI 兼容模型）
-        if (window.GPTTokenizer_cl100k_base && (source === 'openai' || source === 'custom')) {
-            try {
-                const tokens = window.GPTTokenizer_cl100k_base.encode(text);
-                return tokens.length;
-            } catch (e) {
-            }
-        }
-
-        // 2. 如果无法精确计数，则使用估算
-        const estimated = Math.ceil(text.length / 3.35);
-        return estimated;
-    }
-
-    // ==================== 清空状态书 ====================
-
-    async function resetWorldStateToInitial() {
-        UI.updateProgress('开始按模板重置所有状态书...');
-        const books = await getAllStateBooks();
-        if (books.length === 0) {
-            UI.updateProgress('没有状态书需要重置');
-            return true;
-        }
-
-        for (const bookName of books) {
-            const bookIndex = parseInt(bookName.split('-')[1]);
-            const book = await API.getWorldbook(bookName);
-            const entries = Array.isArray(book) ? book : (book.entries || []);
-
-            // 获取该状态书中的模板条目
-            const templateEntryName = `${CONFIG.STATE_TEMPLATE_PREFIX}${bookIndex}`;
-            const templateEntry = entries.find(e => e.name === templateEntryName);
-            let categoryMap = {};
-            if (templateEntry) {
-                // 解析模板内容，构建类别ID -> 定义的映射
-                const content = templateEntry.content;
-                const categoryRegex = /\*\*类别(\d+):([^*]+)\*\*\n([\s\S]*?)(?=\n\*\*类别\d+:|$)/g;
-                let match;
-                while ((match = categoryRegex.exec(content)) !== null) {
-                    const catId = match[1];
-                    categoryMap[catId] = match[3].trim();
-                }
-            }
-
-            // 过滤出所有状态条目
-            const stateEntries = entries.filter(e => e?.name?.startsWith(CONFIG.STATE_ENTRY_PREFIX));
-
-            // 为每个状态条目重新生成内容
-            for (const entry of stateEntries) {
-                // 尝试从条目名称中提取类别ID（格式：状态-{bookIndex}-{catId}-{catName}）
-                const nameMatch = entry.name.match(new RegExp(`^状态-${bookIndex}-(\\d+)-`));
-                const catId = nameMatch ? nameMatch[1] : null;
-                let newContent;
-
-                if (catId && categoryMap[catId]) {
-                    // 有模板定义，使用模板定义作为基础，但保留字段值为空（或可自定义）
-                    // 这里简单使用模板定义，也可根据需要清空具体字段值
-                    newContent = categoryMap[catId];
-                } else {
-                    // 无模板或类别ID无法提取，使用默认初始内容
-                    newContent = getInitialStateContent();
-                }
-
-                entry.content = newContent;
-            }
-
-            // 保存更新后的世界书
-            await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
-            UI.updateProgress(`  ✓ 已重置 ${bookName} (${stateEntries.length} 个条目)`);
-        }
-
-        UI.updateProgress('✓ 所有状态书重置完成');
-        return true;
-    }
-
-    // ==================== 配置 ====================
-
-    const CONFIG = {
-        VERSION: '1.0',
-        NAME: '自动化小说创作系统',
-
-        WORLD_BOOK_NAME: '状态书',
-        SETTING_BOOK_NAME: '设定书',
-        STATE_ENTRY_PREFIX: '状态-',
-        STATE_BOOK_PREFIX: '状态书-',
-        STATE_TEMPLATE_PREFIX: '状态模板-',
-        MAX_STATE_BOOKS: 5,
-        STATE_TYPE_LIMIT: 20,
-        MAX_IMAGES_PER_BOOK: 20,
-        MAX_AUDIOS_PER_BOOK: 20,
-
-        // 新增：回流次数控制
-        MAX_CONSECUTIVE_REFLOWS: 3,    // 同一源连续触发同一目标的最大次数
-        MAX_REFLOOP_DEPTH: 100,        // 全局回流处理的最大迭代次数
-
-        STORAGE_KEY: 'novel_creator_chapters_v1',
-        SETTINGS_KEY: 'novel_creator_settings_v1',
-        STORAGE: {
-            maxChapters: 10000,
-            warningThreshold: 10000,
-            criticalThreshold: 10000
-        },
-
-        AGENT_SWITCH_DELAY: 1000,
-        MAX_PROGRESS_LINES: 500,
-
-        PROTOCOL_PATTERN: /===第([^章]+)章续写锁定协议===([\s\S]*?)(?:===|$)/,
-        CHAPTER_PREFIX_RE: /^(?:第?\d+章|第?(?:[零一二三四五六七八九十百千万]+)章)[\s:：]*/,
-
-        UI: {
-            panelId: 'nc-panel',
-            overlayId: 'nc-overlay',
-            historyPanelId: 'nc-history-panel',
-            historyOverlayId: 'nc-history-overlay',
-            buttonId: 'nc-float-btn'
-        },
-
-        AGENT_STATUS_COLORS: {
-            idle: {
-                bg: 'rgba(102, 126, 234, 0.15)',
-                border: 'rgba(102, 126, 234, 0.4)',
-                text: '#667eea',
-                glow: 'none'
-            },
-            running: {
-                bg: 'rgba(245, 158, 11, 0.15)',
-                border: '#f59e0b',
-                text: '#fbbf24',
-                glow: '0 0 15px rgba(245, 158, 11, 0.3)'
-            },
-            pending: {
-                bg: 'rgba(147, 51, 234, 0.15)',
-                border: '#9333ea',
-                text: '#c084fc',
-                glow: '0 0 15px rgba(147, 51, 234, 0.4)'
-            },
-            waiting_input: {
-                bg: 'linear-gradient(135deg, #06b6d4, #0891b2)',
-                border: '#06b6d4',
-                text: '#ffffff',
-                glow: '0 0 15px rgba(6, 182, 212, 0.4)'
-            },
-            reflow_processing: {
-                bg: 'linear-gradient(135deg, #ec4899, #db2777)',
-                border: '#ec4899',
-                text: '#ffffff',
-                glow: '0 0 25px rgba(236, 72, 153, 0.6)'
-            },
-            reflow_waiting: {
-                bg: 'rgba(251, 113, 133, 0.12)',
-                border: 'rgba(251, 113, 133, 0.5)',
-                text: '#fb7185',
-                glow: 'none'
-            },
-            completed: {
-                bg: 'linear-gradient(135deg, #10b981, #059669)',
-                border: '#10b981',
-                text: '#ffffff',
-                glow: '0 0 20px rgba(16, 185, 129, 0.5)'
-            },
-            error: {
-                bg: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                border: '#ef4444',
-                text: '#ffffff',
-                glow: '0 0 20px rgba(239, 68, 68, 0.6)'
-            }
-        }
-    };
-
-    // ==================== 新增：分支冲突专用错误 ====================
-
-    class ExistingBranchError extends Error {
-        constructor() {
-            super('分支冲突：该互动结果已存在对应章节');
-            this.name = 'ExistingBranchError';
-        }
-    }
-
-    // ==================== 新增：互动映射管理器 ====================
-
-    const MappingManager = {
-        DB_NAME: 'NovelCreatorMappingsDB',
-        DB_VERSION: 1,
-        STORE_NAME: 'mappings',
-        cache: new Map(), // 内存缓存，键为 "parentNum|interactionResult"，值为 targetChapterNum
-
-        async _openDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
-                request.onerror = () => reject(request.error);
-                request.onsuccess = () => resolve(request.result);
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
-                    }
-                };
-            });
-        },
-
-        // 生成映射 ID
-        _makeId(parentNum, interactionResult) {
-            return `${parentNum}|${interactionResult}`;
-        },
-
-        // 加载所有映射到缓存
-        async loadAll() {
-            console.log('[MappingManager.loadAll] ========== 开始加载映射表 ==========');
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readonly');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.getAll();
-                request.onsuccess = () => {
-                    const mappings = request.result || [];
-                    this.cache.clear();
-                    mappings.forEach(m => {
-                        const key = this._makeId(m.parentChapterNum, m.interactionResult);
-                        this.cache.set(key, m.targetChapterNum);
-                    });
-                    console.log(`[MappingManager.loadAll] 加载了 ${mappings.length} 条映射到缓存`);
-                    resolve();
-                };
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        // 查询映射
-        getMapping(parentNum, interactionResult) {
-            if (!parentNum || !interactionResult) return null;
-            const key = this._makeId(parentNum, interactionResult);
-            const target = this.cache.get(key);
-            console.log(`[MappingManager.getMapping] parentNum=${parentNum}, result="${interactionResult}" -> ${target ? '存在：' + target : '不存在'}`);
-            if (target) {
-                return {targetChapterNum: target};
-            }
-            return null;
-        },
-
-        // 记录映射
-        async recordMapping(parentNum, interactionResult, targetChapterNum) {
-            console.log(`[MappingManager.recordMapping] parentNum=${parentNum}, result="${interactionResult}", target=${targetChapterNum}`);
-            if (!parentNum || !interactionResult || !targetChapterNum) {
-                console.warn('[MappingManager.recordMapping] 参数不完整，跳过');
-                return;
-            }
-            const key = this._makeId(parentNum, interactionResult);
-            if (this.cache.has(key)) {
-                console.warn('[MappingManager.recordMapping] 映射已存在，跳过');
-                return;
-            }
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const entry = {
-                    id: key,
-                    parentChapterNum: parentNum,
-                    interactionResult: interactionResult,
-                    targetChapterNum: targetChapterNum,
-                    createdAt: Date.now(),
-                    updatedAt: Date.now()
-                };
-                const request = store.put(entry);
-                request.onsuccess = () => {
-                    this.cache.set(key, targetChapterNum);
-                    console.log(`[MappingManager.recordMapping] 映射记录成功`);
-                    resolve();
-                };
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        // 删除与指定章节相关的映射（作为源或目标）
-        async deleteMappingsByChapters(chapterNums) {
-            console.log(`[MappingManager.deleteMappingsByChapters] 章节列表: ${chapterNums.join(', ')}`);
-            const chapterSet = new Set(chapterNums);
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.getAll();
-                request.onsuccess = () => {
-                    const mappings = request.result || [];
-                    const toDelete = mappings.filter(m =>
-                        chapterSet.has(m.parentChapterNum) || chapterSet.has(m.targetChapterNum)
-                    ).map(m => m.id);
-                    console.log(`[MappingManager.deleteMappingsByChapters] 待删除映射 ID: ${toDelete.join(', ')}`);
-
-                    let deleteCount = 0;
-                    toDelete.forEach(id => {
-                        const delReq = store.delete(id);
-                        delReq.onsuccess = () => {
-                            this.cache.delete(id);
-                            deleteCount++;
-                        };
-                        delReq.onerror = (e) => console.error(`[MappingManager] 删除映射 ${id} 失败`, e);
-                    });
-
-                    transaction.oncomplete = () => {
-                        console.log(`[MappingManager.deleteMappingsByChapters] 删除了 ${deleteCount} 条映射`);
-                        resolve();
-                    };
-                    transaction.onerror = (e) => reject(e);
-                };
-                request.onerror = () => reject(request.error);
-            });
-        },
-
-        // 清空所有映射
-        async clear() {
-            console.log('[MappingManager.clear] 清空所有映射');
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.clear();
-                request.onsuccess = () => {
-                    this.cache.clear();
-                    console.log('[MappingManager.clear] 清空成功');
-                    resolve();
-                };
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        // 导出所有映射（用于备份）
-        async exportAll() {
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readonly');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.getAll();
-                request.onsuccess = () => resolve(request.result || []);
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        // 批量导入映射（用于恢复）
-        async importAll(mappings) {
-            console.log(`[MappingManager.importAll] 开始导入 ${mappings.length} 条映射`);
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                let count = 0;
-                mappings.forEach(m => {
-                    const req = store.put(m);
-                    req.onsuccess = () => {
-                        const key = this._makeId(m.parentChapterNum, m.interactionResult);
-                        this.cache.set(key, m.targetChapterNum);
-                        count++;
-                    };
-                    req.onerror = (e) => console.error('[MappingManager.importAll] 导入失败', e);
-                });
-                transaction.oncomplete = () => {
-                    console.log(`[MappingManager.importAll] 成功导入 ${count} 条映射`);
-                    resolve();
-                };
-                transaction.onerror = (e) => reject(e);
-            });
-        }
-    };
-
-    /**
-     * 打开 IndexedDB 数据库
-     * @returns {Promise<IDBDatabase>}
-     */
-    function openDB() {
-        return new Promise((resolve, reject) => {
-
-            const request = indexedDB.open(DB_NAME, DB_VERSION);
-            request.onerror = (event) => {
-                console.error('[Storage][IndexedDB] 打开失败', event.target.error);
-                reject(event.target.error);
-            };
-            request.onsuccess = (event) => {
-                const db = event.target.result;
-
-                resolve(db);
-            };
-            request.onupgradeneeded = (event) => {
-                console.log('[Storage][IndexedDB] 升级数据库，旧版本:', event.oldVersion, '新版本:', event.newVersion);
-                const db = event.target.result;
-                if (!db.objectStoreNames.contains(STORE_NAME)) {
-                    db.createObjectStore(STORE_NAME);
-                }
-                // 新增：创建 galProjects 存储
-                if (!db.objectStoreNames.contains('galProjects')) {
-                    db.createObjectStore('galProjects', {keyPath: 'id'});
-                }
-            };
-        });
-    }
-
-    /**
-     * 从 IndexedDB 加载数据
-     * @returns {Promise<Object>} 返回 { chapters: [] } 或默认空结构
-     */
-    async function loadFromIndexedDB() {
-
-        const db = await openDB();
-        return new Promise((resolve, reject) => {
-            const transaction = db.transaction(STORE_NAME, 'readonly');
-            const store = transaction.objectStore(STORE_NAME);
-            const request = store.get(DB_KEY);
-            request.onsuccess = () => {
-                const result = request.result || {chapters: []};
-
-                resolve(result);
-            };
-            request.onerror = (event) => {
-                console.error('[Storage][IndexedDB] 加载失败', event.target.error);
-                reject(event.target.error);
-            };
-            transaction.oncomplete = () => db.close();
-        });
-    }
-
-    /**
-     * 保存数据到 IndexedDB（异步）
-     * @param {Object} data 包含 chapters 的对象
-     */
-    async function saveToIndexedDB(data) {
-
-        const db = await openDB();
-        return new Promise((resolve, reject) => {
-            const transaction = db.transaction(STORE_NAME, 'readwrite');
-            const store = transaction.objectStore(STORE_NAME);
-            const request = store.put(data, DB_KEY);
-            request.onsuccess = () => {
-
-                resolve();
-            };
-            request.onerror = (event) => {
-                console.error('[Storage][IndexedDB] 保存失败', event.target.error);
-                reject(event.target.error);
-            };
-            transaction.oncomplete = () => db.close();
-        });
-    }
-
-    // ==================== IndexedDB 初始化与辅助函数 ====================
-
-    const DB_NAME = 'NovelCreatorDB';
-    const DB_VERSION = 2;
-    const STORE_NAME = 'chapters';
-    const DB_KEY = CONFIG.STORAGE_KEY;
-
-    // ==================== Agent状态管理 ====================
-
-    const AgentStateManager = {
-        states: {},
-
-        init() {
-            // 保护性检查：如果 CONFIG.AGENTS 不存在或不是对象，则初始化为空对象
-            if (!CONFIG.AGENTS || typeof CONFIG.AGENTS !== 'object') {
-                console.warn('CONFIG.AGENTS 无效，已重置为空对象');
-                this.states = {};
-                return;
-            }
-            Object.keys(CONFIG.AGENTS).forEach(key => {
-                this.states[key] = 'idle';
-            });
-        },
-
-        setState(agentKey, state) {
-            if (CONFIG.AGENTS[agentKey]) {
-                if (this.states[agentKey] !== state) { // 仅当状态变化时才更新
-                    this.states[agentKey] = state;
-                    UI.updateAgentStatusButton(agentKey);
-                }
-            }
-        },
-
-        getState(agentKey) {
-            return this.states[agentKey] || 'idle';
-        },
-
-        reset() {
-            Object.keys(CONFIG.AGENTS).forEach(key => {
-                this.states[key] = 'idle';
-            });
-            UI.updateAllAgentStatusButtons();
-        },
-    };
-
-    // ==================== 前置检测 ====================
-
-    const PreCheck = {
-        checkAll: async function () {
-            const configLoaded = Object.keys(CONFIG.AGENTS).length > 0;
-            const results = {
-                configLoaded,
-                stateBook: await this.checkStateBook(),
-                settingBook: await this.checkSettingBook(),
-                agents: null,
-                apiStatus: null,
-            };
-
-            if (configLoaded) {
-                results.agents = await this.checkAgents();
-                results.apiStatus = await this.checkAPIConnections();
-            } else {
-                results.agents = {
-                    allExist: false,
-                    configNotLoaded: true,
-                    error: '请先加载配置文件'
-                };
-            }
-
-            // 只要存在任何一个API配置不可用，allPassed 即为 false
-            let apiAllOk = true;
-            if (results.apiStatus) {
-                for (const [id, status] of Object.entries(results.apiStatus)) {
-                    if (!status.ok) {
-                        apiAllOk = false;
-                        console.warn(`[PreCheck.checkAll] API ${id} 不可用:`, status.error);
-                    }
-                }
-            }
-
-            results.allPassed = configLoaded && results.agents?.allExist === true && apiAllOk;
-            return results;
-        },
-
-        checkAPIConnections: async function () {
-            const apiConfigs = CONFIG.apiConfigs || {};
-            const allConfigIds = Object.keys(apiConfigs);
-
-            const status = {};
-            for (const id of allConfigIds) {
-                const config = apiConfigs[id];
-                const result = await testAPIConnection(config);
-                status[id] = {
-                    ok: result.ok,
-                    error: result.error,
-                    lastTest: Date.now(),
-                };
-            }
-            return status;
-        },
-
-        async checkStateBook() {
-            try {
-                const books = await getAllStateBooks(); // 获取所有存在的状态书
-                let totalStateEntries = 0;
-                let hasAnyStates = false;
-                let hasAnyTemplate = false;
-
-                for (const bookName of books) {
-                    const book = await API.getWorldbook(bookName);
-                    const entries = Array.isArray(book) ? book : (book.entries || []);
-                    const stateEntries = entries.filter(e => e?.name?.startsWith(CONFIG.STATE_ENTRY_PREFIX));
-                    if (stateEntries.length > 0) {
-                        hasAnyStates = true;
-                        totalStateEntries += stateEntries.length;
-                    }
-                    // 检查该状态书是否有对应的模板条目
-                    const bookIndex = parseInt(bookName.split('-')[1]);
-                    const templateEntry = entries.find(e => e.name === `${CONFIG.STATE_TEMPLATE_PREFIX}${bookIndex}`);
-                    if (templateEntry) hasAnyTemplate = true;
-                }
-
-                return {
-                    exists: books.length > 0,
-                    hasStates: hasAnyStates,
-                    hasTemplate: hasAnyTemplate,
-                    stateCount: totalStateEntries,
-                    error: books.length === 0 ? '未找到任何状态书（如 状态书-1、状态书-2 等）' :
-                        !hasAnyStates ? '状态书存在但没有状态条目' :
-                            !hasAnyTemplate ? '所有状态书均缺少模板条目（状态模板-N）' : null
-                };
-            } catch (e) {
-                return {exists: false, error: `读取状态书失败: ${e.message}`};
-            }
-        },
-
-        async checkSettingBook() {
-            try {
-                // 获取当前激活的全局世界书列表
-                let globalBooks = [];
-                try {
-                    if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
-                        globalBooks = await TavernHelper.getGlobalWorldbookNames();
-                    } else if (typeof window.getGlobalWorldbookNames === 'function') {
-                        globalBooks = await window.getGlobalWorldbookNames();
-                    }
-                } catch (e) {
-                    console.warn('[PreCheck.checkSettingBook] 获取全局激活列表失败:', e);
-                }
-
-                // 检查设定书是否在激活列表中
-                if (!globalBooks.includes(CONFIG.SETTING_BOOK_NAME)) {
-                    return {exists: false, error: '设定书未激活'};
-                }
-
-                // 如果激活，再读取内容
-                const book = await API.getWorldbook(CONFIG.SETTING_BOOK_NAME);
-                const entries = Array.isArray(book) ? book : (book.entries || []);
-
-                return {
-                    exists: entries.length > 0,
-                    entryCount: entries.length,
-                    error: entries.length === 0 ? '设定书为空' : null
-                };
-            } catch (e) {
-                return {exists: false, error: `读取设定书失败: ${e.message}`};
-            }
-        },
-
-        async checkAgents() {
-            const context = API.getContext();
-            const characters = context.characters || [];
-            const characterNames = characters.map(c => c?.name || c?.data?.name || '');
-
-            const missingAgents = [];
-            const foundAgents = [];
-
-            // 遍历动态加载的 CONFIG.AGENTS
-            for (const [, agent] of Object.entries(CONFIG.AGENTS)) {
-                const found = characterNames.some(name => name === agent.name);
-                if (found) {
-                    foundAgents.push(agent.name);
-                } else {
-                    missingAgents.push(agent.name);
-                }
-            }
-
-            return {
-                allExist: missingAgents.length === 0,
-                foundCount: foundAgents.length,
-                totalCount: Object.keys(CONFIG.AGENTS).length,
-                foundAgents,
-                missingAgents,
-                error: missingAgents.length > 0 ? `缺少以下Agent角色卡:\n${missingAgents.join('\n')}` : null
-            };
-        },
-
-        formatErrorMessage: function (results) {
-            const errors = [];
-
-            // 状态书
-            if (!results.stateBook.exists) {
-                errors.push(`📚 状态书: ⚠️ 未找到，系统将在需要时自动创建`);
-            } else if (!results.stateBook.hasStates) {
-                errors.push(`📚 状态书: ⚠️ 存在但没有状态条目，系统将在需要时自动创建`);
-            } else {
-                errors.push(`📚 状态书: ✓ 已找到 (${results.stateBook.stateCount}个状态条目)`);
-            }
-
-            // 设定书
-            if (!results.settingBook.exists) {
-                errors.push(`📖 设定书: ⚠️ 未找到（可选）`);
-            } else {
-                errors.push(`📖 设定书: ✓ 已找到 (${results.settingBook.entryCount}个条目)`);
-            }
-
-            // Agent 部分
-            if (results.agents) {
-                if (results.agents.configNotLoaded) {
-                    errors.push(`🤖 Agent配置: 未加载`);
-                } else {
-                    // 统计每个角色卡名称的出现次数和缺失情况
-                    const nameCount = {};
-                    const nameMissing = {};
-                    const foundSet = new Set(results.agents.foundAgents || []);
-
-                    for (const [key, agent] of Object.entries(CONFIG.AGENTS)) {
-                        const name = agent.name;
-                        nameCount[name] = (nameCount[name] || 0) + 1;
-                        if (!foundSet.has(name)) {
-                            nameMissing[name] = (nameMissing[name] || 0) + 1;
-                        }
-                    }
-
-                    let agentLines = ['🤖 Agent角色卡:'];
-                    const uniqueNames = [...new Set(Object.values(CONFIG.AGENTS).map(a => a.name))];
-                    for (const name of uniqueNames) {
-                        const total = nameCount[name];
-                        const missing = nameMissing[name] || 0;
-                        const present = total - missing;
-                        const status = missing === 0 ? '✓' : '✗';
-                        let line = `  ${status} ${name}`;
-                        if (total > 1) {
-                            line += ` (${present}/${total}个Agent可用)`;
-                        }
-                        agentLines.push(line);
-                    }
-                    errors.push(agentLines.join('\n'));
-                }
-            } else {
-                errors.push(`🤖 Agent信息: 无法获取`);
-            }
-
-            // API 状态
-            if (results.apiStatus) {
-                const failedApis = [];
-                for (const [id, status] of Object.entries(results.apiStatus)) {
-                    if (!status.ok) {
-                        const errorMsg = (status.error || '未知错误').replace(/\n/g, ' ');
-                        failedApis.push(`  ❌ ${id}: ${errorMsg}`);
-                    }
-                }
-                if (failedApis.length > 0) {
-                    errors.push(`🔌 API连通性测试失败：\n${failedApis.join('\n')}`);
-                }
-            }
-
-            // 最终判断：只要有任何失败，就返回错误信息
-            if (results.configLoaded && results.agents?.allExist === true && (!results.apiStatus || Object.values(results.apiStatus).every(s => s.ok))) {
-                return null;
-            }
-
-            return errors.join('\n');
-        }
-    };
-
-    // ==================== 用户中断专用错误 ====================
-
-    class UserInterruptError extends Error {
-        constructor() {
-            super('用户中断');
-            this.name = 'UserInterruptError';
-        }
-    }
-
-    // ==================== API 适配层 ====================
-
-    const API = {
-        getContext() {
-            if (typeof window.SillyTavern !== 'undefined' && window.SillyTavern.getContext) {
-                return window.SillyTavern.getContext();
-            }
-            throw new Error('无法获取 SillyTavern 上下文');
-        },
-
-        async selectCharacter(agentName) {
-            if (typeof TavernHelper?.triggerSlash === 'function') {
-                await TavernHelper.triggerSlash(`/go ${agentName}`);
-                return;
-            }
-            throw new Error('TavernHelper.triggerSlash 不可用');
-        },
-
-        async generate(message, options = {}) {
-            if (typeof TavernHelper?.generate !== 'function') throw new Error('TavernHelper.generate 不可用');
-            const context = this.getContext();
-            const result = await TavernHelper.generate({
-                user_input: message, max_chat_history: 1, should_silence: true, ...options
-            });
-            let text = '';
-            if (typeof result === 'string') {
-                text = result;
-            } else if (result && typeof result === 'object') {
-                text = result.text || result.message || result.response || '';
-            }
-            if (!text) {
-                const last = [...(context.chat || [])].reverse().find(m => !m.is_user);
-                if (last) text = last.mes;
-            }
-            return {mes: text, name: context.name2 || 'Assistant', is_user: false, extra: result?.extra || {}};
-        },
-
-        async getWorldbook(name) {
-            if (typeof TavernHelper?.getWorldbook === 'function') return TavernHelper.getWorldbook(name);
-            if (typeof window.getWorldbook === 'function') return window.getWorldbook(name);
-            throw new Error('getWorldbook 不可用');
-        },
-
-        async updateWorldbook(name, callback, options = {}) {
-            if (typeof TavernHelper?.updateWorldbookWith === 'function') return TavernHelper.updateWorldbookWith(name, callback, options);
-            if (typeof window.updateWorldbookWith === 'function') return window.updateWorldbookWith(name, callback, options);
-            throw new Error('updateWorldbookWith 不可用');
-        },
-
-        async stopGeneration() {
-            if (typeof TavernHelper?.stopAllGeneration === 'function') {
-                try {
-                    console.log('[API.stopGeneration] 调用 TavernHelper.stopAllGeneration()');
-                    await TavernHelper.stopAllGeneration();
-                } catch (e) {
-                    console.error('[API.stopGeneration] 调用 stopAllGeneration 失败:', e);
-                }
-            } else {
-                console.warn('[API.stopGeneration] TavernHelper.stopAllGeneration 不可用');
-                // 可以保留原有的降级方案，例如调用 SillyTavern 的停止方法
-                // if (typeof SillyTavern?.getContext?.()?.stopGenerating === 'function') { ... }
-            }
-        },
-
-        sleep: (ms) => new Promise(r => setTimeout(r, ms))
-    };
-
-    /**
-     * 测试单个API配置的连通性
-     * @param {Object} config - API配置对象，包含 source, apiUrl, key, model, timeout 等
-     * @returns {Promise<{ok: boolean, error?: string}>}
-     */
-    async function testAPIConnection(config) {
-        const {type, source, apiUrl, key, model, timeout = 10000} = config;
-        const url = apiUrl.replace(/\/+$/, ''); // 去除末尾多余的斜杠
-
-        // ========== 调试日志：函数入口 ==========
-        console.log(`[testAPIConnection] 开始测试连接`);
-        console.log(`[testAPIConnection] 参数: type=${type}, source=${source}, apiUrl=${apiUrl}, model=${model}, timeout=${timeout}`);
-        console.log(`[testAPIConnection] 处理后 url: ${url}`);
-        // 检查密钥是否包含非ASCII字符（中文等）
-        if (/[^\x00-\x7F]/.test(key)) {
-            const errorMsg = 'API密钥包含非ASCII字符（如中文），请使用有效的密钥';
-            console.error(`[testAPIConnection] ${errorMsg}`);
-            return {ok: false, error: errorMsg};
-        }
-
-        if (type === 'text') {
-            // 文本平台统一测试 GET /models （用户已提供版本前缀，如 /v1）
-            const modelsUrl = url + '/models';
-            console.log(`[testAPIConnection][text] 测试URL: ${modelsUrl}`);
-
-            const options = {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${key}`,
-                    'Content-Type': 'application/json',
-                },
-                signal: AbortSignal.timeout(timeout),
-            };
-            console.log(`[testAPIConnection][text] 请求头:`, options.headers);
-
-            try {
-                console.log(`[testAPIConnection][text] 开始 fetch...`);
-                const response = await fetch(modelsUrl, options);
-                console.log(`[testAPIConnection][text] 响应状态: ${response.status} ${response.statusText}`);
-
-                if (response.ok) {
-                    console.log(`[testAPIConnection][text] 连接成功`);
-                    return {ok: true};
-                } else {
-                    const errorText = await response.text();
-                    console.error(`[testAPIConnection][text] 响应错误文本:`, errorText);
-                    return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
-                }
-            } catch (err) {
-                console.error(`[testAPIConnection][text] 请求异常:`, err);
-                return {ok: false, error: err.message};
-            }
-        } else if (type === 'image') {
-            console.log(`[testAPIConnection][image] source=${source}`);
-
-            if (source === 'openai') {
-                // OpenAI 图像 API 测试：尝试 GET /models
-                const modelsUrl = url + '/models';
-                console.log(`[testAPIConnection][openai] 测试URL: ${modelsUrl}`);
-
-                const options = {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                        'Content-Type': 'application/json',
-                    },
-                    signal: AbortSignal.timeout(timeout),
-                };
-                console.log(`[testAPIConnection][openai] 请求头:`, options.headers);
-
-                try {
-                    console.log(`[testAPIConnection][openai] 开始 fetch...`);
-                    const response = await fetch(modelsUrl, options);
-                    console.log(`[testAPIConnection][openai] 响应状态: ${response.status} ${response.statusText}`);
-
-                    if (response.ok) {
-                        console.log(`[testAPIConnection][openai] 连接成功`);
-                        return {ok: true};
-                    } else {
-                        const errorText = await response.text();
-                        console.error(`[testAPIConnection][openai] 响应错误文本:`, errorText);
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
-                    }
-                } catch (err) {
-                    console.error(`[testAPIConnection][openai] 请求异常:`, err);
-                    return {ok: false, error: err.message};
-                }
-            } else if (source === 'stability') {
-                // Stability AI 测试：尝试 GET /user/account
-                const accountUrl = url + '/user/account';
-                console.log(`[testAPIConnection][stability] 测试URL: ${accountUrl}`);
-
-                const options = {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
-                    signal: AbortSignal.timeout(timeout),
-                };
-                console.log(`[testAPIConnection][stability] 请求头:`, options.headers);
-
-                try {
-                    console.log(`[testAPIConnection][stability] 开始 fetch...`);
-                    const response = await fetch(accountUrl, options);
-                    console.log(`[testAPIConnection][stability] 响应状态: ${response.status} ${response.statusText}`);
-
-                    if (response.ok) {
-                        console.log(`[testAPIConnection][stability] 连接成功`);
-                        return {ok: true};
-                    } else {
-                        const errorText = await response.text();
-                        console.error(`[testAPIConnection][stability] 响应错误文本:`, errorText);
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
-                    }
-                } catch (err) {
-                    console.error(`[testAPIConnection][stability] 请求异常:`, err);
-                    return {ok: false, error: err.message};
-                }
-            } else if (source === 'midjourney') {
-                // Midjourney 测试：尝试 GET /mj/ping（假设有此端点）
-                const pingUrl = url + '/mj/ping';
-                console.log(`[testAPIConnection][midjourney] 测试URL: ${pingUrl}`);
-
-                const options = {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
-                    signal: AbortSignal.timeout(timeout),
-                };
-                console.log(`[testAPIConnection][midjourney] 请求头:`, options.headers);
-
-                try {
-                    console.log(`[testAPIConnection][midjourney] 开始 fetch...`);
-                    const response = await fetch(pingUrl, options);
-                    console.log(`[testAPIConnection][midjourney] 响应状态: ${response.status} ${response.statusText}`);
-
-                    if (response.ok) {
-                        console.log(`[testAPIConnection][midjourney] 连接成功`);
-                        return {ok: true};
-                    } else {
-                        const errorText = await response.text();
-                        console.error(`[testAPIConnection][midjourney] 响应错误文本:`, errorText);
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
-                    }
-                } catch (err) {
-                    console.warn('[testAPIConnection][midjourney] ping 失败，尝试轻量任务...');
-                    console.error('[testAPIConnection][midjourney] 异常详情:', err);
-                    return {ok: false, error: `无法验证 Midjourney 连通性: ${err.message}`};
-                }
-            } else if (source === 'flux') {
-                // Flux 测试：尝试 GET /models（假设兼容 OpenAI）
-                const modelsUrl = url + '/models';
-                console.log(`[testAPIConnection][flux] 测试URL: ${modelsUrl}`);
-
-                const options = {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
-                    signal: AbortSignal.timeout(timeout),
-                };
-                console.log(`[testAPIConnection][flux] 请求头:`, options.headers);
-
-                try {
-                    console.log(`[testAPIConnection][flux] 开始 fetch...`);
-                    const response = await fetch(modelsUrl, options);
-                    console.log(`[testAPIConnection][flux] 响应状态: ${response.status} ${response.statusText}`);
-
-                    if (response.ok) {
-                        console.log(`[testAPIConnection][flux] 连接成功`);
-                        return {ok: true};
-                    } else {
-                        const errorText = await response.text();
-                        console.error(`[testAPIConnection][flux] 响应错误文本:`, errorText);
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
-                    }
-                } catch (err) {
-                    console.error(`[testAPIConnection][flux] 请求异常:`, err);
-                    return {ok: false, error: err.message};
-                }
-            } else if (source === 'picsart') {
-                // Picsart 测试：尝试 GET /health（假设）
-                const healthUrl = url + '/health';
-                console.log(`[testAPIConnection][picsart] 测试URL: ${healthUrl}`);
-
-                const options = {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
-                    signal: AbortSignal.timeout(timeout),
-                };
-                console.log(`[testAPIConnection][picsart] 请求头:`, options.headers);
-
-                try {
-                    console.log(`[testAPIConnection][picsart] 开始 fetch...`);
-                    const response = await fetch(healthUrl, options);
-                    console.log(`[testAPIConnection][picsart] 响应状态: ${response.status} ${response.statusText}`);
-
-                    if (response.ok) {
-                        console.log(`[testAPIConnection][picsart] 连接成功`);
-                        return {ok: true};
-                    } else {
-                        const errorText = await response.text();
-                        console.error(`[testAPIConnection][picsart] 响应错误文本:`, errorText);
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
-                    }
-                } catch (err) {
-                    console.error(`[testAPIConnection][picsart] 请求异常:`, err);
-                    return {ok: false, error: err.message};
-                }
-            } else if (source === 'siliconflow') {
-                // SiliconFlow 图像：尝试 GET /models（假设兼容 OpenAI）
-                const modelsUrl = url + '/models';
-                console.log(`[testAPIConnection][siliconflow] 测试URL: ${modelsUrl}`);
-
-                const options = {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
-                    signal: AbortSignal.timeout(timeout),
-                };
-                console.log(`[testAPIConnection][siliconflow] 请求头:`, options.headers);
-
-                try {
-                    console.log(`[testAPIConnection][siliconflow] 开始 fetch...`);
-                    const response = await fetch(modelsUrl, options);
-                    console.log(`[testAPIConnection][siliconflow] 响应状态: ${response.status} ${response.statusText}`);
-
-                    if (response.ok) {
-                        console.log(`[testAPIConnection][siliconflow] 连接成功`);
-                        return {ok: true};
-                    } else {
-                        const errorText = await response.text();
-                        console.error(`[testAPIConnection][siliconflow] 响应错误文本:`, errorText);
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
-                    }
-                } catch (err) {
-                    console.error(`[testAPIConnection][siliconflow] 请求异常:`, err);
-                    return {ok: false, error: err.message};
-                }
-            } else if (source === 'sdwebui') {
-                // Stable Diffusion WebUI 测试：尝试 GET /sdapi/v1/sd-models
-                const testUrl = url + '/sdapi/v1/sd-models';
-                console.log(`[testAPIConnection][sdwebui] 测试URL: ${testUrl}`);
-
-                const options = {
-                    method: 'GET',
-                    signal: AbortSignal.timeout(timeout),
-                };
-                console.log(`[testAPIConnection][sdwebui] 请求选项: 无 headers`);
-
-                try {
-                    console.log(`[testAPIConnection][sdwebui] 开始 fetch...`);
-                    const response = await fetch(testUrl, options);
-                    console.log(`[testAPIConnection][sdwebui] 响应状态: ${response.status} ${response.statusText}`);
-
-                    if (response.ok) {
-                        console.log(`[testAPIConnection][sdwebui] 连接成功`);
-                        return {ok: true};
-                    } else {
-                        const errorText = await response.text();
-                        console.error(`[testAPIConnection][sdwebui] 响应错误文本:`, errorText);
-                        return {ok: false, error: `SD WebUI 未正确响应 (${response.status}): ${errorText}`};
-                    }
-                } catch (err) {
-                    console.error(`[testAPIConnection][sdwebui] 请求异常:`, err);
-                    return {ok: false, error: `无法连接到 SD WebUI: ${err.message}`};
-                }
-            } else if (source === 'other') {
-                // 其他图像 API：尝试 OPTIONS 请求或简单 GET
-                console.log(`[testAPIConnection][other] 测试URL (OPTIONS): ${url}`);
-                try {
-                    const response = await fetch(url, {
-                        method: 'OPTIONS',
-                        signal: AbortSignal.timeout(timeout),
-                    });
-                    console.log(`[testAPIConnection][other] OPTIONS 响应状态: ${response.status} ${response.statusText}`);
-
-                    if (response.status < 500) {
-                        console.log(`[testAPIConnection][other] 连接成功（仅 URL 可达性）`);
-                        return {ok: true, warning: '仅验证了URL可达性，密钥有效性未确认'};
-                    } else {
-                        const errorText = await response.text();
-                        console.error(`[testAPIConnection][other] 响应错误文本:`, errorText);
-                        return {ok: false, error: `OPTIONS 请求失败 (${response.status})`};
-                    }
-                } catch (err) {
-                    console.error(`[testAPIConnection][other] 请求异常:`, err);
-                    return {ok: false, error: `无法验证图像API连通性，请手动检查URL和密钥。详细错误: ${err.message}`};
-                }
-            } else {
-                console.error(`[testAPIConnection] 不支持的图像平台: ${source}`);
-                return {ok: false, error: `不支持的图像平台: ${source}`};
-            }
-        }
-        // ========== 新增：音频平台测试 ==========
-        else if (type === 'audio') {
-            console.log(`[testAPIConnection][audio] 开始测试音频平台 source=${source}`);
-            console.log(`[testAPIConnection][audio] 完整配置:`, JSON.stringify(config, null, 2));
-
-            // 根据不同的 source 构造不同的测试端点
-            let testUrl = url; // 默认使用根 URL
-            let method = 'GET';
-            let headers = {};
-
-            // 需要认证的平台添加 Authorization 头
-            const authSources = ['elevenlabs', 'minimax', 'minimax-music', 'minimax-speech', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'stableaudio', 'riffusion', 'custom'];
-            if (authSources.includes(source) && key && key.trim() !== '') {
-                if (source === 'azure-tts') {
-                    headers['Ocp-Apim-Subscription-Key'] = key;
-                } else {
-                    headers['Authorization'] = `Bearer ${key}`;
-                }
-                headers['Content-Type'] = 'application/json';
-                console.log(`[testAPIConnection][audio] 添加认证头`);
-            }
-
-            // 针对已知平台选择更合适的健康检查端点
-            switch (source) {
-                case 'elevenlabs':
-                    testUrl = url + '/voices'; // 获取声音列表，需要认证
-                    break;
-                case 'minimax':
-                case 'minimax-music':
-                case 'minimax-speech':
-                    // MiniMax 可能使用 /voice/list
-                    testUrl = url + '/voice/list';
-                    break;
-                case 'huggingface':
-                    testUrl = url + '/api/models'; // 获取模型列表
-                    break;
-                case 'openai-tts':
-                    testUrl = url + '/models'; // 兼容 OpenAI 的模型列表
-                    break;
-                case 'azure-tts':
-                    // Azure TTS 的语音列表端点：/cognitiveservices/voices/list
-                    testUrl = url + '/cognitiveservices/voices/list';
-                    // 认证头已在上面设置
-                    break;
-                case 'google-tts':
-                    // Google TTS 需要将 key 放在 URL 参数中
-                    testUrl = url + '/voices?key=' + encodeURIComponent(key);
-                    headers = {}; // 移除 Authorization 头
-                    break;
-                case 'stableaudio':
-                    testUrl = url + '/v2beta/audio/health'; // 假设有此端点
-                    break;
-                case 'riffusion':
-                    testUrl = url; // 直接根路径，可能返回 200 或 404 但可用于连通性
-                    method = 'HEAD';
-                    break;
-                case 'custom':
-                case 'other':
-                    // 对于自定义，尝试 OPTIONS 请求或 GET 根路径
-                    method = 'OPTIONS';
-                    testUrl = url;
-                    break;
-                default:
-                    testUrl = url;
-            }
-
-            console.log(`[testAPIConnection][audio] 请求 ${method} ${testUrl}`);
-            const options = {
-                method: method,
-                headers: headers,
-                signal: AbortSignal.timeout(timeout),
-            };
-
-            try {
-                const startTime = Date.now();
-                const response = await fetch(testUrl, options);
-                const elapsed = Date.now() - startTime;
-                console.log(`[testAPIConnection][audio] 状态码: ${response.status}, 耗时: ${elapsed}ms`);
-
-                if (response.ok) {
-                    console.log(`[testAPIConnection][audio] 连接成功，平台 ${source} 可用`);
-                    return { ok: true };
-                } else {
-                    const errorText = await response.text();
-                    console.error(`[testAPIConnection][audio] 错误响应:`, errorText);
-                    return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
-                }
-            } catch (err) {
-                console.error(`[testAPIConnection][audio] 请求异常:`, err);
-                return { ok: false, error: err.message };
-            }
-        }
-        // ========== 结束音频平台测试 ==========
-        else {
-            console.error(`[testAPIConnection] 未知的 type: ${type}`);
-            return {ok: false, error: `未知的 type: ${type}`};
-        }
-    }
-
-    // ==================== 通知 ====================
-
-    const Notify = {
-        _call(type, msg, title, opts) {
-            // 确保 msg 和 title 是字符串
-            const safeMsg = (msg === null || msg === undefined) ? '' : String(msg);
-            const safeTitle = (title === null || title === undefined) ? '' : String(title);
-            const formattedMsg = safeMsg.replace(/\n/g, '<br>');
-
-            if (typeof window.toastr !== 'undefined') {
-                const defaultOptions = {
-                    escapeHtml: false,          // 允许 HTML，使 <br> 生效
-                    closeButton: true,
-                    progressBar: true,
-                    timeOut: 5000,
-                    extendedTimeOut: 5000,
-                    positionClass: 'toast-top-right',
-                    preventDuplicates: true,
-                };
-                const userOptions = opts || {};
-                const options = {...defaultOptions, ...userOptions};
-                toastr[type](formattedMsg, safeTitle, options);
-            } else {
-                console[type === 'error' ? 'error' : type === 'warning' ? 'warn' : 'log'](`[${type.toUpperCase()}]`, safeTitle, safeMsg);
-                if (type === 'error' || type === 'success') {
-                    alert((safeTitle ? safeTitle + '\n' : '') + safeMsg);
-                }
-            }
-        },
-        success: (msg, title, opts) => Notify._call('success', msg, title, opts),
-        error: (msg, title, opts) => Notify._call('error', msg, title, opts),
-        warning: (msg, title, opts) => Notify._call('warning', msg, title, opts),
-        info: (msg, title, opts) => Notify._call('info', msg, title, opts)
-    };
-
-    // ==================== 存储管理 ====================
-
-    const Storage = {
-        _writeQueue: Promise.resolve(),
-
-        /**
-         * 初始化：从 IndexedDB 加载数据到内存缓存 HISTORY_CACHE
-         * 必须在任何读写操作前调用，并等待完成
-         */
-        async init() {
-            console.log('[Storage] 开始初始化...');
-            try {
-                const data = await loadFromIndexedDB();
-                HISTORY_CACHE = {
-                    chapters: data.chapters || [],
-                    lastUpdate: Date.now()
-                };
-                console.log('[Storage] 初始化完成，加载章节数:', HISTORY_CACHE.chapters.length);
-            } catch (e) {
-                console.error('[Storage] 初始化失败，使用空缓存', e);
-                HISTORY_CACHE = {chapters: [], lastUpdate: Date.now()};
-            }
-        },
-
-        /**
-         * 同步保存数据（更新内存缓存并通过队列异步写入 IndexedDB）
-         */
-        save(data) {
-            if (!data || !Array.isArray(data.chapters)) {
-                console.warn('[Storage] save() 收到无效数据', data);
-                return false;
-            }
-            // 更新内存缓存
-            HISTORY_CACHE.chapters = data.chapters.sort((a, b) => a.num - b.num);
-            HISTORY_CACHE.lastUpdate = Date.now();
-
-            console.log('[Storage] 将数据加入写入队列，章节数:', data.chapters.length);
-            // 将写入操作加入队列
-            this._writeQueue = this._writeQueue.then(() => {
-                console.time('IndexedDB写入');
-                return saveToIndexedDB({chapters: HISTORY_CACHE.chapters})
-                    .then(() => {
-                        console.timeEnd('IndexedDB写入');
-                        console.log('[Storage] 异步写入 IndexedDB 成功');
-                    })
-                    .catch(err => {
-                        console.timeEnd('IndexedDB写入');
-                        console.error('[Storage] 异步写入 IndexedDB 失败', err);
-                        Notify.error('章节数据保存失败，请检查浏览器存储权限');
-                    });
-            }).catch(err => {
-                console.error('[Storage] 写入队列处理出错', err);
-            });
-
-            return true;
-        },
-
-        /**
-         * 加载章节列表（同步返回内存缓存）
-         */
-        loadChapters() {
-            console.log('[Storage.loadChapters] 返回缓存章节数:', HISTORY_CACHE.chapters.length);
-            return [...(HISTORY_CACHE.chapters || [])].sort((a, b) => a.num - b.num);
-        },
-
-        /**
-         * 构建章节的紧凑路径（供 sourcePath 存储使用）
-         * @param {number} num - 章节号
-         * @param {Array} chapters - 所有章节数组
-         * @returns {string|null} 路径字符串，如 "3" 或 "1#1#2"
-         */
-        _buildChapterPath(num, chapters) {
-            console.log(`[Storage._buildChapterPath] ===== 开始构建章节 ${num} 的紧凑路径 =====`);
-            console.time(`_buildChapterPath_${num}`);
-
-            const chapter = chapters.find(c => c.num === num);
-            if (!chapter) {
-                console.warn(`[Storage._buildChapterPath] 章节 ${num} 不存在，返回 null`);
-                console.timeEnd(`_buildChapterPath_${num}`);
-                return null;
-            }
-
-            // 构建章节映射和子节点映射
-            const chapterMap = {};
-            const childrenMap = {};
-            chapters.forEach(ch => {
-                chapterMap[ch.num] = ch;
-                const p = ch.parent;
-                if (p !== null && p !== undefined) {
-                    if (!childrenMap[p]) childrenMap[p] = [];
-                    childrenMap[p].push(ch);
-                }
-            });
-
-            // 对每个父节点的子节点按章节号排序（确保顺序稳定）
-            for (const p in childrenMap) {
-                childrenMap[p].sort((a, b) => a.num - b.num);
-                console.log(`[Storage._buildChapterPath] 父节点 ${p} 的子节点排序后: ${childrenMap[p].map(c => c.num).join(', ')}`);
-            }
-
-            // 向上回溯，收集每一步的选择序号（从目标节点到根的方向）
-            const segments = [];
-            let currentNum = num;
-            let current = chapter;
-
-            console.log(`[Storage._buildChapterPath] 开始回溯，当前节点: ${currentNum}, 父节点: ${current.parent}`);
-
-            while (current.parent !== null && current.parent !== undefined) {
-                const parentNum = current.parent;
-                const parent = chapterMap[parentNum];
-                if (!parent) {
-                    console.warn(`[Storage._buildChapterPath] 父节点 ${parentNum} 不存在，终止回溯`);
-                    break;
-                }
-
-                const siblings = childrenMap[parentNum] || [];
-                if (!siblings.length) {
-                    console.warn(`[Storage._buildChapterPath] 父节点 ${parentNum} 的子节点列表为空，终止回溯`);
-                    break;
-                }
-
-                const index = siblings.findIndex(c => c.num === currentNum) + 1;
-                if (index === 0) {
-                    console.warn(`[Storage._buildChapterPath] 在父节点 ${parentNum} 的子节点中未找到当前节点 ${currentNum}`);
-                    break;
-                }
-
-                console.log(`[Storage._buildChapterPath] 父节点 ${parentNum} 有 ${siblings.length} 个子节点，当前节点 ${currentNum} 的序号为 ${index}`);
-                segments.push(index);
-
-                currentNum = parentNum;
-                current = parent;
-                console.log(`[Storage._buildChapterPath] 向上移动到父节点: ${currentNum}`);
-            }
-
-            const rootNum = currentNum;
-            console.log(`[Storage._buildChapterPath] 回溯结束，根节点号为 ${rootNum}`);
-
-            // 反转得到从根到目标的顺序
-            const pathSegments = segments.reverse();
-            console.log(`[Storage._buildChapterPath] 从根到目标的顺序序号: [${pathSegments.join(', ')}]`);
-
-            // 构建路径
-            let path = String(rootNum);
-            for (const idx of pathSegments) {
-                path += '#'.repeat(idx) + idx;
-            }
-
-            console.log(`[Storage._buildChapterPath] 最终路径: ${path}`);
-            console.timeEnd(`_buildChapterPath_${num}`);
-            return path;
-        },
-
-        /**
-         * 保存单章（更新内存缓存并通过队列异步写入 IndexedDB）
-         */
-        saveChapter(chapterData, chapterNum, snapshot, parentNum, interactionResult) {
-            console.log(`[Storage.saveChapter] 加入队列: num=${chapterNum}, parent=${parentNum}, interactionResult=${interactionResult}`);
-            const chapters = [...(HISTORY_CACHE.chapters || [])];
-            const timestamp = new Date().toLocaleString('zh-CN');
-
-            // ---------- 修改点：不再自动添加标题行 ----------
-            // 直接使用传入的 content，保持原样
-            const content = chapterData.content || '无';
-            // ---------- 结束修改 ----------
-
-            // ========== 新增：计算来源路径 sourcePath ==========
-            let sourcePath = null;
-            if (parentNum) {
-                sourcePath = this._buildChapterPath(parentNum, chapters);
-            } else {
-                // 无父章节，默认为 "1"（第一章的路径）
-                sourcePath = "1";
-            }
-            console.log(`[Storage.saveChapter] 计算得到 sourcePath = ${sourcePath}`);
-            // ========== 结束计算 ==========
-
-            const entry = {
-                num: chapterNum,
-                parent: parentNum || null,
-                sourcePath: sourcePath,                // 新增：来源路径
-                interactionResult: interactionResult || null, // 新增：互动结果
-                title: chapterData.title || `第${chapterNum}章`,
-                content,
-                snapshot,
-                timestamp,
-                size: content.length
-            };
-
-            // 合并其他自定义属性（如 interactive 标志等）
-            for (const key in chapterData) {
-                if (!['title', 'content'].includes(key)) {
-                    entry[key] = chapterData[key];
-                }
-            }
-
-            const idx = chapters.findIndex(c => c.num === chapterNum);
-            if (idx !== -1) chapters[idx] = entry;
-            else chapters.push(entry);
-            chapters.sort((a, b) => a.num - b.num);
-
-            HISTORY_CACHE.chapters = chapters;
-            HISTORY_CACHE.lastUpdate = Date.now();
-
-            // ===== 新增：如果唯一性约束开启且有互动结果，记录映射 =====
-            if (WORKFLOW_STATE.enforceUniqueBranches && parentNum && interactionResult) {
-                this._writeQueue = this._writeQueue.then(async () => {
-                    try {
-                        await MappingManager.recordMapping(parentNum, interactionResult, chapterNum);
-                    } catch (e) {
-                        console.error('[Storage.saveChapter] 记录映射失败', e);
-                    }
-                });
-            }
-            // ===== 结束新增 =====
-
-            this._writeQueue = this._writeQueue.then(() => {
-                console.time('IndexedDB写入');
-                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
-                    .then(() => {
-                        console.timeEnd('IndexedDB写入');
-                        console.log('[Storage.saveChapter] 异步写入 IndexedDB 成功');
-                    })
-                    .catch(err => {
-                        console.timeEnd('IndexedDB写入');
-                        console.error('[Storage.saveChapter] 异步写入 IndexedDB 失败', err);
-                        Notify.error('章节数据保存失败，请检查浏览器存储权限');
-                    });
-            }).catch(err => {
-                console.error('[Storage.saveChapter] 写入队列处理出错', err);
-            });
-
-            return true;
-        },
-
-        /**
-         * 删除指定章节之后的所有章节（包括该章）
-         */
-        deleteAfter(chapterNum) {
-            console.log(`[Storage.deleteAfter] 加入队列: 删除从 ${chapterNum} 开始`);
-            const chapters = [...(HISTORY_CACHE.chapters || [])];
-            const remaining = chapters.filter(c => c.num < chapterNum);
-            const deletedCount = chapters.length - remaining.length;
-            HISTORY_CACHE.chapters = remaining;
-            HISTORY_CACHE.lastUpdate = Date.now();
-
-            this._writeQueue = this._writeQueue.then(() => {
-                return saveToIndexedDB({chapters: HISTORY_CACHE.chapters})
-                    .then(() => console.log('[Storage.deleteAfter] 异步写入成功'))
-                    .catch(err => {
-                        console.error('[Storage.deleteAfter] 写入失败', err);
-                        Notify.error('删除章节失败');
-                    });
-            });
-            return {success: true, count: deletedCount};
-        },
-
-        /**
-         * 清空所有章节
-         */
-        clear() {
-            console.log('[Storage.clear] 加入队列: 清空所有章节');
-            HISTORY_CACHE.chapters = [];
-            HISTORY_CACHE.lastUpdate = Date.now();
-
-            this._writeQueue = this._writeQueue.then(() => {
-                return saveToIndexedDB({chapters: []})
-                    .then(() => console.log('[Storage.clear] 异步写入成功'))
-                    .catch(err => {
-                        console.error('[Storage.clear] 写入失败', err);
-                        Notify.error('清空章节失败');
-                    });
-            });
-            return true;
-        },
-
-        // 以下方法保持不变，仅作示意
-        loadSettings() {
-            try {
-                return JSON.parse(localStorage.getItem(CONFIG.SETTINGS_KEY) || '{"profile":"standard"}');
-            } catch (_) {
-                return {profile: 'standard'};
-            }
-        },
-
-        saveSettings(settings) {
-            try {
-                localStorage.setItem(CONFIG.SETTINGS_KEY, JSON.stringify(settings));
-                return true;
-            } catch (_) {
-                return false;
-            }
-        },
-
-        saveCustomAgents(agents) {
-            const settings = this.loadSettings();
-            settings.customAgents = agents;
-            return this.saveSettings(settings);
-        },
-
-        loadCustomAgents() {
-            const settings = this.loadSettings();
-            return settings.customAgents || [];
-        },
-
-        saveSelectionState(state) {
-            const settings = this.loadSettings();
-            settings.selectionState = state;
-            return this.saveSettings(settings);
-        },
-
-        loadSelectionState() {
-            const settings = this.loadSettings();
-            const saved = settings.selectionState || {};
-            if (CONFIG.categories) {
-                const filtered = {};
-                Object.keys(CONFIG.categories).forEach(cat => {
-                    filtered[cat] = saved[cat] || null;
-                });
-                return filtered;
-            }
-            return saved;
-        },
-
-        saveTokenStats(stats) {
-            try {
-                localStorage.setItem('novel_creator_token_stats_v1', JSON.stringify(stats));
-            } catch (_) {
-            }
-        },
-
-        loadAutoMode() {
-            const settings = this.loadSettings();
-            return settings.autoMode || false;
-        },
-
-        async listGalgameProjects() {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction('galProjects', 'readonly');
-                const store = transaction.objectStore('galProjects');
-                const request = store.getAll();
-                request.onsuccess = () => {
-                    const projects = request.result.map(item => ({
-                        id: item.id,
-                        name: item.data.name,
-                        thumbnail: item.data.thumbnail,
-                        updatedAt: item.data.updatedAt
-                    }));
-                    resolve(projects);
-                };
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        async loadGalgameProject(id) {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction('galProjects', 'readonly');
-                const store = transaction.objectStore('galProjects');
-                const request = store.get(id);
-                request.onsuccess = () => {
-                    if (request.result) resolve(request.result.data);
-                    else resolve(null);
-                };
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        async saveGalgameProject(id, data) {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction('galProjects', 'readwrite');
-                const store = transaction.objectStore('galProjects');
-                const request = store.put({id, data});
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        async deleteGalgameProject(id) {
-            const db = await openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction('galProjects', 'readwrite');
-                const store = transaction.objectStore('galProjects');
-                const request = store.delete(id);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        }
-    };
-
-    // ==================== 模态框栈 ====================
-
-    const ModalStack = {
-        _stack: [],
-        push(overlay) {
-            this._stack.push(overlay);
-        },
-        remove(overlay) {
-            const idx = this._stack.indexOf(overlay);
-            if (idx !== -1) this._stack.splice(idx, 1);
-        },
-        closeTop() {
-            const top = this._stack.pop();
-            if (!top) return;
-            const isHistoryPanel = top.querySelector('.nc-history-panel') !== null;
-            top.style.opacity = '0';
-            top.style.transition = 'opacity .2s';
-            setTimeout(() => {
-                top.remove();
-                if (isHistoryPanel && this._stack.length === 0) {
-                    UI.createPanel();
-                }
-            }, 200);
-        }
-    };
-
-    // ==================== 状态快照 ====================
-
-    const Snapshot = {
-        /**
-         * 创建增强快照：保存所有状态书的全部条目（包括模板）
-         */
-        async create() {
-            console.time('Snapshot.create');
-            console.log('[Snapshot] 开始创建快照');
-            const books = await getAllStateBooks();
-            console.log('[Snapshot] 获取到状态书列表:', books);
-            const booksData = {};
-
-            for (const bookName of books) {
-                console.time(`读取 ${bookName}`);
-                const book = await API.getWorldbook(bookName);
-                const entries = Array.isArray(book) ? book : (book.entries || []);
-                console.timeEnd(`读取 ${bookName}`);
-                console.log(`[Snapshot] ${bookName} 条目数: ${entries.length}`);
-                // 使用深拷贝，但记录条目数大小
-                booksData[bookName] = entries.map(e => {
-                    // 粗略估计 JSON 字符串长度
-                    const size = JSON.stringify(e).length;
-                    console.log(`[Snapshot] 条目 ${e.name || e.uid} 序列化大小: ${size} 字节`);
-                    return JSON.parse(JSON.stringify(e));
-                });
-            }
-
-            const snapshot = {
-                timestamp: new Date().toISOString(),
-                books: booksData
-            };
-            console.timeEnd('Snapshot.create');
-            console.log('[Snapshot] 快照创建完成，时间戳:', snapshot.timestamp);
-            return snapshot;
-        },
-
-        /**
-         * 彻底回滚：删除所有现有状态书，并按快照精确重建
-         */
-        async restore(snapshot) {
-            if (!snapshot?.books) return false;
-            UI.updateProgress(`开始彻底回滚状态书...`);
-
-            // 获取当前所有状态书
-            const currentBooks = await getAllStateBooks();
-            const snapshotBookNames = Object.keys(snapshot.books);
-
-            // 获取当前全局激活的世界书列表（用于后续恢复激活状态）
-            let currentGlobalBooks = [];
-            try {
-                if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
-                    currentGlobalBooks = await TavernHelper.getGlobalWorldbookNames();
-                } else if (typeof window.getGlobalWorldbookNames === 'function') {
-                    currentGlobalBooks = await window.getGlobalWorldbookNames();
-                }
-            } catch (e) {
-                UI.updateProgress(`  ⚠️ 获取当前全局世界书失败: ${e.message}`, true);
-            }
-
-            // 1. 删除所有现有的状态书
-            for (const bookName of currentBooks) {
-                UI.updateProgress(`  删除状态书: ${bookName}...`);
-                try {
-                    if (typeof deleteWorldbook === 'function') {
-                        await deleteWorldbook(bookName);
-                    } else if (typeof TavernHelper?.deleteWorldbook === 'function') {
-                        await TavernHelper.deleteWorldbook(bookName);
-                    } else {
-                        throw new Error('deleteWorldbook API 不可用');
-                    }
-                } catch (e) {
-                    UI.updateProgress(`    ✗ 删除失败: ${e.message}`, true);
-                }
-            }
-
-            // 2. 重建快照中的状态书
-            for (const bookName of snapshotBookNames) {
-                UI.updateProgress(`  重建 ${bookName} (${snapshot.books[bookName].length} 个条目)...`);
-                try {
-                    // 创建世界书（如果已存在则可能失败，但我们已经删除了，所以通常不存在）
-                    if (typeof createWorldbook === 'function') {
-                        await createWorldbook(bookName);
-                    } else if (typeof TavernHelper?.createWorldbook === 'function') {
-                        await TavernHelper.createWorldbook(bookName);
-                    } else {
-                        throw new Error('createWorldbook API 不可用');
-                    }
-                    // 写入条目（snapshot.books[bookName] 已是完整的嵌套结构）
-                    await API.updateWorldbook(bookName, () => snapshot.books[bookName], {render: 'immediate'});
-                } catch (e) {
-                    UI.updateProgress(`    ✗ 重建失败: ${e.message}`, true);
-                }
-            }
-
-            // 3. 重新设置全局激活世界书列表
-            // 保留原有的非状态书（如设定书），并添加快照中的所有状态书
-            const nonStateBooks = currentGlobalBooks.filter(name => !name.startsWith(CONFIG.STATE_BOOK_PREFIX));
-            const newGlobalBooks = [...new Set([...nonStateBooks, ...snapshotBookNames])];
-            try {
-                if (typeof TavernHelper?.rebindGlobalWorldbooks === 'function') {
-                    await TavernHelper.rebindGlobalWorldbooks(newGlobalBooks);
-                } else if (typeof window.rebindGlobalWorldbooks === 'function') {
-                    await window.rebindGlobalWorldbooks(newGlobalBooks);
-                } else {
-                    throw new Error('rebindGlobalWorldbooks API 不可用');
-                }
-            } catch (e) {
-                UI.updateProgress(`  ⚠️ 重新激活世界书失败: ${e.message}`, true);
-            }
-
-            UI.updateProgress('✓ 状态书彻底回滚完成');
-            return true;
-        }
-    };
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 19：UI 主界面                                              ║
+    // ║  UI 对象 — 面板 / 事件绑定 / 工作流预览 / 文件管理 / 配置复制     ║
+    // ╚══════════════════════════════════════════════════════════════════╝
 
     // ==================== UI - 主界面 ====================
 
@@ -5024,7 +5807,7 @@
                     document.head.appendChild(style);
 
                     this.customStyleElement = style;
-                    Notify.success(`配色样式已加载: ${file.name}`, '', {timeOut: 2000});
+                    Notify.success(`配色样式已加载: ${file.name}`, '', { timeOut: 2000 });
                 } catch (err) {
                     Notify.error('读取CSS文件失败: ' + err.message);
                 } finally {
@@ -5096,12 +5879,12 @@
          * @returns {string} 渲染后的 HTML 字符串（图片占位符会被替换为异步加载的图片）
          */
         _renderMarkdown(text) {
-            console.log('[DEBUG][_renderMarkdown] ===== 进入函数 =====');
-            console.log('[DEBUG][_renderMarkdown] 原始文本长度:', text?.length);
-            console.log('[DEBUG][_renderMarkdown] 原始文本前200字符:', text?.substring(0, 200));
+
+
+
 
             if (!text) {
-                console.log('[DEBUG][_renderMarkdown] 文本为空，返回空字符串');
+
                 return '';
             }
 
@@ -5111,10 +5894,10 @@
             const match = trimmed.match(codeBlockRegex);
             if (match) {
                 text = match[1];
-                console.log('[DEBUG][_renderMarkdown] 已去除外层代码块标记，处理后文本长度:', text.length);
-                console.log('[DEBUG][_renderMarkdown] 处理后文本预览:', text.substring(0, 200));
+
+
             } else {
-                console.log('[DEBUG][_renderMarkdown] 未检测到外层代码块标记');
+
             }
 
             // ===== 判断是否为 HTML（文档或片段） =====
@@ -5125,7 +5908,7 @@
                 trimmedLower.startsWith('<body');
             const hasHtmlTags = /<\/?[a-z][\s\S]*?>/i.test(text);
             const treatAsHtml = isHtmlDoc || hasHtmlTags;
-            console.log('[DEBUG][_renderMarkdown] 是否为HTML:', treatAsHtml, 'isHtmlDoc:', isHtmlDoc, 'hasHtmlTags:', hasHtmlTags);
+
 
             // ===== 处理图片占位符 =====
             const markdownImageRegex = /!\[([^\]]*)\]\(id:([^)]+)\)/g;
@@ -5138,83 +5921,83 @@
 
             // 替换 Markdown 图片
             processedText = processedText.replace(markdownImageRegex, (match, alt, id) => {
-                console.log('[DEBUG][_renderMarkdown] 发现 Markdown 图片占位符，id:', id, 'alt:', alt);
+
                 if (!idSet.has(id)) {
                     idSet.add(id);
                     const placeholder = `<!--IMG_PLACEHOLDER_${id}-->`;
-                    placeholders.push({id, placeholder, alt});
-                    console.log('[DEBUG][_renderMarkdown] 创建占位符:', placeholder);
+                    placeholders.push({ id, placeholder, alt });
+
                     imagePromises.push(
                         ImageStore.get(id).then(blob => {
-                            console.log('[DEBUG][_renderMarkdown] 图片获取成功，id:', id, 'blob 存在:', !!blob);
+
                             if (blob) {
                                 const url = URL.createObjectURL(blob);
-                                console.log('[DEBUG][_renderMarkdown] 创建图片 URL:', url);
+
                                 return {
                                     id,
                                     html: `<img src="${url}" alt="${alt}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
                                 };
                             } else {
                                 console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                                return {id, html: `![${alt}](图片丢失)`};
+                                return { id, html: `![${alt}](图片丢失)` };
                             }
                         }).catch(err => {
                             console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                            return {id, html: `![${alt}](图片加载错误)`};
+                            return { id, html: `![${alt}](图片加载错误)` };
                         })
                     );
                     return placeholder;
                 } else {
-                    console.log('[DEBUG][_renderMarkdown] 重复图片 id:', id, '保留原占位符');
+
                     return match;
                 }
             });
 
             // 替换 HTML 图片
             processedText = processedText.replace(htmlImageRegex, (match, id) => {
-                console.log('[DEBUG][_renderMarkdown] 发现 HTML 图片占位符，id:', id);
+
                 if (!idSet.has(id)) {
                     idSet.add(id);
                     const placeholder = `<!--HTML_IMG_PLACEHOLDER_${id}-->`;
-                    placeholders.push({id, placeholder, isHtml: true});
-                    console.log('[DEBUG][_renderMarkdown] 创建 HTML 占位符:', placeholder);
+                    placeholders.push({ id, placeholder, isHtml: true });
+
                     imagePromises.push(
                         ImageStore.get(id).then(blob => {
-                            console.log('[DEBUG][_renderMarkdown] 图片获取成功，id:', id, 'blob 存在:', !!blob);
+
                             if (blob) {
                                 const url = URL.createObjectURL(blob);
                                 const altMatch = match.match(/alt="([^"]*)"/);
                                 const alt = altMatch ? altMatch[1] : '';
                                 const classMatch = match.match(/class="([^"]*)"/);
                                 const cls = classMatch ? classMatch[1] : '';
-                                console.log('[DEBUG][_renderMarkdown] 创建图片 URL:', url, 'alt:', alt, 'class:', cls);
+
                                 return {
                                     id,
                                     html: `<img src="${url}" alt="${alt}" class="${cls}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
                                 };
                             } else {
                                 console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                                return {id, html: `[图片丢失: ${id}]`};
+                                return { id, html: `[图片丢失: ${id}]` };
                             }
                         }).catch(err => {
                             console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                            return {id, html: `[图片加载错误: ${id}]`};
+                            return { id, html: `[图片加载错误: ${id}]` };
                         })
                     );
                     return placeholder;
                 } else {
-                    console.log('[DEBUG][_renderMarkdown] 重复图片 id:', id, '保留原占位符');
+
                     return match;
                 }
             });
 
-            console.log('[DEBUG][_renderMarkdown] 共发现图片 ID:', Array.from(idSet));
-            console.log('[DEBUG][_renderMarkdown] 占位符列表:', placeholders.map(p => p.placeholder));
+
+
 
             let html;
             if (treatAsHtml) {
                 // ===== 关键修改：使用 DOMParser 提取 <body> 内部 HTML 并保留 <head> 样式 =====
-                console.log('[DEBUG][_renderMarkdown] 检测为 HTML，准备提取内容');
+
                 try {
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(processedText, 'text/html');
@@ -5224,8 +6007,8 @@
                     // 提取 <body> 内部的 HTML（不包括 <body> 标签本身）
                     const bodyHTML = doc.body?.innerHTML || '';
                     html = styleHTML + bodyHTML;
-                    console.log('[DEBUG][_renderMarkdown] 提取后 HTML 长度:', html.length);
-                    console.log('[DEBUG][_renderMarkdown] 提取后 HTML 预览:', html.substring(0, 200));
+
+
                 } catch (e) {
                     console.error('[DEBUG][_renderMarkdown] DOMParser 解析失败，降级返回原始文本:', e);
                     html = processedText; // 降级
@@ -5234,9 +6017,9 @@
                 // 否则，用 marked 解析 Markdown
                 if (typeof marked !== 'undefined') {
                     try {
-                        html = marked.parse(processedText, {gfm: true, breaks: true});
-                        console.log('[DEBUG][_renderMarkdown] marked 解析成功，生成 HTML 长度:', html.length);
-                        console.log('[DEBUG][_renderMarkdown] 生成 HTML 前200字符:', html.substring(0, 200));
+                        html = marked.parse(processedText, { gfm: true, breaks: true });
+
+
                     } catch (e) {
                         console.error('[DEBUG][_renderMarkdown] marked 解析失败:', e);
                         html = `<pre style="color:#ff6b6b; background:#1e1e1e; padding:10px; border-radius:5px;">${this._escapeHtml(text)}</pre>`;
@@ -5249,19 +6032,19 @@
 
             // ===== 异步替换所有图片占位符（保持不变） =====
             if (imagePromises.length > 0) {
-                console.log('[DEBUG][_renderMarkdown] 等待所有图片 Promise 完成...');
+
                 Promise.all(imagePromises).then(results => {
                     const replaceMap = {};
                     results.forEach(r => {
                         replaceMap[`<!--IMG_PLACEHOLDER_${r.id}-->`] = r.html;
                         replaceMap[`<!--HTML_IMG_PLACEHOLDER_${r.id}-->`] = r.html;
-                        console.log('[DEBUG][_renderMarkdown] 为 id', r.id, '构建替换映射，html 预览:', r.html.substring(0, 50));
+
                     });
 
                     const attemptReplace = (retryCount = 0) => {
-                        console.log(`[DEBUG][_renderMarkdown] 第 ${retryCount} 次尝试替换占位符`);
+
                         const containers = document.querySelectorAll('.markdown-body');
-                        console.log(`[DEBUG][_renderMarkdown] 找到 ${containers.length} 个 .markdown-body 容器`);
+
 
                         let replacedAny = false;
                         containers.forEach((container, idx) => {
@@ -5272,12 +6055,12 @@
                                     innerHTML = innerHTML.split(placeholder).join(imgHtml);
                                     changed = true;
                                     replacedAny = true;
-                                    console.log(`[DEBUG][_renderMarkdown] 容器 ${idx} 已替换占位符:`, placeholder);
+
                                 }
                             }
                             if (changed) {
                                 container.innerHTML = innerHTML;
-                                console.log(`[DEBUG][_renderMarkdown] 容器 ${idx} 的 innerHTML 已更新`);
+
                             }
                         });
 
@@ -5289,7 +6072,7 @@
                                 console.error('[DEBUG][_renderMarkdown] 重试5次后仍无法替换图片占位符，请检查 DOM 结构');
                             }
                         } else {
-                            console.log('[DEBUG][_renderMarkdown] 图片占位符替换完成，共替换', Object.keys(replaceMap).length, '个占位符');
+
                         }
                     };
 
@@ -5298,7 +6081,7 @@
                     console.error('[DEBUG][_renderMarkdown] Promise.all 执行失败:', err);
                 });
             } else {
-                console.log('[DEBUG][_renderMarkdown] 无图片占位符需要替换，直接返回 HTML');
+
             }
 
             return html;
@@ -5315,8 +6098,8 @@
         },
 
         _downloadText(content, filename, mimeType = 'text/plain;charset=utf-8') {
-            const url = URL.createObjectURL(new Blob([content], {type: mimeType}));
-            Object.assign(document.createElement('a'), {href: url, download: filename}).click();
+            const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+            Object.assign(document.createElement('a'), { href: url, download: filename }).click();
             URL.revokeObjectURL(url);
         },
 
@@ -5331,17 +6114,17 @@
         },
 
         _closeModal(overlayEl) {
-            console.log(`[UI._closeModal] 开始关闭模态框`);
+
             overlayEl.style.opacity = '0';
             overlayEl.style.transition = 'opacity 0.2s';
             setTimeout(() => {
                 ModalStack.remove(overlayEl);
                 overlayEl.remove();
-                console.log(`[UI._closeModal] 模态框已移除`);
+
 
                 // ===== 新增：如果栈为空且主面板不存在，则重新创建主面板 =====
                 if (ModalStack._stack.length === 0 && !document.getElementById(CONFIG.UI.panelId)) {
-                    console.log('[UI._closeModal] 栈为空且主面板不存在，重新创建主面板');
+
                     UI.createPanel();
                 }
                 // ===== 结束新增 =====
@@ -5478,7 +6261,7 @@
                 const textToCopy = content;
                 try {
                     await navigator.clipboard.writeText(textToCopy);
-                    Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
+                    Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
                 } catch (err) {
                     // 降级方案：使用 execCommand
                     try {
@@ -5490,7 +6273,7 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（使用降级方案）', '', {timeOut: 2000});
+                        Notify.success('内容已复制到剪贴板（使用降级方案）', '', { timeOut: 2000 });
                     } catch (err2) {
                         Notify.error('复制失败，请手动选择文本后复制');
                         UI.showMarkdownModal('复制失败，请手动复制以下内容', textToCopy, {
@@ -5507,10 +6290,10 @@
         },
 
         showErrorPanel(errorMessage) {
-            console.log('[UI.showErrorPanel] ===== 进入 showErrorPanel =====');
-            console.log('[UI.showErrorPanel] 传入的 errorMessage 开头:', errorMessage ? errorMessage.substring(0, 100) : '空');
-            console.log('[UI.showErrorPanel] 当前 WORKFLOW_STATE.currentConfigFile:', WORKFLOW_STATE.currentConfigFile);
-            console.log('[UI.showErrorPanel] 当前 CONFIG.AGENTS 键数量:', Object.keys(CONFIG.AGENTS).length);
+
+
+
+
 
             this.closeAll();
 
@@ -5537,7 +6320,7 @@
             // 保存失败信息到全局状态
             WORKFLOW_STATE.lastCheckFailed = true;
             WORKFLOW_STATE.lastCheckErrorMessage = fullError;
-            console.log('[错误面板] 保存失败信息:', fullError);
+
 
             const escapedError = this._escapeHtml(fullError);
             const coloredError = escapedError
@@ -5573,7 +6356,7 @@
 
             // 绑定事件
             panel.querySelector('#nc-retry-btn').addEventListener('click', async () => {
-                console.log('[错误面板] 点击“重新检测”按钮，传入 force=true');
+
                 // 先清除失败标志，确保重新检测时不会因为旧的缓存而跳过
                 WORKFLOW_STATE.lastCheckFailed = false;
                 WORKFLOW_STATE.lastCheckErrorMessage = '';
@@ -5581,30 +6364,30 @@
                 await openPanelWithCheck(true);
             });
             panel.querySelector('#nc-close-btn').addEventListener('click', () => {
-                console.log('[错误面板] 点击“关闭”按钮');
+
                 this.closeAll();
             });
             panel.querySelector('#nc-load-config-btn').addEventListener('click', () => {
-                console.log('[错误面板] 点击“重新加载配置文件”按钮');
+
                 const fileInput = document.createElement('input');
                 fileInput.type = 'file';
                 fileInput.accept = '.json,application/json';
                 fileInput.onchange = async (e) => {
                     const file = e.target.files[0];
                     if (!file) return;
-                    console.log('[错误面板] 选择的配置文件：', file.name, '大小：', file.size);
+
                     try {
                         const text = await file.text();
                         const json = JSON.parse(text);
-                        console.log('[错误面板] 配置文件解析成功，开始加载...');
+
                         const success = loadConfigFromJson(json, file.name, file.size);
                         if (!success) {
                             console.error('[错误面板] loadConfigFromJson 返回失败');
                             return;
                         }
-                        Notify.success('配置文件加载成功...', '', {timeOut: 2000});
+                        Notify.success('配置文件加载成功...', '', { timeOut: 2000 });
                         this.closeAll();
-                        console.log('[错误面板] 加载成功，重新打开面板（不带force）');
+
                         await openPanelWithCheck();
                     } catch (err) {
                         console.error('[错误面板] 加载配置文件失败:', err);
@@ -5624,7 +6407,7 @@
             if (UI.apiCheckInterval) {
                 clearInterval(UI.apiCheckInterval);
                 UI.apiCheckInterval = null;
-                console.log('[API监控] 定时器已清除');
+
             }
         },
 
@@ -5755,7 +6538,7 @@
 
             // 加载保存的预选状态
             const savedSelection = Storage.loadSelectionState();
-            WORKFLOW_STATE.selectionState = {...WORKFLOW_STATE.selectionState, ...savedSelection};
+            WORKFLOW_STATE.selectionState = { ...WORKFLOW_STATE.selectionState, ...savedSelection };
 
             // 不再直接调用 init() 重置所有状态，而是确保所有配置中的 Agent 都有状态
             for (const key of Object.keys(CONFIG.AGENTS)) {
@@ -5797,28 +6580,28 @@
             // ===== 新增：启动API状态定时检查（每30秒） =====
             if (UI.apiCheckInterval) clearInterval(UI.apiCheckInterval);
             UI.apiCheckInterval = setInterval(async () => {
-                console.log('[API监控] 定时检查API状态...');
+
                 if (!document.getElementById(CONFIG.UI.panelId)) {
-                    console.log('[API监控] 面板已关闭，停止检查');
+
                     return;
                 }
 
                 const apiConfigs = CONFIG.apiConfigs || {};
                 if (Object.keys(apiConfigs).length === 0) {
-                    console.log('[API监控] 无API配置，跳过');
+
                     return;
                 }
 
                 const newStatus = {};
                 for (const [id, config] of Object.entries(apiConfigs)) {
-                    console.log(`[API监控] 测试配置 ${id}...`);
+
                     const result = await testAPIConnection(config);
                     newStatus[id] = {
                         ok: result.ok,
                         error: result.error,
                         lastTest: Date.now(),
                     };
-                    console.log(`[API监控] ${id} 结果: ${result.ok ? '可用' : '不可用'}`);
+
                 }
                 WORKFLOW_STATE.apiStatus = newStatus;
 
@@ -5826,7 +6609,7 @@
                 if (unavailable.length > 0) {
                     console.warn('[API监控] 不可用API:', unavailable);
                     if (WORKFLOW_STATE.isRunning) {
-                        console.log('[API监控] 工作流正在运行，触发中断');
+
                         Workflow.stop();
                         UI.updateProgress(`❌ API连接丢失 (${unavailable.join(', ')})，工作流已中断`, true);
                         Notify.error(`API连接丢失 (${unavailable.join(', ')})，工作流已中断`);
@@ -5839,7 +6622,7 @@
                         UI.updateProgress(`⚠️ API连接异常 (${unavailable.join(', ')})，请检查后重试`, true);
                     }
                 } else {
-                    console.log('[API监控] 所有API可用');
+
                     if (!WORKFLOW_STATE.isRunning) {
                         const startBtn = document.getElementById('nc-start-btn');
                         if (startBtn) {
@@ -5864,7 +6647,7 @@
             // ===== 新增：成功打开主面板，清除失败缓存 =====
             WORKFLOW_STATE.lastCheckFailed = false;
             WORKFLOW_STATE.lastCheckErrorMessage = '';
-            console.log('[UI.createPanel] 成功创建面板，清除检测缓存');
+
             // ===== 结束新增 =====
         },
 
@@ -5917,7 +6700,7 @@
 
             let statusIndicatorHTML = '';
             for (const [state, label] of Object.entries(stateLabels)) {
-                const colors = CONFIG.AGENT_STATUS_COLORS[state] || {border: '#888', text: '#888'};
+                const colors = CONFIG.AGENT_STATUS_COLORS[state] || { border: '#888', text: '#888' };
                 let color;
                 if (state === 'idle' || state === 'reflow_waiting') {
                     color = colors.text;
@@ -6219,7 +7002,7 @@
             });
             // 新增配置GUI按钮事件
             panel.querySelector('#nc-config-gui-btn').addEventListener('click', () => {
-                console.log('[ConfigGUI] 按钮点击，打开配置编辑器');
+
                 UI.openConfigGUI();
             });
 
@@ -6235,7 +7018,7 @@
                         const text = await file.text();
                         const json = JSON.parse(text);
                         loadConfigFromJson(json, file.name, file.size);
-                        Notify.success('配置文件加载成功，重新打开面板...', '', {timeOut: 2000});
+                        Notify.success('配置文件加载成功，重新打开面板...', '', { timeOut: 2000 });
                         UI.closeAll();
                         await openPanelWithCheck();
                     } catch (err) {
@@ -6253,7 +7036,7 @@
             // 一键纯净按钮
             panel.querySelector('#nc-clean-pure-btn').addEventListener('click', async () => {
                 if (WORKFLOW_STATE.isRunning) {
-                    Notify.warning('请先停止当前工作流', '', {timeOut: 2000});
+                    Notify.warning('请先停止当前工作流', '', { timeOut: 2000 });
                     return;
                 }
                 const confirmed = await UI.showConfirmModal('⚠️ 一键纯净将删除所有历史章节、所有状态书、取消激活所有世界书，并重置内存缓存。此操作不可撤销！\n\n确定继续吗？', '确认');
@@ -6318,7 +7101,7 @@
                         startTime: null,
                         currentChapter: 1,
                         shouldStop: false,
-                        tokenStats: {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0},
+                        tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
                         discarded: false,
                         discardedChapter: null,
                         userInputCache: '',
@@ -6359,7 +7142,7 @@
                     UI.updateCurrentChapterNum();
                     UI.clearProgress();
                     UI.updateProgress('✅ 一键纯净完成');
-                    Notify.success('系统已恢复纯净状态', '', {timeOut: 2000});
+                    Notify.success('系统已恢复纯净状态', '', { timeOut: 2000 });
 
                     // 刷新面板
                     UI.closeAll();
@@ -6390,7 +7173,7 @@
                 if (WORKFLOW_STATE.awaitingInput && WORKFLOW_STATE.inputResolver) {
                     const userInput = inputEl.value.trim();
                     if (!userInput) {
-                        Notify.warning('请输入内容后再提交', '', {timeOut: 2000});
+                        Notify.warning('请输入内容后再提交', '', { timeOut: 2000 });
                         return;
                     }
                     submitBtn.disabled = true;
@@ -6482,7 +7265,7 @@
 
                 HistoryUI.showChapterSelectionModal((selectedChapters) => {
                     if (!selectedChapters || selectedChapters.length === 0) {
-                        Notify.warning('请至少选择一个章节', '', {timeOut: 2000});
+                        Notify.warning('请至少选择一个章节', '', { timeOut: 2000 });
                         return;
                     }
 
@@ -6507,7 +7290,7 @@
                     }
 
                     if (!inputText) {
-                        Notify.warning('没有可用的章节内容', '', {timeOut: 2000});
+                        Notify.warning('没有可用的章节内容', '', { timeOut: 2000 });
                         return;
                     }
 
@@ -6530,7 +7313,7 @@
             panel.querySelector('#nc-view-chapter-content').addEventListener('click', () => {
                 const chapters = Storage.loadChapters();
                 const latest = chapters.length > 0 ? Math.max(...chapters.map(c => c.num)) : 0;
-                HistoryUI.viewChapter(latest, {mode: 'edit'}); // 修改此处
+                HistoryUI.viewChapter(latest, { mode: 'edit' }); // 修改此处
             });
 
             panel.querySelector('#nc-view-chapter-status').addEventListener('click', () => {
@@ -6544,7 +7327,7 @@
                 const agentKey = WORKFLOW_STATE.currentWaitingAgent;
                 const inputIndex = WORKFLOW_STATE.currentWaitingInputIndex;
                 if (!agentKey || inputIndex === null || inputIndex === undefined) {
-                    Notify.info('没有正在等待输入的Agent', '', {timeOut: 2000});
+                    Notify.info('没有正在等待输入的Agent', '', { timeOut: 2000 });
                     return;
                 }
                 const agent = CONFIG.AGENTS[agentKey];
@@ -6597,7 +7380,7 @@
                     const agentBtn = e.target.closest('[data-agent]');
                     if (!agentBtn) return;
                     const agentKey = agentBtn.dataset.agent;
-                    console.log(`[DEBUG] 启动层点击事件: agentKey=${agentKey}`);
+
 
                     // 查找该 Agent 对应的下面层复选框（不在启动层内）
                     const allInputs = panel.querySelectorAll(`input[value="${agentKey}"]`);
@@ -6616,26 +7399,26 @@
                         if (lowerLabel) {
                             const input = lowerLabel.querySelector('input');
                             if (input) {
-                                console.log(`[DEBUG] 通过 data-agent 找到了下层复选框，将使用它`);
+
                                 targetCheckbox = input;
                             }
                         }
                         if (!targetCheckbox) {
-                            Notify.info(`${getAgentDisplayName(agentKey)} 在当前配置中不可用`, '', {timeOut: 2000});
+                            Notify.info(`${getAgentDisplayName(agentKey)} 在当前配置中不可用`, '', { timeOut: 2000 });
                             return;
                         }
                     }
 
                     if (targetCheckbox.disabled) {
-                        Notify.info(`${getAgentDisplayName(agentKey)} 为必选Agent，不可取消`, '', {timeOut: 2000});
+                        Notify.info(`${getAgentDisplayName(agentKey)} 为必选Agent，不可取消`, '', { timeOut: 2000 });
                         return;
                     }
 
                     // 切换下面层复选框的选中状态
                     targetCheckbox.checked = !targetCheckbox.checked;
-                    console.log(`[DEBUG] 切换下层复选框 ${agentKey} 至: ${targetCheckbox.checked}`);
 
-                    const changeEvent = new Event('change', {bubbles: true});
+
+                    const changeEvent = new Event('change', { bubbles: true });
                     targetCheckbox.dispatchEvent(changeEvent);
                 });
             }
@@ -6645,7 +7428,7 @@
             if (uniqueCheckbox) {
                 uniqueCheckbox.addEventListener('change', (e) => {
                     WORKFLOW_STATE.enforceUniqueBranches = e.target.checked;
-                    console.log('[UI] 唯一分支开关已切换至:', WORKFLOW_STATE.enforceUniqueBranches);
+
                     const settings = Storage.loadSettings();
                     settings.enforceUniqueBranches = WORKFLOW_STATE.enforceUniqueBranches;
                     Storage.saveSettings(settings);
@@ -6867,7 +7650,7 @@
             }
 
             const enabledAgents = this.calculateAgentsFromSelection();
-            console.log('[DEBUG] _updateLaunchLayer: enabledAgents =', enabledAgents);
+
 
             // **【新增】验证每个 agentKey 是否存在于 CONFIG.AGENTS 中，不存在则过滤并警告**
             const validAgents = enabledAgents.filter(agentKey => {
@@ -6882,7 +7665,7 @@
                 (CONFIG.AGENTS[a]?.order || 999) - (CONFIG.AGENTS[b]?.order || 999)
             );
 
-            console.log('[DEBUG] _updateLaunchLayer: 最终渲染到启动层的 Agent 列表:', sortedAgents);
+
 
             launchContainer.innerHTML = sortedAgents.map(agentKey => {
                 const agent = CONFIG.AGENTS[agentKey];
@@ -6902,7 +7685,7 @@
             // **【新增】额外检查：渲染完成后，对比启动层中的 data-agent 与下面层复选框是否存在**
             const allLowerCheckboxes = panel.querySelectorAll('.nc-agent-checkbox input:not(#nc-current-agents-inside input)');
             const lowerAgentSet = new Set(Array.from(allLowerCheckboxes).map(cb => cb.value));
-            console.log('[DEBUG] _updateLaunchLayer: 下面层存在的 Agent 集合:', Array.from(lowerAgentSet));
+
 
             const launchLabels = launchContainer.querySelectorAll('[data-agent]');
             launchLabels.forEach(label => {
@@ -7087,7 +7870,7 @@
                     parsedChapters: parsedChapters,
                     selectedChapters: Array.from(selectedChapters),
                     currentPage: currentPage,
-                    selectedFile: selectedFile ? {name: selectedFile.name, size: selectedFile.size} : null
+                    selectedFile: selectedFile ? { name: selectedFile.name, size: selectedFile.size } : null
                 };
 
             };
@@ -7116,7 +7899,7 @@
                     selectedChapters.clear();
                     renderList();
                     saveCache();
-                    Notify.success(`成功提取 ${parsed.length} 章`, '', {timeOut: 2000});
+                    Notify.success(`成功提取 ${parsed.length} 章`, '', { timeOut: 2000 });
                 } catch (err) {
                     console.error('[performExtract] 提取失败', err);
                     Notify.error('提取失败：' + err.message);
@@ -7132,7 +7915,7 @@
                     const num = parseInt(match[1], 10);
                     const title = match[2].trim();
                     let content = match[3].trim();
-                    results.push({num, title, content});
+                    results.push({ num, title, content });
                 }
                 return results;
             }
@@ -7157,7 +7940,7 @@
                         }
                         renderList();
                         saveCache();
-                        Notify.info(`已自动补全为连续章节：${allExisting.join(', ')}`, '', {timeOut: 2000});
+                        Notify.info(`已自动补全为连续章节：${allExisting.join(', ')}`, '', { timeOut: 2000 });
                     } else {
 
                     }
@@ -7230,7 +8013,7 @@
                         const targetPage = parseInt(pageInput.value, 10);
                         const totalPages = Math.ceil(parsedChapters.length / pageSize) || 1;
                         if (isNaN(targetPage) || targetPage < 1 || targetPage > totalPages) {
-                            Notify.warning(`请输入1~${totalPages}之间的页码`, '', {timeOut: 2000});
+                            Notify.warning(`请输入1~${totalPages}之间的页码`, '', { timeOut: 2000 });
                             pageInput.value = currentPage;
                             return;
                         }
@@ -7295,7 +8078,7 @@
             startBtn.addEventListener('click', async () => {
                 const selected = Array.from(selectedChapters).sort((a, b) => a - b);
                 if (selected.length === 0) {
-                    Notify.warning('请至少选择一个章节', '', {timeOut: 2000});
+                    Notify.warning('请至少选择一个章节', '', { timeOut: 2000 });
                     return;
                 }
                 const chaptersToProcess = parsedChapters.filter(ch => selectedChapters.has(ch.num));
@@ -7313,7 +8096,7 @@
 
             // ========== 关键修改：关闭按钮和遮罩层点击事件，关闭后重新打开主面板 ==========
             closeBtn.addEventListener('click', () => {
-                console.log(`[UI._showHtmlPreviewModal] 关闭模态框`);
+
                 ModalStack.closeTop();  // 统一关闭顶层
             });
 
@@ -7389,12 +8172,12 @@
          */
         _replaceImagePlaceholders: async function (html) {
             console.time('_replaceImagePlaceholders');
-            console.log('[replaceImagePlaceholders] 进入，HTML长度', html.length);
+
 
             // 匹配 src="id:xxx" 和 href="id:xxx" （支持双引号，实际 HTML 中可能混用单引号，这里简化处理，若需完整支持可扩展）
             const placeholderRegex = /(src|href)="id:([^"]+)"/g;
             const matches = [...html.matchAll(placeholderRegex)];
-            console.log('[replaceImagePlaceholders] 找到', matches.length, '个占位符');
+
 
             if (matches.length === 0) {
                 console.timeEnd('_replaceImagePlaceholders');
@@ -7406,7 +8189,7 @@
                 const fullAttr = match[0];          // 完整属性，如 src="id:img_123"
                 const attrName = match[1];           // 属性名：src 或 href
                 const id = match[2];                 // 资源ID
-                console.log(`[replaceImagePlaceholders] 处理 ${attrName} 属性，ID:`, id);
+
 
                 let replacement = fullAttr; // 默认不替换，若出错则保留原样（但会标记丢失）
 
@@ -7416,14 +8199,14 @@
                     if (blob) {
                         const url = URL.createObjectURL(blob);
                         replacement = `${attrName}="${url}"`;
-                        console.log(`[replaceImagePlaceholders] 图片 ${id} 替换成功，url已创建`);
+
                     } else {
                         console.warn(`[replaceImagePlaceholders] 图片 ${id} 不存在，替换为 #`);
                         replacement = `${attrName}="#" alt="图片丢失"`;
                     }
                     // 原代码片段（约第1689行附近）
                 } else if (id.startsWith('other_')) {   // 修改此处
-                    console.log(`[replaceImagePlaceholders] 检测到其余文件ID ${id}，尝试从 OtherFileStore 获取`);
+
                     const fileObj = await OtherFileStore.get(id);
                     if (fileObj && fileObj.text) {
                         const mime = fileObj.format === 'html' ? 'text/html' :
@@ -7433,7 +8216,7 @@
                         const blob = new Blob([fileObj.text], { type: mime });
                         const url = URL.createObjectURL(blob);
                         replacement = `${attrName}="${url}"`;
-                        console.log(`[replaceImagePlaceholders] 其余文件 ${id} 替换成功，url已创建 (${mime})`);
+
                     } else {
                         console.warn(`[replaceImagePlaceholders] 其余文件 ${id} 不存在，替换为 #`);
                         replacement = `${attrName}="#" alt="文件丢失"`;
@@ -7444,7 +8227,7 @@
                     if (blob) {
                         const url = URL.createObjectURL(blob);
                         replacement = `${attrName}="${url}"`;
-                        console.log(`[replaceImagePlaceholders] 音频 ${id} 替换成功，url已创建`);
+
                     } else {
                         console.warn(`[replaceImagePlaceholders] 音频 ${id} 不存在，替换为 #`);
                         replacement = `${attrName}="#" alt="音频丢失"`;
@@ -7490,8 +8273,8 @@
         },
 
         showAgentStatusDetail: function (agentKey) {
-            console.log(`[DEBUG][UI.showAgentStatusDetail] 被调用，agentKey=${agentKey}, 时间戳=${Date.now()}`);
-            console.log(`[DEBUG][UI.showAgentStatusDetail] WORKFLOW_STATE.outputs[${agentKey}] =`, WORKFLOW_STATE.outputs[agentKey]);
+
+
 
             const output = WORKFLOW_STATE.outputs[agentKey];
             const agentName = getAgentDisplayName(agentKey);
@@ -7505,21 +8288,21 @@
                     if (agent.role === 'imageGenerator') {
                         images = JSON.parse(output);
                         if (!Array.isArray(images)) images = [images];
-                        console.log(`[DEBUG][UI.showAgentStatusDetail] 生图师输出解析，图片数量=${images.length}`);
+
                     } else if (agent.role === 'fusionGenerator') {
                         const fusionData = JSON.parse(output);
                         if (fusionData && fusionData.fusion_image_id) {
-                            images = [{id: fusionData.fusion_image_id}];
-                            console.log(`[DEBUG][UI.showAgentStatusDetail] 融图师输出解析，图片ID=${fusionData.fusion_image_id}`);
+                            images = [{ id: fusionData.fusion_image_id }];
+
                         }
                     } else if (agent.role === 'imageVariator') {
                         images = JSON.parse(output);
                         if (!Array.isArray(images)) images = [images];
-                        console.log(`[DEBUG][UI.showAgentStatusDetail] 变图师输出解析，图片数量=${images.length}`);
+
                     }
                     if (images.length > 0) {
                         const rawOutput = WORKFLOW_STATE.agentRawOutputs?.[agentKey] || output;
-                        console.log(`[DEBUG][UI.showAgentStatusDetail] 调用图片生成器模态框，图片数量=${images.length}`);
+
                         this._showImageGeneratorModal(agentKey, images, rawOutput);
                         return;
                     }
@@ -7543,7 +8326,7 @@
                 if (error.prompt) {
                     errorDetail += `\n提示词（前500字符）：\n${error.prompt}`;
                 }
-                console.log(`[DEBUG][UI.showAgentStatusDetail] 显示错误模态框`);
+
                 this.showMarkdownModal(`${agentName} 执行错误`, `**错误详情**\n\n\`\`\`\n${errorDetail}\n\`\`\``, {
                     maxWidth: '700px',
                     fontFamily: 'Consolas,monospace',
@@ -7556,20 +8339,20 @@
 
             // 普通输出（非生图师/融图师/变图师或无图片）
             if (!output) {
-                console.log(`[DEBUG][UI.showAgentStatusDetail] 无输出，提示信息`);
-                Notify.info(`暂无 ${agentName} 的输出`, '', {timeOut: 2000});
+
+                Notify.info(`暂无 ${agentName} 的输出`, '', { timeOut: 2000 });
                 return;
             }
 
             // 检测是否包含 HTML/JS
             const hasHTML = this._detectHTML(output);
-            console.log(`[DEBUG][UI.showAgentStatusDetail] 检测到 HTML/JS: ${hasHTML}`);
+
 
             if (hasHTML) {
-                console.log(`[DEBUG][UI.showAgentStatusDetail] 调用 HTML 预览模态框`);
+
                 this._showHtmlPreviewModal(agentName, output, agentKey);
             } else {
-                console.log(`[DEBUG][UI.showAgentStatusDetail] 调用 Markdown 模态框`);
+
                 this.showMarkdownModal(agentName, output, {
                     maxWidth: '700px',
                     fontFamily: 'Consolas,monospace',
@@ -7738,7 +8521,7 @@
                 }
                 try {
                     await navigator.clipboard.writeText(textToCopy);
-                    Notify.success('已复制到剪贴板', '', {timeOut: 2000});
+                    Notify.success('已复制到剪贴板', '', { timeOut: 2000 });
                 } catch (err) {
                     // 降级方案
                     const textarea = document.createElement('textarea');
@@ -7749,7 +8532,7 @@
                     textarea.select();
                     document.execCommand('copy');
                     document.body.removeChild(textarea);
-                    Notify.success('已复制到剪贴板（降级方案）', '', {timeOut: 2000});
+                    Notify.success('已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
                 }
             });
 
@@ -7778,7 +8561,7 @@
         showDiscardedChapter() {
             const d = WORKFLOW_STATE.discardedChapter;
             if (!d) {
-                Notify.info('暂无废章内容', '', {timeOut: 2000});
+                Notify.info('暂无废章内容', '', { timeOut: 2000 });
                 return;
             }
             let title = d.title || '';
@@ -7875,13 +8658,13 @@
 
             const line = document.createElement('div');
             line.style.cssText = `margin-bottom:3px;${isError ? 'color:#ff6b6b;' : ''}`;
-            const time = new Date().toLocaleTimeString('zh-CN', {hour12: false});
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
             line.textContent = `[${time}] ${text}`;
 
             content.appendChild(line);
             content.scrollTop = content.scrollHeight;
 
-            WORKFLOW_STATE.progressLog.push({text, isError, time});
+            WORKFLOW_STATE.progressLog.push({ text, isError, time });
             if (WORKFLOW_STATE.progressLog.length > CONFIG.MAX_PROGRESS_LINES) {
                 WORKFLOW_STATE.progressLog.shift();
             }
@@ -7898,16 +8681,16 @@
             const lastEl = document.getElementById('nc-token-last');
             if (totalEl) totalEl.textContent = WORKFLOW_STATE.tokenStats.totalInput + WORKFLOW_STATE.tokenStats.totalOutput;
             if (lastEl) {
-                const {lastInput, lastOutput} = WORKFLOW_STATE.tokenStats;
+                const { lastInput, lastOutput } = WORKFLOW_STATE.tokenStats;
                 lastEl.textContent = lastInput || lastOutput ? `本次: +${lastInput + lastOutput}` : '本次: -';
             }
         },
 
         resetTokenStats() {
-            WORKFLOW_STATE.tokenStats = {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0};
+            WORKFLOW_STATE.tokenStats = { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 };
             Storage.saveTokenStats(WORKFLOW_STATE.tokenStats);
             this.updateTokenDisplay();
-            Notify.success('Token统计已重置', '', {timeOut: 2000});
+            Notify.success('Token统计已重置', '', { timeOut: 2000 });
         },
 
         setLoading(isLoading) {
@@ -7972,7 +8755,7 @@
                     version: CONFIG.VERSION,
                     exportTime: new Date().toISOString(),
                     totalChapters: chapters.length,
-                    data: {chapters}
+                    data: { chapters }
                 };
                 zip.file('chapters.json', JSON.stringify(chapterBackup, null, 2));
                 UI.updateProgress(`  ✓ 章节数据已打包 (共 ${chapters.length} 章)`);
@@ -8034,7 +8817,7 @@
 
                 // ===== 关键增强：获取所有存在的状态书（包括未激活的）并合并 =====
                 const stateBooks = await getAllStateBooks(); // 这会尝试读取直到第一个不存在的书号
-                console.log(`[导出] 通过 getAllStateBooks 获取到 ${stateBooks.length} 本状态书`);
+
                 // 合并并去重
                 allBooks = [...new Set([...allBooks, ...stateBooks])];
                 // ===== 结束增强 =====
@@ -8098,13 +8881,13 @@
                         const imageFolder = zip.folder('images');
                         for (let i = 0; i < allImages.length; i++) {
                             const img = allImages[i];
-                            const {id, blob} = img;
+                            const { id, blob } = img;
                             let ext = 'png';
                             if (blob.type.includes('jpeg') || blob.type.includes('jpg')) ext = 'jpg';
                             else if (blob.type.includes('gif')) ext = 'gif';
                             else if (blob.type.includes('webp')) ext = 'webp';
                             const fileName = `${id}.${ext}`;
-                            imageFolder.file(fileName, blob, {binary: true});
+                            imageFolder.file(fileName, blob, { binary: true });
                         }
                         UI.updateProgress(`  ✓ 已导出 ${allImages.length} 张图片`);
                     } else {
@@ -8122,13 +8905,13 @@
                     if (allTexts.length > 0) {
                         const textFolder = zip.folder('texts');
                         for (const item of allTexts) {
-                            const {id, text, format} = item;
+                            const { id, text, format } = item;
                             let ext;
                             if (format === 'html') ext = 'html';
                             else if (format === 'js') ext = 'js';
                             else ext = 'txt'; // 默认 txt
                             const fileName = `${id}.${ext}`;
-                            textFolder.file(fileName, text, {binary: false});
+                            textFolder.file(fileName, text, { binary: false });
                         }
                         UI.updateProgress(`  ✓ 已导出 ${allTexts.length} 个文本文件`);
                     } else {
@@ -8146,14 +8929,14 @@
                     if (allAudios.length > 0) {
                         const audioFolder = zip.folder('audios');
                         for (const audio of allAudios) {
-                            const {id, blob} = audio;
+                            const { id, blob } = audio;
                             let ext = 'mp3';
                             if (blob.type.includes('wav')) ext = 'wav';
                             else if (blob.type.includes('ogg')) ext = 'ogg';
                             else if (blob.type.includes('m4a')) ext = 'm4a';
                             else if (blob.type.includes('flac')) ext = 'flac';
                             const fileName = `${id}.${ext}`;
-                            audioFolder.file(fileName, blob, {binary: true});
+                            audioFolder.file(fileName, blob, { binary: true });
                         }
                         UI.updateProgress(`  ✓ 已导出 ${allAudios.length} 个音频文件`);
                     } else {
@@ -8165,7 +8948,7 @@
                 }
 
                 // ========== 生成并下载 ZIP ==========
-                const blob = await zip.generateAsync({type: 'blob'});
+                const blob = await zip.generateAsync({ type: 'blob' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -8183,9 +8966,9 @@
         },
 
         async renderAndWaitForInteraction(html) {
-            console.log('[UI.renderAndWaitForInteraction] ========== 开始渲染交互HTML ==========');
-            console.log('[UI.renderAndWaitForInteraction] 原始HTML长度:', html?.length);
-            console.log('[UI.renderAndWaitForInteraction] 原始HTML前200字符:', html?.substring(0, 200));
+
+
+
 
             // 去除外层 ```html 代码块标记
             const trimmed = html.trim();
@@ -8193,18 +8976,18 @@
             const match = trimmed.match(codeBlockRegex);
             if (match) {
                 html = match[1];
-                console.log('[UI.renderAndWaitForInteraction] 已去除外层代码块标记，提取内容长度:', html.length);
+
             } else {
-                console.log('[UI.renderAndWaitForInteraction] 未检测到代码块标记');
+
             }
 
             // 替换图片占位符
-            console.log('[UI.renderAndWaitForInteraction] 开始替换图片占位符...');
+
             html = await this._replaceImagePlaceholders(html);
-            console.log('[UI.renderAndWaitForInteraction] 图片占位符替换完成，最终HTML长度:', html.length);
+
 
             return new Promise((resolve, reject) => {
-                console.log('[UI.renderAndWaitForInteraction] 进入Promise，开始创建模态框...');
+
 
                 // 创建遮罩层
                 const overlay = document.createElement('div');
@@ -8235,12 +9018,12 @@
 
                 overlay.appendChild(modal);
                 document.body.appendChild(overlay);
-                console.log('[UI.renderAndWaitForInteraction] 模态框已添加到DOM');
+
 
                 // ========== 执行 HTML 中的所有脚本 ==========
                 const contentDiv = modal.querySelector('#nc-interaction-content');
                 const scripts = contentDiv.querySelectorAll('script');
-                console.log(`[UI.renderAndWaitForInteraction] 找到 ${scripts.length} 个脚本标签，准备执行`);
+
                 scripts.forEach(oldScript => {
                     const newScript = document.createElement('script');
                     Array.from(oldScript.attributes).forEach(attr => {
@@ -8250,7 +9033,7 @@
                         newScript.innerHTML = oldScript.innerHTML;
                     }
                     oldScript.parentNode.replaceChild(newScript, oldScript);
-                    console.log('[UI.renderAndWaitForInteraction] 已替换并执行一个脚本');
+
                 });
                 // ========== 结束脚本执行 ==========
 
@@ -8258,7 +9041,7 @@
                 overlay.onclick = null;
                 overlay.addEventListener('click', (e) => {
                     if (e.target === overlay) {
-                        console.log('[UI.renderAndWaitForInteraction] 用户点击遮罩层，已阻止关闭');
+
                         e.stopPropagation();
                     }
                 });
@@ -8266,13 +9049,13 @@
                 // 绑定复制按钮
                 const copyBtn = modal.querySelector('.nc-modal-copy-btn');
                 copyBtn.addEventListener('click', async () => {
-                    console.log('[UI.renderAndWaitForInteraction] 复制按钮点击');
+
                     const content = modal.querySelector('#nc-interaction-content');
                     const textToCopy = content.innerText || content.textContent;
                     try {
                         await navigator.clipboard.writeText(textToCopy);
-                        Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
-                        console.log('[UI.renderAndWaitForInteraction] 复制成功（clipboard）');
+                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
+
                     } catch (err) {
                         console.warn('[UI.renderAndWaitForInteraction] 剪贴板API失败，使用降级方案:', err);
                         const textarea = document.createElement('textarea');
@@ -8283,15 +9066,15 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', {timeOut: 2000});
-                        console.log('[UI.renderAndWaitForInteraction] 复制成功（降级）');
+                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
+
                     }
                 });
 
                 // 绑定跳过按钮
                 const skipBtn = modal.querySelector('.nc-modal-skip-btn');
                 skipBtn.addEventListener('click', () => {
-                    console.log('[UI.renderAndWaitForInteraction] 跳过按钮点击');
+
                     handleUserInteraction('[SKIP]');
                 });
 
@@ -8303,10 +9086,10 @@
                 // 用户交互后的统一处理函数
                 const handleUserInteraction = (result) => {
                     if (resolved) {
-                        console.log('[UI.renderAndWaitForInteraction] handleUserInteraction 已被调用过，忽略本次调用');
+
                         return;
                     }
-                    console.log('[UI.renderAndWaitForInteraction] 用户交互，结果:', result);
+
                     resolved = true;
 
                     // 声明倒计时消息元素变量（提升作用域）
@@ -8316,7 +9099,7 @@
                     if (timeoutId) {
                         clearTimeout(timeoutId);
                         timeoutId = null;
-                        console.log('[UI.renderAndWaitForInteraction] 已清除超时保护定时器');
+
                     }
 
                     // 禁用所有交互按钮
@@ -8326,7 +9109,7 @@
                         btn.style.opacity = '0.5';
                         btn.style.cursor = 'not-allowed';
                     });
-                    console.log(`[UI.renderAndWaitForInteraction] 已禁用 ${allButtons.length} 个按钮`);
+
 
                     // 添加倒计时提示
                     const footer = modal.querySelector('.nc-modal-footer');
@@ -8343,54 +9126,54 @@
                             countdownMsg.style.color = '#aaa';
                             countdownMsg.style.fontSize = '12px';
                             footer.appendChild(countdownMsg);
-                            console.log('[UI.renderAndWaitForInteraction] 已创建倒计时消息元素');
+
                         } else {
-                            console.log('[UI.renderAndWaitForInteraction] 倒计时消息元素已存在，复用');
+
                         }
 
                         let countdown = 5;
                         countdownMsg.textContent = `${countdown}秒后自动关闭...`;
-                        console.log(`[UI.renderAndWaitForInteraction] 倒计时初始值: ${countdown}`);
+
 
                         const updateCountdown = () => {
                             countdown--;
                             if (countdownMsg) {
                                 countdownMsg.textContent = `${countdown}秒后自动关闭...`;
-                                console.log(`[UI.renderAndWaitForInteraction] 倒计时更新: ${countdown}`);
+
                             }
                             if (countdown <= 0) {
                                 clearInterval(interval);
-                                console.log('[UI.renderAndWaitForInteraction] 倒计时结束，清除interval');
+
                             }
                         };
                         const interval = setInterval(updateCountdown, 1000);
-                        console.log('[UI.renderAndWaitForInteraction] 已启动倒计时定时器');
+
                     }
 
                     // 启动5秒延迟关闭
                     closeTimer = setTimeout(() => {
-                        console.log('[UI.renderAndWaitForInteraction] 5秒延迟结束，开始移除模态框');
+
                         if (countdownMsg) countdownMsg.remove();  // 现在可以正确访问
                         if (overlay && overlay.parentNode) {
                             overlay.remove();
-                            console.log('[UI.renderAndWaitForInteraction] 模态框已移除（延迟关闭）');
+
                         } else {
                             console.warn('[UI.renderAndWaitForInteraction] 模态框已不存在');
                         }
                         delete window.__interactionResolver;
-                        console.log('[UI.renderAndWaitForInteraction] 已删除 window.__interactionResolver');
+
                         resolve(result);
-                        console.log('[UI.renderAndWaitForInteraction] Promise已resolve');
+
                     }, 5000);
-                    console.log('[UI.renderAndWaitForInteraction] 已设置5秒延迟关闭定时器');
+
                 };
 
                 // 提供给排版师脚本的回调
                 window.__interactionResolver = (result) => {
-                    console.log('[UI.renderAndWaitForInteraction] window.__interactionResolver 被调用，result:', result);
+
                     handleUserInteraction(result);
                 };
-                console.log('[UI.renderAndWaitForInteraction] 已设置 window.__interactionResolver');
+
 
                 // 超时保护：30秒后自动关闭（如果用户未交互）
                 timeoutId = setTimeout(() => {
@@ -8401,12 +9184,12 @@
                         }
                         delete window.__interactionResolver;
                         resolve('[TIMEOUT]');
-                        console.log('[UI.renderAndWaitForInteraction] 已 resolve 超时');
+
                     } else {
-                        console.log('[UI.renderAndWaitForInteraction] 超时保护触发但已解决，忽略');
+
                     }
                 }, 3600000);
-                console.log('[UI.renderAndWaitForInteraction] 已设置30秒超时保护定时器');
+
             });
         },
 
@@ -8427,9 +9210,9 @@
          * @param {string} agentKey - Agent 键（用于调试）
          */
         _showHtmlPreviewModal: function (agentName, content, agentKey) {
-            console.log(`[UI._showHtmlPreviewModal] ===== 开始执行 =====`);
-            console.log(`[UI._showHtmlPreviewModal] 参数: agentName="${agentName}", agentKey="${agentKey}", content长度=${content?.length}`);
-            console.log(`[UI._showHtmlPreviewModal] 原始内容预览: ${content?.substring(0, 200)}`);
+
+
+
 
             // 去除外层代码块
             const trimmed = content.trim();
@@ -8437,9 +9220,9 @@
             const match = trimmed.match(codeBlockRegex);
             if (match) {
                 content = match[1];
-                console.log(`[UI._showHtmlPreviewModal] 已去除外层代码块标记，处理后内容长度: ${content.length}`);
+
             } else {
-                console.log('[UI._showHtmlPreviewModal] 未检测到代码块标记');
+
             }
 
             const overlay = document.createElement('div');
@@ -8472,15 +9255,15 @@
 
             overlay.appendChild(modal);
             document.body.appendChild(overlay);
-            console.log('[UI._showHtmlPreviewModal] 模态框已添加到 DOM');
+
 
             this._openModal(overlay);
-            console.log('[UI._showHtmlPreviewModal] 已调用 _openModal');
+
 
             // 初始化源码内容
             const sourcePre = modal.querySelector('#nc-source-pre');
             sourcePre.textContent = content;
-            console.log(`[UI._showHtmlPreviewModal] 源码内容已填充，内容长度: ${content.length}`);
+
 
             // 获取视图切换元素
             const sourceContainer = modal.querySelector('#nc-source-container');
@@ -8489,7 +9272,7 @@
             const previewBtn = modal.querySelector('#nc-html-preview');
             const copyBtn = modal.querySelector('#nc-html-copy');
             const closeBtn = modal.querySelector('#nc-html-close');
-            console.log('[UI._showHtmlPreviewModal] 获取到所有按钮和容器');
+
 
             // 辅助函数：检查并输出容器的滚动状态
             const logScrollState = (container, label) => {
@@ -8499,9 +9282,9 @@
                 const scrollWidth = container.scrollWidth;
                 const clientWidth = container.clientWidth;
                 const computedStyle = window.getComputedStyle(container);
-                console.log(`[UI._showHtmlPreviewModal] [${label}] scrollHeight=${scrollHeight}, clientHeight=${clientHeight}, 差值=${scrollHeight - clientHeight}`);
-                console.log(`[UI._showHtmlPreviewModal] [${label}] scrollWidth=${scrollWidth}, clientWidth=${clientWidth}, 差值=${scrollWidth - clientWidth}`);
-                console.log(`[UI._showHtmlPreviewModal] [${label}] overflowY=${computedStyle.overflowY}, overflowX=${computedStyle.overflowX}`);
+
+
+
                 // 同时检查内部的 <pre>
                 const pre = container.querySelector('pre');
                 if (pre) {
@@ -8509,25 +9292,25 @@
                     const preCH = pre.clientHeight;
                     const preSW = pre.scrollWidth;
                     const preCW = pre.clientWidth;
-                    console.log(`[UI._showHtmlPreviewModal] [${label}] <pre> scrollHeight=${preSH}, clientHeight=${preCH}, 差值=${preSH - preCH}`);
-                    console.log(`[UI._showHtmlPreviewModal] [${label}] <pre> scrollWidth=${preSW}, clientWidth=${preCW}, 差值=${preSW - preCW}`);
+
+
                 }
                 if (scrollHeight > clientHeight) {
-                    console.log(`[UI._showHtmlPreviewModal] [${label}] 垂直滚动条应出现`);
+
                 } else {
-                    console.log(`[UI._showHtmlPreviewModal] [${label}] 垂直滚动条可能不需要 (scrollHeight <= clientHeight)`);
+
                 }
             };
 
             // 立即检查一次（可能布局未完全更新）
             setTimeout(() => {
-                console.log('[UI._showHtmlPreviewModal] 延迟100ms后检查滚动状态');
+
                 logScrollState(sourceContainer, '源码容器(延迟)');
             }, 100);
 
             // 源码视图按钮
             sourceBtn.addEventListener('click', () => {
-                console.log('[UI._showHtmlPreviewModal] 点击“查看源码”按钮');
+
                 sourceContainer.style.display = 'block';
                 previewContainer.style.display = 'none';
                 sourceBtn.style.opacity = '1';
@@ -8542,29 +9325,29 @@
 
             // 预览视图按钮
             previewBtn.addEventListener('click', async () => {
-                console.log('[UI._showHtmlPreviewModal] 点击“预览”按钮');
+
                 sourceContainer.style.display = 'none';
                 previewContainer.style.display = 'block';
                 sourceBtn.style.opacity = '0.6';
                 previewBtn.style.opacity = '1';
 
                 if (previewContainer.children.length === 0) {
-                    console.log('[UI._showHtmlPreviewModal] 预览容器为空，开始加载预览内容');
+
                     previewContainer.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">加载预览中...</div>';
                     try {
-                        console.log('[UI._showHtmlPreviewModal] 开始替换图片占位符...');
+
                         const processedHtml = await this._replaceImagePlaceholders(content);
-                        console.log(`[UI._showHtmlPreviewModal] 图片占位符替换完成，HTML长度: ${processedHtml.length}`);
+
                         previewContainer.innerHTML = processedHtml;
                         const scripts = previewContainer.querySelectorAll('script');
-                        console.log(`[UI._showHtmlPreviewModal] 找到 ${scripts.length} 个脚本标签，准备执行`);
+
                         scripts.forEach(oldScript => {
                             const newScript = document.createElement('script');
                             Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
                             if (oldScript.innerHTML) newScript.innerHTML = oldScript.innerHTML;
                             oldScript.parentNode.replaceChild(newScript, oldScript);
                         });
-                        console.log('[UI._showHtmlPreviewModal] 脚本执行完成');
+
 
                         // 预览加载完成后，检查预览容器的滚动状态
                         logScrollState(previewContainer, '预览容器(加载后)');
@@ -8573,17 +9356,17 @@
                         previewContainer.innerHTML = `<div style="color:#ff6b6b; padding:20px;">预览渲染失败: ${err.message}</div>`;
                     }
                 } else {
-                    console.log('[UI._showHtmlPreviewModal] 预览内容已存在，直接显示');
+
                     logScrollState(previewContainer, '预览容器(显示)');
                 }
             });
 
             // 复制按钮
             copyBtn.addEventListener('click', async () => {
-                console.log('[UI._showHtmlPreviewModal] 点击“复制”按钮');
+
                 try {
                     await navigator.clipboard.writeText(content);
-                    console.log('[UI._showHtmlPreviewModal] 复制成功（剪贴板API）');
+
                     Notify.success('已复制到剪贴板');
                 } catch (err) {
                     console.warn('[UI._showHtmlPreviewModal] 剪贴板API失败，使用降级方案:', err);
@@ -8595,21 +9378,21 @@
                     textarea.select();
                     document.execCommand('copy');
                     document.body.removeChild(textarea);
-                    console.log('[UI._showHtmlPreviewModal] 复制成功（降级方案）');
+
                     Notify.success('已复制到剪贴板（降级方案）');
                 }
             });
 
             // 关闭按钮
             closeBtn.addEventListener('click', () => {
-                console.log('[UI._showHtmlPreviewModal] 点击“关闭”按钮');
+
                 this._closeModal(overlay);
             });
 
             // 遮罩层点击关闭
             overlay.addEventListener('click', (e) => {
                 if (e.target === overlay) {
-                    console.log('[UI._showHtmlPreviewModal] 点击遮罩层关闭');
+
                     this._closeModal(overlay);
                 }
             });
@@ -8619,7 +9402,7 @@
             previewContainer.style.display = 'none';
             sourceBtn.style.opacity = '1';
             previewBtn.style.opacity = '0.6';
-            console.log(`[UI._showHtmlPreviewModal] 初始视图显示源码，立即检查滚动状态`);
+
             logScrollState(sourceContainer, '源码容器(初始)');
             // 延迟再检查一次
             setTimeout(() => {
@@ -8630,7 +9413,7 @@
         // ==================== 文件管理器 ====================
 
         showFileManager: async function () {
-            console.log('[FileManager] ========== 打开文件管理器 ==========');
+
             console.time('FileManagerOpen');
             this.closeAll();
 
@@ -8693,7 +9476,7 @@
             let currentTab = 'images';
 
             const setActiveTab = (tabId) => {
-                console.log(`[FileManager] 切换标签页至: ${tabId}`);
+
                 const tabs = [
                     { btn: imagesTab, id: 'images' },
                     { btn: libraryTab, id: 'library' },
@@ -8731,14 +9514,14 @@
 
             // ===== 加载图片库 =====
             const loadImages = async () => {
-                console.log('[FileManager] 加载图片库 (loadImages)');
+
                 currentTab = 'images';
                 setActiveTab('images');
                 contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载图片库...</div>';
 
                 try {
                     const allImages = await ImageStore.getAll();
-                    console.log(`[FileManager] 图片库数据: 共 ${allImages.length} 张图片`);
+
                     if (allImages.length === 0) {
                         contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">图片库为空</div>';
                         return;
@@ -8766,7 +9549,7 @@
                     contentDiv.querySelectorAll('.download-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
-                            console.log(`[FileManager] 下载图片: ${id}`);
+
                             const blob = await ImageStore.get(id);
                             if (blob) {
                                 const url = URL.createObjectURL(blob);
@@ -8783,13 +9566,13 @@
                     contentDiv.querySelectorAll('.delete-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
-                            console.log(`[FileManager] 尝试删除图片 ${id}`);
+
                             const confirmed = await UI.showConfirmModal(`确定要删除图片 ${id} 吗？`, '确认');
                             if (!confirmed) {
-                                console.log(`[FileManager] 用户取消删除图片 ${id}`);
+
                                 return;
                             }
-                            console.log(`[FileManager] 用户确认删除图片 ${id}`);
+
                             await ImageStore.delete(id);
                             Notify.success(`图片 ${id} 已删除`);
                             loadImages();
@@ -8804,14 +9587,14 @@
 
             // ===== 加载图库书图片 =====
             const loadLibraryImages = async () => {
-                console.log('[FileManager] 加载图库书 (loadLibraryImages)');
+
                 currentTab = 'library';
                 setActiveTab('library');
                 contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载图库书...</div>';
 
                 try {
                     const entries = await getLibraryEntries();
-                    console.log(`[FileManager] 图库书条目数: ${entries.length}`);
+
                     if (entries.length === 0) {
                         contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">图库书为空</div>';
                         return;
@@ -8826,7 +9609,7 @@
                         items.push({ entry, imageId, blob });
                     }
 
-                    console.log(`[FileManager] 图库书中有实际图片的条目: ${items.length}`);
+
                     if (items.length === 0) {
                         contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">图库书中无可显示的图片</div>';
                         return;
@@ -8857,7 +9640,7 @@
                     contentDiv.querySelectorAll('.download-library-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
-                            console.log(`[FileManager] 下载图库图片: ${id}`);
+
                             const blob = await ImageStore.get(id);
                             if (blob) {
                                 const url = URL.createObjectURL(blob);
@@ -8876,16 +9659,16 @@
                             const bookIndex = parseInt(e.target.dataset.book);
                             const uid = parseInt(e.target.dataset.uid);
                             const imageId = e.target.dataset.id;
-                            console.log(`[FileManager] 尝试删除图库条目：书 ${bookIndex} uid=${uid}，图片ID ${imageId}`);
+
                             const confirmed = await UI.showConfirmModal(
                                 `确定要删除图库${bookIndex}的条目(uid=${uid})及其对应图片 ${imageId} 吗？`,
                                 '确认'
                             );
                             if (!confirmed) {
-                                console.log('[FileManager] 用户取消删除');
+
                                 return;
                             }
-                            console.log('[FileManager] 用户确认删除，开始处理');
+
                             try {
                                 await ImageStore.delete(imageId);
                                 const bookName = `状态书-图库${bookIndex}`;
@@ -8912,14 +9695,14 @@
 
             // ===== 加载音频库 =====
             const loadAudios = async () => {
-                console.log('[FileManager] 加载音频库 (loadAudios)');
+
                 currentTab = 'audios';
                 setActiveTab('audios');
                 contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载音频库...</div>';
 
                 try {
                     const allAudios = await AudioStore.getAll();
-                    console.log(`[FileManager] 音频库数据: 共 ${allAudios.length} 个音频`);
+
                     if (allAudios.length === 0) {
                         contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">音频库为空</div>';
                         return;
@@ -8952,7 +9735,7 @@
                     contentDiv.querySelectorAll('.download-audio-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
-                            console.log(`[FileManager] 下载音频: ${id}`);
+
                             const blob = await AudioStore.get(id);
                             if (blob) {
                                 const url = URL.createObjectURL(blob);
@@ -8968,13 +9751,13 @@
                     contentDiv.querySelectorAll('.delete-audio-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
-                            console.log(`[FileManager] 尝试删除音频 ${id}`);
+
                             const confirmed = await UI.showConfirmModal(`确定要删除音频 ${id} 吗？`, '确认');
                             if (!confirmed) {
-                                console.log('[FileManager] 用户取消删除');
+
                                 return;
                             }
-                            console.log('[FileManager] 用户确认删除');
+
                             await AudioStore.delete(id);
                             Notify.success(`音频 ${id} 已删除`);
                             loadAudios();
@@ -8989,14 +9772,14 @@
 
             // ===== 加载音频书 =====
             const loadAudioBook = async () => {
-                console.log('[FileManager] 加载音频书 (loadAudioBook)');
+
                 currentTab = 'audiobook';
                 setActiveTab('audiobook');
                 contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载音频书...</div>';
 
                 try {
                     const entries = await getAudioLibraryEntries();
-                    console.log(`[FileManager] 音频书条目数: ${entries.length}`);
+
                     if (entries.length === 0) {
                         contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">音频书为空</div>';
                         return;
@@ -9011,7 +9794,7 @@
                         items.push({ entry, audioId, blob });
                     }
 
-                    console.log(`[FileManager] 音频书中有实际音频的条目: ${items.length}`);
+
                     if (items.length === 0) {
                         contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">音频书中无可播放的音频</div>';
                         return;
@@ -9046,7 +9829,7 @@
                     contentDiv.querySelectorAll('.download-audiobook-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
-                            console.log(`[FileManager] 下载音频书音频: ${id}`);
+
                             const blob = await AudioStore.get(id);
                             if (blob) {
                                 const url = URL.createObjectURL(blob);
@@ -9064,16 +9847,16 @@
                             const bookIndex = parseInt(e.target.dataset.book);
                             const uid = parseInt(e.target.dataset.uid);
                             const audioId = e.target.dataset.id;
-                            console.log(`[FileManager] 尝试删除音频书条目：书 ${bookIndex} uid=${uid}，音频ID ${audioId}`);
+
                             const confirmed = await UI.showConfirmModal(
                                 `确定要删除音频库${bookIndex}的条目(uid=${uid})及其对应音频 ${audioId} 吗？`,
                                 '确认'
                             );
                             if (!confirmed) {
-                                console.log('[FileManager] 用户取消删除');
+
                                 return;
                             }
-                            console.log('[FileManager] 用户确认删除');
+
                             try {
                                 await AudioStore.delete(audioId);
                                 const bookName = `状态书-音频库${bookIndex}`;
@@ -9100,14 +9883,14 @@
 
             // ===== 加载其余文件库 =====
             const loadOtherFiles = async () => {
-                console.log('[FileManager] 加载其余文件库 (loadOtherFiles)');
+
                 currentTab = 'other';
                 setActiveTab('other');
                 contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载其余文件库...</div>';
 
                 try {
                     const allTexts = await OtherFileStore.getAll();
-                    console.log(`[FileManager] 其余文件库数据: 共 ${allTexts.length} 项`);
+
                     if (allTexts.length === 0) {
                         contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">其余文件库为空</div>';
                         return;
@@ -9138,7 +9921,7 @@
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
                             const format = e.target.dataset.format;
-                            console.log(`[FileManager] 查看文本: ${id}, format=${format}`);
+
                             const item = await OtherFileStore.get(id);
                             if (item) {
                                 this.showMarkdownModal(`文本预览: ${id}`, item.text, {
@@ -9155,7 +9938,7 @@
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
                             const format = e.target.dataset.format;
-                            console.log(`[FileManager] 下载文本: ${id}, format=${format}`);
+
                             const item = await OtherFileStore.get(id);
                             if (item) {
                                 const ext = format === 'html' ? 'html' : format === 'js' ? 'js' : 'txt';
@@ -9173,13 +9956,13 @@
                     contentDiv.querySelectorAll('.delete-text-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
-                            console.log(`[FileManager] 尝试删除文本 ${id}`);
+
                             const confirmed = await UI.showConfirmModal(`确定要删除文本 ${id} 吗？`, '确认');
                             if (!confirmed) {
-                                console.log('[FileManager] 用户取消删除');
+
                                 return;
                             }
-                            console.log('[FileManager] 用户确认删除');
+
                             await OtherFileStore.delete(id);
                             Notify.success(`文本 ${id} 已删除`);
                             loadOtherFiles();
@@ -9194,14 +9977,14 @@
 
             // ===== 加载Galgame项目 =====
             const loadGalgames = async () => {
-                console.log('[FileManager] 加载Galgame项目 (loadGalgames)');
+
                 currentTab = 'galgames';
                 setActiveTab('galgames');
                 contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载Galgame项目...</div>';
 
                 try {
                     const projects = await Storage.listGalgameProjects();
-                    console.log(`[FileManager] Galgame项目列表: 共 ${projects.length} 项`);
+
                     if (projects.length === 0) {
                         contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">暂无Galgame项目</div>';
                         return;
@@ -9232,7 +10015,7 @@
                     contentDiv.querySelectorAll('.load-gal-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
-                            console.log(`[FileManager] 尝试加载Galgame项目 ${id}`);
+
                             const project = await Storage.loadGalgameProject(id);
                             if (project) {
                                 this._closeModal(overlay);
@@ -9259,7 +10042,7 @@
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
                             const name = e.target.dataset.name;
-                            console.log(`[FileManager] 尝试导出Galgame项目 ${id}`);
+
                             const project = await Storage.loadGalgameProject(id);
                             if (project) {
                                 await UI._exportGalgameProject(name, project.nodes);
@@ -9271,13 +10054,13 @@
                     contentDiv.querySelectorAll('.delete-gal-btn').forEach(btn => {
                         btn.addEventListener('click', async (e) => {
                             const id = e.target.dataset.id;
-                            console.log(`[FileManager] 尝试删除Galgame项目 ${id}`);
+
                             const confirmed = await UI.showConfirmModal(`确定要删除项目 ${id} 吗？`, '确认');
                             if (!confirmed) {
-                                console.log('[FileManager] 用户取消删除');
+
                                 return;
                             }
-                            console.log('[FileManager] 用户确认删除');
+
                             await Storage.deleteGalgameProject(id);
                             Notify.success('项目已删除');
                             loadGalgames();
@@ -9292,7 +10075,7 @@
 
             // ==================== 上传文件功能（支持自定义ID/自动生成） ====================
             uploadBtn.addEventListener('click', async () => {
-                console.log('[FileManager] ===== 点击上传按钮，开始上传流程 =====');
+
                 const fileInput = document.createElement('input');
                 fileInput.type = 'file';
                 fileInput.style.display = 'none';
@@ -9305,7 +10088,7 @@
                         return;
                     }
 
-                    console.log(`[FileManager] 用户选择了文件: name=${file.name}, type=${file.type}, size=${file.size} 字节`);
+
 
                     // 确定文件类型和存储
                     const mime = file.type;
@@ -9339,7 +10122,7 @@
                     // 弹出自定义ID输入模态框
                     let customId = '';
                     try {
-                        console.log('[FileManager] 弹出自定义ID输入框');
+
                         customId = await new Promise((resolve, reject) => {
                             const overlay2 = document.createElement('div');
                             overlay2.className = 'nc-modal-overlay nc-font';
@@ -9381,7 +10164,7 @@
 
                             const handleSave = async (useAuto) => {
                                 let inputId = useAuto ? null : idInput.value.trim();
-                                console.log(`[FileManager] 用户选择: ${useAuto ? '自动生成' : `自定义ID "${inputId}"`}`);
+
 
                                 if (!useAuto && !inputId) {
                                     Notify.error('请输入自定义ID或使用“自动生成”');
@@ -9415,7 +10198,7 @@
 
                                     if (existing) {
                                         const action = await UI._showResourceConflictModal(inputId, storeType);
-                                        console.log(`[FileManager] 冲突解决: ${action}`);
+
                                         if (action === 'cancel' || action === 'skip') {
                                             return; // 不关闭模态框
                                         }
@@ -9434,7 +10217,7 @@
                                         const text = await file.text();
                                         savedId = await OtherFileStore.save(text, format, useAuto ? undefined : inputId);
                                     }
-                                    console.log(`[FileManager] 文件保存成功，ID: ${savedId}`);
+
                                     ModalStack.closeTop();
                                     resolve(savedId);
                                 } catch (err) {
@@ -9447,13 +10230,13 @@
                             okBtn.addEventListener('click', () => handleSave(false));
                             autoBtn.addEventListener('click', () => handleSave(true));
                             closeBtn.addEventListener('click', () => {
-                                console.log('[FileManager] 用户取消保存');
+
                                 ModalStack.closeTop();
                                 reject(new Error('用户取消'));
                             });
                             overlay2.addEventListener('click', (e) => {
                                 if (e.target === overlay2) {
-                                    console.log('[FileManager] 点击遮罩层取消');
+
                                     ModalStack.closeTop();
                                     reject(new Error('用户取消'));
                                 }
@@ -9466,7 +10249,7 @@
                             });
                         });
                     } catch (err) {
-                        console.log('[FileManager] 上传取消');
+
                         fileInput.remove();
                         return;
                     }
@@ -9508,11 +10291,11 @@
 
             // 关闭按钮
             closeBtn.addEventListener('click', () => {
-                console.log('[FileManager] 点击关闭按钮');
+
                 const reopenMainPanel = () => {
                     setTimeout(() => {
                         if (ModalStack._stack.length === 0 && !document.getElementById(CONFIG.UI.panelId)) {
-                            console.log('[FileManager] 关闭后重新创建主面板');
+
                             UI.createPanel();
                         }
                     }, 250);
@@ -9524,7 +10307,7 @@
             // 遮罩层点击关闭
             overlay.addEventListener('click', (e) => {
                 if (e.target === overlay) {
-                    console.log('[FileManager] 点击遮罩层关闭');
+
                     const reopenMainPanel = () => {
                         setTimeout(() => {
                             if (ModalStack._stack.length === 0 && !document.getElementById(CONFIG.UI.panelId)) {
@@ -9538,13 +10321,13 @@
             });
 
             // 默认显示图片库
-            console.log('[FileManager] 初始加载图片库');
+
             loadImages();
             console.timeEnd('FileManagerOpen');
         },
 
-        showGalgameEditor : async function () {
-            console.log('[GalgameEditor] ========== 打开制作器 ==========');
+        showGalgameEditor: async function () {
+
             this.closeAll();
 
             // 加载项目列表（用于侧边栏）
@@ -9697,14 +10480,14 @@
                         updatedAt: Date.now()
                     };
                     await Storage.saveGalgameProject(WORKFLOW_STATE.galProjectId, project);
-                    console.log('[GalgameEditor] 自动保存成功，变量:', project.variables);
+
                 }, 300000); // 5分钟
             };
 
             // 初始化编辑器实例
             const editor = new GalgameEditor(canvas, {
                 onNodeSelect: (node) => {
-                    console.log('[GalgameEditor] 节点选中，重新渲染属性面板，节点:', node);
+
                     this._renderGalgameProperties(node, rightPanel.querySelector('#nc-gal-properties'), editor);
                 },
                 onNodesChange: () => this._updateGalgameCanvas(editor)
@@ -9715,7 +10498,7 @@
 
             // 加载或初始化项目
             if (WORKFLOW_STATE.galProject) {
-                console.log('[GalgameEditor] 加载已有项目，变量:', WORKFLOW_STATE.galProject.variables);
+
                 editor.loadFromJSON(WORKFLOW_STATE.galProject.nodes);
             } else {
                 WORKFLOW_STATE.galProject = {
@@ -9724,7 +10507,7 @@
                     variables: {}
                 };
                 WORKFLOW_STATE.galProjectId = null;
-                console.log('[GalgameEditor] 新建项目，变量初始化为空');
+
             }
 
             startAutoSave();
@@ -9741,13 +10524,13 @@
                     if (editor) {
                         editor.showGuides = e.target.checked;
                         editor._requestRender();
-                        console.log(`[GalgameEditor] 显示指示线: ${e.target.checked}`);
+
                     }
                 });
             }
 
             modal.querySelector('#nc-gal-close').addEventListener('click', () => {
-                console.log('[GalgameEditor] 关闭制作器');
+
                 if (autoSaveTimer) clearInterval(autoSaveTimer);
                 cleanupResources();
                 this._closeModal(overlay);
@@ -9755,18 +10538,18 @@
 
             overlay.addEventListener('click', (e) => {
                 if (e.target === overlay) {
-                    console.log('[GalgameEditor] 点击遮罩层关闭');
+
                     if (autoSaveTimer) clearInterval(autoSaveTimer);
                     cleanupResources();
                     this._closeModal(overlay);
                 }
             });
 
-            console.log('[GalgameEditor] 制作器模态框创建完成');
+
         },
 
         _loadGalgameResources: async function (container) {
-            console.log('[GalgameEditor] 加载资源列表');
+
 
             // 清理容器内现有的 blob URL
             const oldImages = container.querySelectorAll('img');
@@ -9810,8 +10593,8 @@
             container.innerHTML = html;
         },
 
-        _renderGalgameVariables : function (container) {
-            console.log('[GalgameVar] 渲染变量监视器');
+        _renderGalgameVariables: function (container) {
+
             const vars = WORKFLOW_STATE.galProject?.variables || {};
 
             let html = `
@@ -9853,7 +10636,7 @@
                             newValue = e.target.value; // 视为字符串
                         }
                         WORKFLOW_STATE.galProject.variables[varName] = newValue;
-                        console.log(`[GalgameVar] 修改变量 ${varName} =`, newValue);
+
                     });
                 });
 
@@ -9865,7 +10648,7 @@
                         if (confirm(`确定删除变量 ${varName} 吗？`)) {
                             delete WORKFLOW_STATE.galProject.variables[varName];
                             renderRows(); // 重新渲染
-                            console.log(`[GalgameVar] 删除变量 ${varName}`);
+
                         }
                     });
                 });
@@ -9888,7 +10671,7 @@
                     value = valueStr;
                 }
                 WORKFLOW_STATE.galProject.variables[name] = value;
-                console.log(`[GalgameVar] 新增变量 ${name} =`, value);
+
                 renderRows();
             });
 
@@ -9896,18 +10679,18 @@
         },
 
         _renderGalgameProperties: function (node, container, editor) {
-            console.log('[GalgameProp] ========== 开始渲染属性面板 ==========');
-            console.log('[GalgameProp] 节点信息:', node);
-            console.log('[GalgameProp] 传入的 editor 对象:', editor ? '有效' : 'undefined');
+
+
+
 
             // 如果 editor 未定义，尝试从 container 的祖先模态框中获取 editor
             let _editor = editor;
             if (!_editor) {
-                console.log('[GalgameProp] editor 未传入，尝试从 DOM 中查找');
+
                 const overlay = container.closest('.nc-modal-overlay');
                 if (overlay && overlay.editor) {
                     _editor = overlay.editor;
-                    console.log('[GalgameProp] 从 overlay 获取到 editor');
+
                 } else {
                     console.error('[GalgameProp] 无法获取 editor，属性面板将不可用');
                     container.innerHTML = '<div style="color:#ff6b6b; text-align:center; padding:20px;">❌ 编辑器实例丢失，请重新打开制作器</div>';
@@ -9917,7 +10700,7 @@
 
             if (!node) {
                 container.innerHTML = '<div style="color:#aaa; text-align:center;">未选中节点</div>';
-                console.log('[GalgameProp] 无节点，显示空提示');
+
                 return;
             }
 
@@ -9945,7 +10728,7 @@
                     }
                 }
             }
-            console.log('[GalgameProp] 快照中状态条目数量:', snapshotEntries.length);
+
 
             // ===== 构建HTML =====
             let html = `
@@ -10043,7 +10826,7 @@
             titleInput.addEventListener('blur', () => {
                 node.title = titleInput.value;
                 _editor.updateNode(node.id, { title: node.title });
-                console.log('[GalgameProp] 标题更新为:', node.title);
+
             });
 
             chapterInput.addEventListener('change', () => {
@@ -10051,38 +10834,38 @@
                 if (!isNaN(val)) {
                     node.chapterNum = val;
                     _editor.updateNode(node.id, { chapterNum: node.chapterNum });
-                    console.log('[GalgameProp] 章节号更新为:', node.chapterNum);
+
                 }
             });
 
             scriptInput.addEventListener('blur', () => {
                 node.script = scriptInput.value;
                 _editor.updateNode(node.id, { script: node.script });
-                console.log('[GalgameProp] 脚本更新');
+
             });
 
             defaultTargetInput.addEventListener('blur', () => {
                 node.defaultTarget = defaultTargetInput.value;
                 _editor.updateNode(node.id, { defaultTarget: node.defaultTarget });
-                console.log('[GalgameProp] 默认目标更新为:', node.defaultTarget);
+
             });
 
             onEnterScriptInput.addEventListener('blur', () => {
                 node.onEnterScript = onEnterScriptInput.value;
                 _editor.updateNode(node.id, { onEnterScript: node.onEnterScript });
-                console.log('[GalgameProp] 进入脚本更新');
+
             });
 
             // 从历史导入章节号
             importBtn.addEventListener('click', () => {
-                console.log('[GalgameImport] 点击“从历史导入”');
+
                 HistoryUI.showChapterSelectionModal((selected) => {
                     if (selected && selected.length > 0) {
                         const ch = selected[0];
                         node.chapterNum = ch.num;
                         chapterInput.value = ch.num;
                         _editor.updateNode(node.id, { chapterNum: ch.num });
-                        console.log('[GalgameImport] 节点 chapterNum 更新为:', ch.num);
+
                         Notify.success(`已关联章节 #${ch.num}`);
                         // 重新渲染属性面板以显示快照导入区域
                         UI._renderGalgameProperties(node, container, editor);
@@ -10094,7 +10877,7 @@
             deleteBtn.addEventListener('click', async () => {
                 const confirmed = await UI.showConfirmModal(`确定删除节点 #${node.id} 吗？`, '确认');
                 if (confirmed) {
-                    console.log('[GalgameProp] 删除节点:', node.id);
+
                     _editor.deleteNode(node.id);
                 }
             });
@@ -10191,7 +10974,7 @@
                             WORKFLOW_STATE.galProject.variables = {};
                         }
                         WORKFLOW_STATE.galProject.variables[varName] = entry.content; // 存储为字符串
-                        console.log(`[GalgameProp] 从快照导入变量 ${varName} =`, entry.content.substring(0, 50) + '...');
+
                         Notify.success(`变量 ${varName} 已添加`);
                         // 刷新变量监视器
                         const varContainer = document.querySelector('#nc-gal-var-content');
@@ -10202,11 +10985,11 @@
                 });
             }
 
-            console.log('[GalgameProp] ========== 属性面板渲染完成 ==========');
+
         },
 
         _analyzeNodeResults: async function (node, container, editor) {
-            console.log('[GalgameEditor] 分析节点可能结果，节点ID:', node.id);
+
             const analyzerKey = Object.keys(CONFIG.AGENTS).find(k => CONFIG.AGENTS[k].role === 'interactionAnalyzer');
             if (!analyzerKey) {
                 Notify.warning('未找到分析助手 Agent (role: interactionAnalyzer)');
@@ -10227,11 +11010,11 @@
 
             const agent = CONFIG.AGENTS[analyzerKey];
             const prompt = agent.inputTemplate.replace('【】', chapter.content);
-            console.log('[GalgameEditor] 发送分析请求，提示词长度:', prompt.length);
+
 
             try {
                 const response = await Workflow.callAgent(analyzerKey, prompt);
-                console.log('[GalgameEditor] 分析返回:', response);
+
 
                 let results = [];
                 try {
@@ -10262,11 +11045,11 @@
             }
         },
 
-        _bindGalgameToolbar : function (overlay, editor, projects) {
-            console.log('[GalgameToolbar] ========== 绑定工具栏事件 ==========');
-            console.log('[GalgameToolbar] 传入的 overlay:', overlay);
-            console.log('[GalgameToolbar] 传入的 editor:', editor ? '有效' : 'undefined');
-            console.log('[GalgameToolbar] 传入的 projects 数量:', projects?.length);
+        _bindGalgameToolbar: function (overlay, editor, projects) {
+
+
+
+
 
             // 获取所有按钮（包括硬编码的自动布局按钮）
             const modeEdit = overlay.querySelector('#nc-gal-mode-edit');
@@ -10325,7 +11108,7 @@
 
             if (modeEdit) {
                 modeEdit.addEventListener('click', () => {
-                    console.log('[GalgameToolbar] 点击“制作模式”按钮');
+
                     if (currentMode === 'play') {
                         if (player) player.stop();
                         canvasContainer.style.display = 'block';
@@ -10333,7 +11116,7 @@
                         currentMode = 'edit';
                         editor.render();
                         setMode('edit');
-                        console.log('[GalgameToolbar] 切换到编辑模式');
+
                     }
                 });
             } else {
@@ -10342,7 +11125,7 @@
 
             if (modePlay) {
                 modePlay.addEventListener('click', () => {
-                    console.log('[GalgameToolbar] 点击“播放模式”按钮');
+
                     if (currentMode === 'edit') {
                         const nodes = editor.toJSON();
                         if (nodes.length === 0) {
@@ -10360,7 +11143,7 @@
                         };
                         player = new GalgamePlayer(playContainer, project);
                         player.start();
-                        console.log('[GalgameToolbar] 切换到播放模式，项目变量:', project.variables);
+
                     }
                 });
             } else {
@@ -10370,7 +11153,7 @@
             // 新建项目
             if (newBtn) {
                 newBtn.addEventListener('click', async () => {
-                    console.log('[GalgameToolbar] 点击“新建”按钮');
+
                     const confirmed = await UI.showConfirmModal('新建将清空当前编辑，确定？', '确认');
                     if (!confirmed) return;
                     editor.setNodes([]);
@@ -10382,7 +11165,7 @@
                     WORKFLOW_STATE.galProjectId = null;
                     overlay.querySelector('#nc-gal-properties').innerHTML = '<div style="color:#aaa;">未选中节点</div>';
                     UI._renderGalgameVariables(overlay.querySelector('#nc-gal-var-content'));
-                    console.log('[GalgameToolbar] 新建项目，变量已重置');
+
                 });
             } else {
                 console.warn('[GalgameToolbar] 未找到 #nc-gal-new 按钮');
@@ -10391,7 +11174,7 @@
             // 保存项目
             if (saveBtn) {
                 saveBtn.addEventListener('click', async () => {
-                    console.log('[GalgameToolbar] 点击“保存”按钮');
+
                     const nodes = editor.toJSON();
                     if (nodes.length === 0) {
                         Notify.warning('没有节点可保存');
@@ -10424,7 +11207,7 @@
                     WORKFLOW_STATE.galProject = project;
                     WORKFLOW_STATE.galProjectId = id;
                     Notify.success('项目已保存');
-                    console.log('[GalgameToolbar] 项目保存成功，ID:', id, '变量:', project.variables);
+
                     UI._renderGalgameVariables(overlay.querySelector('#nc-gal-var-content'));
                 });
             } else {
@@ -10434,9 +11217,9 @@
             // 加载项目
             if (loadBtn) {
                 loadBtn.addEventListener('click', async () => {
-                    console.log('[GalgameLoad] ========== 打开加载模态框 ==========');
+
                     const projects = await Storage.listGalgameProjects();
-                    console.log('[GalgameLoad] 获取到项目列表:', projects);
+
 
                     if (projects.length === 0) {
                         Notify.info('暂无保存的项目');
@@ -10488,7 +11271,7 @@
                     loadModal.querySelectorAll('.project-item').forEach(item => {
                         item.addEventListener('click', async () => {
                             const id = item.dataset.id;
-                            console.log('[GalgameLoad] 选中项目 ID:', id);
+
                             const project = await Storage.loadGalgameProject(id);
                             if (project) {
                                 editor.loadFromJSON(project.nodes);
@@ -10502,7 +11285,7 @@
                                 }
                                 UI._renderGalgameVariables(overlay.querySelector('#nc-gal-var-content'));
                                 Notify.success('项目加载成功');
-                                console.log('[GalgameLoad] 项目加载成功，变量:', project.variables);
+
                             } else {
                                 Notify.error('项目不存在');
                             }
@@ -10523,7 +11306,7 @@
             // 导出项目
             if (exportBtn) {
                 exportBtn.addEventListener('click', async () => {
-                    console.log('[GalgameToolbar] 点击“导出”按钮');
+
                     const nodes = editor.toJSON();
                     if (nodes.length === 0) {
                         Notify.warning('没有节点可导出');
@@ -10539,7 +11322,7 @@
             // 导入项目
             if (importBtn) {
                 importBtn.addEventListener('click', () => {
-                    console.log('[GalgameToolbar] 点击“导入”按钮');
+
                     const input = document.createElement('input');
                     input.type = 'file';
                     input.accept = '.zip,application/zip';
@@ -10558,10 +11341,10 @@
             // 自动布局按钮
             if (autoLayoutBtn) {
                 autoLayoutBtn.addEventListener('click', () => {
-                    console.log('[GalgameToolbar] 点击自动布局按钮');
+
                     if (editor && typeof editor.autoLayout === 'function') {
                         editor.autoLayout();
-                        console.log('[GalgameToolbar] 自动布局执行成功');
+
                     } else {
                         console.error('[GalgameToolbar] editor 无效或 autoLayout 方法不存在', editor);
                         Notify.error('自动布局功能不可用');
@@ -10574,7 +11357,7 @@
             // 打包按钮
             if (packageBtn) {
                 packageBtn.addEventListener('click', async () => {
-                    console.log('[GalgameToolbar] 点击“打包”按钮');
+
                     const nodes = editor.toJSON();
                     if (nodes.length === 0) {
                         Notify.warning('没有节点可打包');
@@ -10588,7 +11371,7 @@
 
             // 关闭按钮已在外部绑定，这里不再重复绑定
 
-            console.log('[GalgameToolbar] 工具栏事件绑定完成');
+
         },
 
         /**
@@ -10596,15 +11379,15 @@
          * @param {Array} nodes - 节点数组
          */
         _packageGalgameProject: async function (nodes) {
-            console.log('[GalgameEditor] ========== 开始打包独立 Galgame ==========');
-            console.log('[GalgameEditor] 节点数:', nodes.length);
+
+
 
             // 1. 收集所有引用的章节号
             const chapterNums = new Set();
             nodes.forEach(node => {
                 if (node.chapterNum) chapterNums.add(node.chapterNum);
             });
-            console.log('[GalgameEditor] 引用的章节号:', Array.from(chapterNums));
+
 
             // 2. 加载章节内容
             const chapters = Storage.loadChapters();
@@ -10614,7 +11397,7 @@
                     chapterMap[ch.num] = ch.content;
                 }
             });
-            console.log(`[GalgameEditor] 加载到 ${Object.keys(chapterMap).length} 章内容`);
+
 
             // 3. 为每个节点附加章节内容
             nodes.forEach(node => {
@@ -10639,9 +11422,9 @@
                 }
             });
 
-            console.log(`[GalgameEditor] 收集到图片: ${Array.from(imageIds).join(', ')}`);
-            console.log(`[GalgameEditor] 收集到音频: ${Array.from(audioIds).join(', ')}`);
-            console.log(`[GalgameEditor] 收集到其余文件: ${Array.from(otherFileIds).join(', ')}`);
+
+
+
 
             // 5. 加载资源并转换为 base64
             const resources = {
@@ -10654,7 +11437,7 @@
                 const blob = await ImageStore.get(id);
                 if (blob) {
                     resources.images[id] = await this._blobToBase64(blob);
-                    console.log(`[GalgameEditor] 图片 ${id} 已转换为 base64`);
+
                 } else {
                     console.warn(`[GalgameEditor] 图片 ${id} 不存在，跳过`);
                 }
@@ -10664,7 +11447,7 @@
                 const blob = await AudioStore.get(id);
                 if (blob) {
                     resources.audios[id] = await this._blobToBase64(blob);
-                    console.log(`[GalgameEditor] 音频 ${id} 已转换为 base64`);
+
                 } else {
                     console.warn(`[GalgameEditor] 音频 ${id} 不存在，跳过`);
                 }
@@ -10677,7 +11460,7 @@
                         text: item.text,
                         format: item.format
                     };
-                    console.log(`[GalgameEditor] 其余文件 ${id} 已加载`);
+
                 } else {
                     console.warn(`[GalgameEditor] 其余文件 ${id} 不存在，跳过`);
                 }
@@ -10685,7 +11468,7 @@
 
             // 6. 获取变量初始值
             const variables = WORKFLOW_STATE.galProject?.variables || {};
-            console.log('[GalgameEditor] 打包时变量初始值:', variables);
+
 
             // 7. 构建项目数据对象
             const projectData = {
@@ -10810,7 +11593,7 @@
                             }
 
                             function resolveTarget(target) {
-                                console.log('[Player] 解析目标:', target);
+
                                 if (typeof target === 'number') {
                                     return findNode(target) ? target : null;
                                 } else if (typeof target === 'string') {
@@ -10917,7 +11700,7 @@
 
                             // 处理用户交互结果
                             window.__interactionResolver = function(result) {
-                                console.log('[Player] 收到交互结果:', result);
+
                                 const node = findNode(currentNodeId);
                                 if (!node) return;
 
@@ -10985,11 +11768,11 @@
             URL.revokeObjectURL(url);
 
             Notify.success(`Galgame 已打包为独立 HTML 文件`);
-            console.log('[GalgameEditor] ========== 打包完成 ==========');
+
         },
 
         _exportGalgameProject: async function (projectName, nodes) {
-            console.log('[GalgameEditor] 导出项目:', projectName);
+
             const zip = new JSZip();
 
             // 收集所有引用的章节
@@ -11000,7 +11783,7 @@
                 version: CONFIG.VERSION,
                 exportTime: new Date().toISOString(),
                 totalChapters: usedChapters.length,
-                data: {chapters: usedChapters}
+                data: { chapters: usedChapters }
             };
             zip.file('chapters.json', JSON.stringify(chapterBackup, null, 2));
 
@@ -11022,7 +11805,7 @@
                     const blob = await ImageStore.get(id);
                     if (blob) {
                         let ext = blob.type.includes('jpeg') ? 'jpg' : blob.type.includes('png') ? 'png' : 'bin';
-                        imageFolder.file(`${id}.${ext}`, blob, {binary: true});
+                        imageFolder.file(`${id}.${ext}`, blob, { binary: true });
                     }
                 }
             }
@@ -11034,7 +11817,7 @@
                     const blob = await AudioStore.get(id);
                     if (blob) {
                         let ext = blob.type.includes('mp3') ? 'mp3' : blob.type.includes('wav') ? 'wav' : 'bin';
-                        audioFolder.file(`${id}.${ext}`, blob, {binary: true});
+                        audioFolder.file(`${id}.${ext}`, blob, { binary: true });
                     }
                 }
             }
@@ -11061,7 +11844,7 @@
             };
             zip.file('project.json', JSON.stringify(projectData, null, 2));
 
-            const blob = await zip.generateAsync({type: 'blob'});
+            const blob = await zip.generateAsync({ type: 'blob' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -11069,7 +11852,7 @@
             a.click();
             URL.revokeObjectURL(url);
             Notify.success('项目导出成功');
-            console.log('[GalgameEditor] 导出完成，变量:', projectData.variables);
+
         },
 
         _updateGalgameCanvas: function (editor) {
@@ -11079,7 +11862,7 @@
                 // 可选：设置未保存标记，便于提示用户
                 // WORKFLOW_STATE.galProject.hasUnsavedChanges = true;
             }
-            console.log('[GalgameEditor] 画布已更新，节点已同步到全局项目');
+
         },
 
         _showConflictResolutionModal: function (conflictCount) {
@@ -11134,7 +11917,7 @@
         },
 
         _importGalgameProject: async function (file, editor, overlay) {
-            console.log('[GalgameEditor] 导入项目:', file.name);
+
             const arrayBuffer = await file.arrayBuffer();
             const zip = await JSZip.loadAsync(arrayBuffer);
 
@@ -11229,18 +12012,18 @@
                             const renumbered = imported.map(c => {
                                 if (existingNums.has(c.num)) {
                                     maxNum++;
-                                    return {...c, num: maxNum};
+                                    return { ...c, num: maxNum };
                                 }
                                 return c;
                             });
                             merged = existing.concat(renumbered);
                         }
                         merged.sort((a, b) => a.num - b.num);
-                        Storage.save({chapters: merged});
+                        Storage.save({ chapters: merged });
                     } else {
                         const merged = existing.concat(imported);
                         merged.sort((a, b) => a.num - b.num);
-                        Storage.save({chapters: merged});
+                        Storage.save({ chapters: merged });
                     }
                 }
             }
@@ -11287,7 +12070,7 @@
             }
 
             Notify.success('项目导入成功');
-            console.log('[GalgameEditor] 导入成功，变量:', variables);
+
         },
 
         showErrorSummary: function () {
@@ -11416,616 +12199,574 @@
                 input.focus();
             });
         },
-    };
 
-    UI.updateWorkflowAgentStates = (function () {
-        let timeout;
-        return function () {
-            if (timeout) clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                console.log('[UI.updateWorkflowAgentStates] 开始更新工作流按钮状态，时间戳:', Date.now());
-                const container = document.getElementById('nc-workflow-viz');
-                if (container) {
-                    container.querySelectorAll('[data-agent]').forEach(btn => {
-                        const agentKey = btn.dataset.agent;
-                        if (agentKey === 'DISCARD') {
-                            if (WORKFLOW_STATE.discardedChapter) {
-                                btn.classList.add('has-discard');
-                            } else {
-                                btn.classList.remove('has-discard');
-                            }
-                        } else {
-                            const newState = AgentStateManager.getState(agentKey);
-                            const oldState = btn.dataset.state;
-                            if (oldState !== newState) {
-                                console.log(`[UI.updateWorkflowAgentStates] Agent ${agentKey} 状态变化: ${oldState} -> ${newState}`);
-                                btn.dataset.state = newState;
-                            }
-                        }
-                    });
-                }
+        _renderMarkdown : function (text) {
 
-                const launchLayer = document.getElementById('nc-launch-layer');
-                if (launchLayer) {
-                    launchLayer.querySelectorAll('[data-agent]').forEach(btn => {
-                        const agentKey = btn.dataset.agent;
-                        const newState = AgentStateManager.getState(agentKey);
-                        btn.dataset.state = newState;
-                    });
-                }
-                console.log('[UI.updateWorkflowAgentStates] 更新完成');
-            }, 50);
-            console.log('[UI.updateWorkflowAgentStates] 防抖延迟执行，已重置计时器');
-        };
-    })();
 
-    UI._renderMarkdown = function (text) {
-        console.log('[DEBUG][_renderMarkdown] ===== 进入函数 =====');
-        console.log('[DEBUG][_renderMarkdown] 原始文本长度:', text?.length);
-        console.log('[DEBUG][_renderMarkdown] 原始文本前200字符:', text?.substring(0, 200));
 
-        if (!text) {
-            console.log('[DEBUG][_renderMarkdown] 文本为空，返回空字符串');
-            return '';
-        }
 
-        // 去除可能的最外层 ```html 或 ```markdown 代码块标记
-        const trimmed = text.trim();
-        const codeBlockRegex = /^\s*```(?:html|markdown)?\s*\n([\s\S]*?)\n\s*```\s*$/;
-        const match = trimmed.match(codeBlockRegex);
-        if (match) {
-            text = match[1];
-            console.log('[DEBUG][_renderMarkdown] 已去除外层代码块标记，处理后文本长度:', text.length);
-            console.log('[DEBUG][_renderMarkdown] 处理后文本预览:', text.substring(0, 200));
-        } else {
-            console.log('[DEBUG][_renderMarkdown] 未检测到外层代码块标记');
-        }
+            if (!text) {
 
-        // ===== 判断是否为 HTML（文档或片段） =====
-        const trimmedLower = text.trim().toLowerCase();
-        const isHtmlDoc = trimmedLower.startsWith('<!doctype') ||
-            trimmedLower.startsWith('<html') ||
-            trimmedLower.startsWith('<head') ||
-            trimmedLower.startsWith('<body');
-        const hasHtmlTags = /<\/?[a-z][\s\S]*?>/i.test(text);
-        const treatAsHtml = isHtmlDoc || hasHtmlTags;
-        console.log('[DEBUG][_renderMarkdown] 是否为HTML:', treatAsHtml, 'isHtmlDoc:', isHtmlDoc, 'hasHtmlTags:', hasHtmlTags);
+                return '';
+            }
 
-        // ===== 处理图片占位符 =====
-        const markdownImageRegex = /!\[([^\]]*)\]\(id:([^)]+)\)/g;
-        const htmlImageRegex = /<img[^>]*src="id:([^"]+)"[^>]*>/g;
+            // 去除可能的最外层 ```html 或 ```markdown 代码块标记
+            const trimmed = text.trim();
+            const codeBlockRegex = /^\s*```(?:html|markdown)?\s*\n([\s\S]*?)\n\s*```\s*$/;
+            const match = trimmed.match(codeBlockRegex);
+            if (match) {
+                text = match[1];
 
-        let processedText = text;
-        const imagePromises = [];
-        const placeholders = [];
-        const idSet = new Set();
 
-        // 新增：图片 URL 缓存，用于在模态框关闭时释放
-        if (!UI._imageUrlCache) UI._imageUrlCache = new Map();
-
-        // 替换 Markdown 图片
-        processedText = processedText.replace(markdownImageRegex, (match, alt, id) => {
-            console.log('[DEBUG][_renderMarkdown] 发现 Markdown 图片占位符，id:', id, 'alt:', alt);
-            if (!idSet.has(id)) {
-                idSet.add(id);
-                const placeholder = `<!--IMG_PLACEHOLDER_${id}-->`;
-                placeholders.push({id, placeholder, alt});
-                console.log('[DEBUG][_renderMarkdown] 创建占位符:', placeholder);
-                imagePromises.push(
-                    ImageStore.get(id).then(blob => {
-                        console.log('[DEBUG][_renderMarkdown] 图片获取成功，id:', id, 'blob 存在:', !!blob);
-                        if (blob) {
-                            // 检查缓存中是否已存在该 id 的 URL
-                            let url = UI._imageUrlCache.get(id);
-                            if (!url) {
-                                url = URL.createObjectURL(blob);
-                                UI._imageUrlCache.set(id, url);
-                                console.log('[DEBUG][_renderMarkdown] 创建新图片 URL:', url);
-                            } else {
-                                console.log('[DEBUG][_renderMarkdown] 复用缓存中的 URL:', url);
-                            }
-                            return {
-                                id,
-                                html: `<img src="${url}" alt="${alt}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
-                            };
-                        } else {
-                            console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                            return {id, html: `![${alt}](图片丢失)`};
-                        }
-                    }).catch(err => {
-                        console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                        return {id, html: `![${alt}](图片加载错误)`};
-                    })
-                );
-                return placeholder;
             } else {
-                console.log('[DEBUG][_renderMarkdown] 重复图片 id:', id, '保留原占位符');
-                return match;
-            }
-        });
 
-        // 替换 HTML 图片
-        processedText = processedText.replace(htmlImageRegex, (match, id) => {
-            console.log('[DEBUG][_renderMarkdown] 发现 HTML 图片占位符，id:', id);
-            if (!idSet.has(id)) {
-                idSet.add(id);
-                const placeholder = `<!--HTML_IMG_PLACEHOLDER_${id}-->`;
-                placeholders.push({id, placeholder, isHtml: true});
-                console.log('[DEBUG][_renderMarkdown] 创建 HTML 占位符:', placeholder);
-                imagePromises.push(
-                    ImageStore.get(id).then(blob => {
-                        console.log('[DEBUG][_renderMarkdown] 图片获取成功，id:', id, 'blob 存在:', !!blob);
-                        if (blob) {
-                            let url = UI._imageUrlCache.get(id);
-                            if (!url) {
-                                url = URL.createObjectURL(blob);
-                                UI._imageUrlCache.set(id, url);
-                                console.log('[DEBUG][_renderMarkdown] 创建新图片 URL:', url);
+            }
+
+            // ===== 判断是否为 HTML（文档或片段） =====
+            const trimmedLower = text.trim().toLowerCase();
+            const isHtmlDoc = trimmedLower.startsWith('<!doctype') ||
+                trimmedLower.startsWith('<html') ||
+                trimmedLower.startsWith('<head') ||
+                trimmedLower.startsWith('<body');
+            const hasHtmlTags = /<\/?[a-z][\s\S]*?>/i.test(text);
+            const treatAsHtml = isHtmlDoc || hasHtmlTags;
+
+
+            // ===== 处理图片占位符 =====
+            const markdownImageRegex = /!\[([^\]]*)\]\(id:([^)]+)\)/g;
+            const htmlImageRegex = /<img[^>]*src="id:([^"]+)"[^>]*>/g;
+
+            let processedText = text;
+            const imagePromises = [];
+            const placeholders = [];
+            const idSet = new Set();
+
+            // 新增：图片 URL 缓存，用于在模态框关闭时释放
+            if (!UI._imageUrlCache) UI._imageUrlCache = new Map();
+
+            // 替换 Markdown 图片
+            processedText = processedText.replace(markdownImageRegex, (match, alt, id) => {
+
+                if (!idSet.has(id)) {
+                    idSet.add(id);
+                    const placeholder = `<!--IMG_PLACEHOLDER_${id}-->`;
+                    placeholders.push({ id, placeholder, alt });
+
+                    imagePromises.push(
+                        ImageStore.get(id).then(blob => {
+
+                            if (blob) {
+                                // 检查缓存中是否已存在该 id 的 URL
+                                let url = UI._imageUrlCache.get(id);
+                                if (!url) {
+                                    url = URL.createObjectURL(blob);
+                                    UI._imageUrlCache.set(id, url);
+
+                                } else {
+
+                                }
+                                return {
+                                    id,
+                                    html: `<img src="${url}" alt="${alt}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
+                                };
                             } else {
-                                console.log('[DEBUG][_renderMarkdown] 复用缓存中的 URL:', url);
+                                console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
+                                return { id, html: `![${alt}](图片丢失)` };
                             }
-                            const altMatch = match.match(/alt="([^"]*)"/);
-                            const alt = altMatch ? altMatch[1] : '';
-                            const classMatch = match.match(/class="([^"]*)"/);
-                            const cls = classMatch ? classMatch[1] : '';
-                            console.log('[DEBUG][_renderMarkdown] 创建图片 URL:', url, 'alt:', alt, 'class:', cls);
-                            return {
-                                id,
-                                html: `<img src="${url}" alt="${alt}" class="${cls}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
-                            };
-                        } else {
-                            console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                            return {id, html: `[图片丢失: ${id}]`};
-                        }
-                    }).catch(err => {
-                        console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                        return {id, html: `[图片加载错误: ${id}]`};
-                    })
-                );
-                return placeholder;
-            } else {
-                console.log('[DEBUG][_renderMarkdown] 重复图片 id:', id, '保留原占位符');
-                return match;
-            }
-        });
+                        }).catch(err => {
+                            console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
+                            return { id, html: `![${alt}](图片加载错误)` };
+                        })
+                    );
+                    return placeholder;
+                } else {
 
-        console.log('[DEBUG][_renderMarkdown] 共发现图片 ID:', Array.from(idSet));
-        console.log('[DEBUG][_renderMarkdown] 占位符列表:', placeholders.map(p => p.placeholder));
+                    return match;
+                }
+            });
 
-        let html;
-        if (treatAsHtml) {
-            try {
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(processedText, 'text/html');
-                const styleTags = Array.from(doc.head?.querySelectorAll('style') || []);
-                const styleHTML = styleTags.map(style => style.outerHTML).join('');
-                const bodyHTML = doc.body?.innerHTML || '';
-                html = styleHTML + bodyHTML;
-                console.log('[DEBUG][_renderMarkdown] 提取后 HTML 长度:', html.length);
-                console.log('[DEBUG][_renderMarkdown] 提取后 HTML 预览:', html.substring(0, 200));
-            } catch (e) {
-                console.error('[DEBUG][_renderMarkdown] DOMParser 解析失败，降级返回原始文本:', e);
-                html = processedText;
-            }
-        } else {
-            if (typeof marked !== 'undefined') {
+            // 替换 HTML 图片
+            processedText = processedText.replace(htmlImageRegex, (match, id) => {
+
+                if (!idSet.has(id)) {
+                    idSet.add(id);
+                    const placeholder = `<!--HTML_IMG_PLACEHOLDER_${id}-->`;
+                    placeholders.push({ id, placeholder, isHtml: true });
+
+                    imagePromises.push(
+                        ImageStore.get(id).then(blob => {
+
+                            if (blob) {
+                                let url = UI._imageUrlCache.get(id);
+                                if (!url) {
+                                    url = URL.createObjectURL(blob);
+                                    UI._imageUrlCache.set(id, url);
+
+                                } else {
+
+                                }
+                                const altMatch = match.match(/alt="([^"]*)"/);
+                                const alt = altMatch ? altMatch[1] : '';
+                                const classMatch = match.match(/class="([^"]*)"/);
+                                const cls = classMatch ? classMatch[1] : '';
+
+                                return {
+                                    id,
+                                    html: `<img src="${url}" alt="${alt}" class="${cls}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
+                                };
+                            } else {
+                                console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
+                                return { id, html: `[图片丢失: ${id}]` };
+                            }
+                        }).catch(err => {
+                            console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
+                            return { id, html: `[图片加载错误: ${id}]` };
+                        })
+                    );
+                    return placeholder;
+                } else {
+
+                    return match;
+                }
+            });
+
+
+
+
+            let html;
+            if (treatAsHtml) {
                 try {
-                    html = marked.parse(processedText, {gfm: true, breaks: true});
-                    console.log('[DEBUG][_renderMarkdown] marked 解析成功，生成 HTML 长度:', html.length);
-                    console.log('[DEBUG][_renderMarkdown] 生成 HTML 前200字符:', html.substring(0, 200));
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(processedText, 'text/html');
+                    const styleTags = Array.from(doc.head?.querySelectorAll('style') || []);
+                    const styleHTML = styleTags.map(style => style.outerHTML).join('');
+                    const bodyHTML = doc.body?.innerHTML || '';
+                    html = styleHTML + bodyHTML;
+
+
                 } catch (e) {
-                    console.error('[DEBUG][_renderMarkdown] marked 解析失败:', e);
-                    html = `<pre style="color:#ff6b6b; background:#1e1e1e; padding:10px; border-radius:5px;">${this._escapeHtml(text)}</pre>`;
+                    console.error('[DEBUG][_renderMarkdown] DOMParser 解析失败，降级返回原始文本:', e);
+                    html = processedText;
                 }
             } else {
-                console.warn('[DEBUG][_renderMarkdown] marked 未定义，使用降级显示');
-                html = `<pre style="background:#1e1e1e; padding:10px; border-radius:5px;">${this._escapeHtml(text)}</pre>`;
-            }
-        }
+                if (typeof marked !== 'undefined') {
+                    try {
+                        html = marked.parse(processedText, { gfm: true, breaks: true });
 
-        if (imagePromises.length > 0) {
-            console.log('[DEBUG][_renderMarkdown] 等待所有图片 Promise 完成...');
-            Promise.all(imagePromises).then(results => {
-                const replaceMap = {};
-                results.forEach(r => {
-                    replaceMap[`<!--IMG_PLACEHOLDER_${r.id}-->`] = r.html;
-                    replaceMap[`<!--HTML_IMG_PLACEHOLDER_${r.id}-->`] = r.html;
-                    console.log('[DEBUG][_renderMarkdown] 为 id', r.id, '构建替换映射，html 预览:', r.html.substring(0, 50));
+
+                    } catch (e) {
+                        console.error('[DEBUG][_renderMarkdown] marked 解析失败:', e);
+                        html = `<pre style="color:#ff6b6b; background:#1e1e1e; padding:10px; border-radius:5px;">${this._escapeHtml(text)}</pre>`;
+                    }
+                } else {
+                    console.warn('[DEBUG][_renderMarkdown] marked 未定义，使用降级显示');
+                    html = `<pre style="background:#1e1e1e; padding:10px; border-radius:5px;">${this._escapeHtml(text)}</pre>`;
+                }
+            }
+
+            if (imagePromises.length > 0) {
+
+                Promise.all(imagePromises).then(results => {
+                    const replaceMap = {};
+                    results.forEach(r => {
+                        replaceMap[`<!--IMG_PLACEHOLDER_${r.id}-->`] = r.html;
+                        replaceMap[`<!--HTML_IMG_PLACEHOLDER_${r.id}-->`] = r.html;
+
+                    });
+
+                    const attemptReplace = (retryCount = 0) => {
+
+                        const containers = document.querySelectorAll('.markdown-body');
+
+
+                        let replacedAny = false;
+                        containers.forEach((container, idx) => {
+                            let innerHTML = container.innerHTML;
+                            let changed = false;
+                            for (const [placeholder, imgHtml] of Object.entries(replaceMap)) {
+                                if (innerHTML.includes(placeholder)) {
+                                    innerHTML = innerHTML.split(placeholder).join(imgHtml);
+                                    changed = true;
+                                    replacedAny = true;
+
+                                }
+                            }
+                            if (changed) {
+                                container.innerHTML = innerHTML;
+
+                            }
+                        });
+
+                        if (!replacedAny) {
+                            console.warn(`[DEBUG][_renderMarkdown] 第 ${retryCount} 次尝试未找到任何占位符`);
+                            if (retryCount < 5) {
+                                setTimeout(() => attemptReplace(retryCount + 1), 200);
+                            } else {
+                                console.error('[DEBUG][_renderMarkdown] 重试5次后仍无法替换图片占位符，请检查 DOM 结构');
+                            }
+                        } else {
+
+                        }
+                    };
+
+                    attemptReplace();
+                }).catch(err => {
+                    console.error('[DEBUG][_renderMarkdown] Promise.all 执行失败:', err);
+                });
+            } else {
+
+            }
+
+            return html;
+        },
+
+        _replaceImagePlaceholders : async function (html) {
+            console.time('_replaceImagePlaceholders');
+
+            const placeholderRegex = /src="id:([^"]+)"/g;
+            const matches = [...html.matchAll(placeholderRegex)];
+
+
+            if (matches.length === 0) {
+                console.timeEnd('_replaceImagePlaceholders');
+                return html;
+            }
+
+            let result = html;
+            for (const match of matches) {
+                const id = match[1];
+
+
+                if (id.startsWith('img_')) {
+                    const blob = await ImageStore.get(id);
+                    if (blob) {
+                        const url = URL.createObjectURL(blob);
+                        result = result.replace(match[0], `src="${url}"`);
+
+                    } else {
+                        console.warn('[replaceImagePlaceholders] 图片', id, '不存在');
+                        result = result.replace(match[0], `src="#" alt="图片丢失"`);
+                    }
+                } else if (id.startsWith('other_')) {
+
+                    const textObj = await OtherFileStore.get(id);
+                    if (textObj && textObj.text) {
+                        const mime = textObj.format === 'html' ? 'text/html' :
+                            textObj.format === 'js' ? 'application/javascript' :
+                                'text/plain';
+                        const blob = new Blob([textObj.text], { type: mime });
+                        const url = URL.createObjectURL(blob);
+                        replacement = `${attrName}="${url}"`;
+
+                    } else {
+                        console.warn(`[replaceImagePlaceholders] 其余文件 ${id} 不存在，替换为 #`);
+                        replacement = `${attrName}="#" alt="文件丢失"`;
+                    }
+                } else if (id.startsWith('audio_')) {
+                    const blob = await AudioStore.get(id);
+                    if (blob) {
+                        const url = URL.createObjectURL(blob);
+                        result = result.replace(match[0], `src="${url}"`);
+
+                    } else {
+                        console.warn('[replaceImagePlaceholders] 音频', id, '不存在');
+                        result = result.replace(match[0], `src="#" alt="音频丢失"`);
+                    }
+                } else {
+                    console.warn('[replaceImagePlaceholders] 未知ID前缀', id);
+                }
+            }
+            console.timeEnd('_replaceImagePlaceholders');
+            return result;
+        },
+
+        /**
+         * 显示主审核模态框
+         * @param {string} agentKey - Agent键
+         * @param {string} originalContent - Agent生成的原始输出
+         * @returns {Promise<{action: 'continue'|'reject', content?: string, suggestion?: string, attachType?: 'original'|'modified'}>}
+         */
+        showReviewModal : function (agentKey, originalContent) {
+
+            const agent = CONFIG.AGENTS[agentKey];
+            const agentName = getAgentDisplayName(agentKey);
+            const isHtml = this._detectHTML(originalContent);
+
+
+            return new Promise((resolve, reject) => {
+
+
+                // 创建遮罩层
+                const overlay = document.createElement('div');
+                overlay.className = 'nc-modal-overlay nc-font';
+                overlay.style.zIndex = '100100';
+                // 禁止点击遮罩关闭
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+
+                        e.stopPropagation();
+                    }
                 });
 
-                const attemptReplace = (retryCount = 0) => {
-                    console.log(`[DEBUG][_renderMarkdown] 第 ${retryCount} 次尝试替换占位符`);
-                    const containers = document.querySelectorAll('.markdown-body');
-                    console.log(`[DEBUG][_renderMarkdown] 找到 ${containers.length} 个 .markdown-body 容器`);
+                const modal = document.createElement('div');
+                modal.className = 'nc-modal';
+                modal.style.maxWidth = '900px';
+                modal.style.width = '100%';
+                modal.style.height = '80vh';
+                modal.style.display = 'flex';
+                modal.style.flexDirection = 'column';
 
-                    let replacedAny = false;
-                    containers.forEach((container, idx) => {
-                        let innerHTML = container.innerHTML;
-                        let changed = false;
-                        for (const [placeholder, imgHtml] of Object.entries(replaceMap)) {
-                            if (innerHTML.includes(placeholder)) {
-                                innerHTML = innerHTML.split(placeholder).join(imgHtml);
-                                changed = true;
-                                replacedAny = true;
-                                console.log(`[DEBUG][_renderMarkdown] 容器 ${idx} 已替换占位符:`, placeholder);
-                            }
-                        }
-                        if (changed) {
-                            container.innerHTML = innerHTML;
-                            console.log(`[DEBUG][_renderMarkdown] 容器 ${idx} 的 innerHTML 已更新`);
-                        }
-                    });
+                // 标题
+                const header = document.createElement('div');
+                header.className = 'nc-modal-header';
+                header.innerHTML = `<h2 style="margin:0;color:#667eea;">审核: ${this._escapeHtml(agentName)}</h2>`;
+                modal.appendChild(header);
 
-                    if (!replacedAny) {
-                        console.warn(`[DEBUG][_renderMarkdown] 第 ${retryCount} 次尝试未找到任何占位符`);
-                        if (retryCount < 5) {
-                            setTimeout(() => attemptReplace(retryCount + 1), 200);
-                        } else {
-                            console.error('[DEBUG][_renderMarkdown] 重试5次后仍无法替换图片占位符，请检查 DOM 结构');
-                        }
-                    } else {
-                        console.log('[DEBUG][_renderMarkdown] 图片占位符替换完成，共替换', Object.keys(replaceMap).length, '个占位符');
-                    }
-                };
+                // 内容区（flex:1）
+                const contentDiv = document.createElement('div');
+                contentDiv.style.flex = '1';
+                contentDiv.style.display = 'flex';
+                contentDiv.style.flexDirection = 'column';
+                contentDiv.style.overflow = 'hidden';
 
-                attemptReplace();
-            }).catch(err => {
-                console.error('[DEBUG][_renderMarkdown] Promise.all 执行失败:', err);
-            });
-        } else {
-            console.log('[DEBUG][_renderMarkdown] 无图片占位符需要替换，直接返回 HTML');
-        }
+                let textarea, previewContainer, sourceContainer;
+                let currentContent = originalContent; // 用于保存按钮暂存
 
-        return html;
-    };
+                if (isHtml) {
 
-    UI._replaceImagePlaceholders = async function (html) {
-        console.time('_replaceImagePlaceholders');
-        console.log('[replaceImagePlaceholders] 进入，HTML长度', html.length);
-        const placeholderRegex = /src="id:([^"]+)"/g;
-        const matches = [...html.matchAll(placeholderRegex)];
-        console.log('[replaceImagePlaceholders] 找到', matches.length, '个占位符');
+                    // 视图切换按钮
+                    const viewBar = document.createElement('div');
+                    viewBar.style.display = 'flex';
+                    viewBar.style.gap = '10px';
+                    viewBar.style.padding = '10px';
+                    viewBar.style.borderBottom = '1px solid #333';
 
-        if (matches.length === 0) {
-            console.timeEnd('_replaceImagePlaceholders');
-            return html;
-        }
-
-        let result = html;
-        for (const match of matches) {
-            const id = match[1];
-            console.log('[replaceImagePlaceholders] 处理ID:', id);
-
-            if (id.startsWith('img_')) {
-                const blob = await ImageStore.get(id);
-                if (blob) {
-                    const url = URL.createObjectURL(blob);
-                    result = result.replace(match[0], `src="${url}"`);
-                    console.log('[replaceImagePlaceholders] 图片替换成功，url已创建');
-                } else {
-                    console.warn('[replaceImagePlaceholders] 图片', id, '不存在');
-                    result = result.replace(match[0], `src="#" alt="图片丢失"`);
-                }
-            } else if (id.startsWith('other_')) {
-                console.log(`[replaceImagePlaceholders] 检测到其余文件ID ${id}，尝试替换为URL`);
-                const textObj = await OtherFileStore.get(id);
-                if (textObj && textObj.text) {
-                    const mime = textObj.format === 'html' ? 'text/html' :
-                        textObj.format === 'js' ? 'application/javascript' :
-                            'text/plain';
-                    const blob = new Blob([textObj.text], { type: mime });
-                    const url = URL.createObjectURL(blob);
-                    replacement = `${attrName}="${url}"`;
-                    console.log(`[replaceImagePlaceholders] 其余文件 ${id} 替换成功，url已创建 (${mime})`);
-                } else {
-                    console.warn(`[replaceImagePlaceholders] 其余文件 ${id} 不存在，替换为 #`);
-                    replacement = `${attrName}="#" alt="文件丢失"`;
-                }
-            } else if (id.startsWith('audio_')) {
-                const blob = await AudioStore.get(id);
-                if (blob) {
-                    const url = URL.createObjectURL(blob);
-                    result = result.replace(match[0], `src="${url}"`);
-                    console.log('[replaceImagePlaceholders] 音频替换成功，url已创建');
-                } else {
-                    console.warn('[replaceImagePlaceholders] 音频', id, '不存在');
-                    result = result.replace(match[0], `src="#" alt="音频丢失"`);
-                }
-            } else {
-                console.warn('[replaceImagePlaceholders] 未知ID前缀', id);
-            }
-        }
-        console.timeEnd('_replaceImagePlaceholders');
-        return result;
-    };
-
-    /**
-     * 显示主审核模态框
-     * @param {string} agentKey - Agent键
-     * @param {string} originalContent - Agent生成的原始输出
-     * @returns {Promise<{action: 'continue'|'reject', content?: string, suggestion?: string, attachType?: 'original'|'modified'}>}
-     */
-    UI.showReviewModal = function (agentKey, originalContent) {
-        console.log(`[UI.showReviewModal] ===== 进入审核模态框 ===== agentKey=${agentKey}, originalContent长度=${originalContent?.length}`);
-        const agent = CONFIG.AGENTS[agentKey];
-        const agentName = getAgentDisplayName(agentKey);
-        const isHtml = this._detectHTML(originalContent);
-        console.log(`[UI.showReviewModal] agentName=${agentName}, isHtml=${isHtml}`);
-
-        return new Promise((resolve, reject) => {
-            console.log('[UI.showReviewModal] Promise 已创建，开始构建模态框');
-
-            // 创建遮罩层
-            const overlay = document.createElement('div');
-            overlay.className = 'nc-modal-overlay nc-font';
-            overlay.style.zIndex = '100100';
-            // 禁止点击遮罩关闭
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) {
-                    console.log('[UI.showReviewModal] 遮罩点击已阻止关闭');
-                    e.stopPropagation();
-                }
-            });
-
-            const modal = document.createElement('div');
-            modal.className = 'nc-modal';
-            modal.style.maxWidth = '900px';
-            modal.style.width = '100%';
-            modal.style.height = '80vh';
-            modal.style.display = 'flex';
-            modal.style.flexDirection = 'column';
-
-            // 标题
-            const header = document.createElement('div');
-            header.className = 'nc-modal-header';
-            header.innerHTML = `<h2 style="margin:0;color:#667eea;">审核: ${this._escapeHtml(agentName)}</h2>`;
-            modal.appendChild(header);
-
-            // 内容区（flex:1）
-            const contentDiv = document.createElement('div');
-            contentDiv.style.flex = '1';
-            contentDiv.style.display = 'flex';
-            contentDiv.style.flexDirection = 'column';
-            contentDiv.style.overflow = 'hidden';
-
-            let textarea, previewContainer, sourceContainer;
-            let currentContent = originalContent; // 用于保存按钮暂存
-
-            if (isHtml) {
-                console.log('[UI.showReviewModal] 内容为HTML，构建双视图');
-                // 视图切换按钮
-                const viewBar = document.createElement('div');
-                viewBar.style.display = 'flex';
-                viewBar.style.gap = '10px';
-                viewBar.style.padding = '10px';
-                viewBar.style.borderBottom = '1px solid #333';
-
-                const sourceBtn = this._createButton('📄 源码', 'nc-btn-xs');
-                const previewBtn = this._createButton('🌐 预览', 'nc-btn-xs');
-                sourceBtn.style.background = '#667eea';
-                previewBtn.style.background = '#4a4a6a';
-
-                viewBar.appendChild(sourceBtn);
-                viewBar.appendChild(previewBtn);
-                contentDiv.appendChild(viewBar);
-
-                // 源码容器
-                sourceContainer = document.createElement('div');
-                sourceContainer.style.flex = '1';
-                sourceContainer.style.overflow = 'auto';
-                sourceContainer.style.padding = '10px';
-                sourceContainer.style.display = 'block';
-
-                textarea = document.createElement('textarea');
-                textarea.style.width = '100%';
-                textarea.style.height = '100%';
-                textarea.style.background = '#1e1e2e';
-                textarea.style.color = '#eaeaea';
-                textarea.style.border = '1px solid #667eea';
-                textarea.style.fontFamily = 'monospace';
-                textarea.style.fontSize = '12px';
-                textarea.style.padding = '8px';
-                textarea.value = originalContent;
-                sourceContainer.appendChild(textarea);
-
-                // 预览容器
-                previewContainer = document.createElement('div');
-                previewContainer.style.flex = '1';
-                previewContainer.style.overflow = 'auto';
-                previewContainer.style.padding = '10px';
-                previewContainer.style.display = 'none';
-                previewContainer.className = 'markdown-body';
-
-                contentDiv.appendChild(sourceContainer);
-                contentDiv.appendChild(previewContainer);
-
-                // 渲染预览函数
-                const renderPreview = async () => {
-                    console.log('[UI.showReviewModal] 开始渲染预览...');
-                    const raw = textarea.value;
-                    const processed = await this._replaceImagePlaceholders(raw);
-                    previewContainer.innerHTML = processed;
-                    // 执行脚本
-                    previewContainer.querySelectorAll('script').forEach(oldScript => {
-                        const newScript = document.createElement('script');
-                        Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
-                        newScript.textContent = oldScript.textContent;
-                        oldScript.parentNode.replaceChild(newScript, oldScript);
-                    });
-                    console.log('[UI.showReviewModal] 预览渲染完成');
-                };
-
-                // 视图切换
-                sourceBtn.addEventListener('click', () => {
-                    console.log('[UI.showReviewModal] 切换到源码视图');
-                    sourceContainer.style.display = 'block';
-                    previewContainer.style.display = 'none';
+                    const sourceBtn = this._createButton('📄 源码', 'nc-btn-xs');
+                    const previewBtn = this._createButton('🌐 预览', 'nc-btn-xs');
                     sourceBtn.style.background = '#667eea';
                     previewBtn.style.background = '#4a4a6a';
-                });
-                previewBtn.addEventListener('click', async () => {
-                    console.log('[UI.showReviewModal] 切换到预览视图');
-                    sourceContainer.style.display = 'none';
-                    previewContainer.style.display = 'block';
-                    sourceBtn.style.background = '#4a4a6a';
-                    previewBtn.style.background = '#667eea';
-                    await renderPreview();
-                });
-            } else {
-                console.log('[UI.showReviewModal] 内容为纯文本，使用单 textarea');
-                // 纯文本：直接一个大的 textarea
-                textarea = document.createElement('textarea');
-                textarea.style.width = '100%';
-                textarea.style.height = '100%';
-                textarea.style.background = '#1e1e2e';
-                textarea.style.color = '#eaeaea';
-                textarea.style.border = '1px solid #667eea';
-                textarea.style.fontFamily = 'monospace';
-                textarea.style.fontSize = '12px';
-                textarea.style.padding = '8px';
-                textarea.value = originalContent;
-                contentDiv.appendChild(textarea);
-            }
 
-            modal.appendChild(contentDiv);
+                    viewBar.appendChild(sourceBtn);
+                    viewBar.appendChild(previewBtn);
+                    contentDiv.appendChild(viewBar);
 
-            // 底部按钮 - 使用统一样式
-            const footer = document.createElement('div');
-            footer.className = 'nc-modal-footer';
-            footer.style.justifyContent = 'center';
-            footer.style.gap = '10px';
-            footer.style.padding = '15px 20px';   // 增加内边距，使按钮不贴边
+                    // 源码容器
+                    sourceContainer = document.createElement('div');
+                    sourceContainer.style.flex = '1';
+                    sourceContainer.style.overflow = 'auto';
+                    sourceContainer.style.padding = '10px';
+                    sourceContainer.style.display = 'block';
 
-            // 创建保存按钮 (使用保存样式，但功能是暂存)
-            const saveBtn = document.createElement('button');
-            saveBtn.className = 'nc-modal-copy-btn';
-            saveBtn.textContent = '💾 保存';
-            saveBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
-            saveBtn.style.color = 'white';
-            saveBtn.style.border = 'none';
+                    textarea = document.createElement('textarea');
+                    textarea.style.width = '100%';
+                    textarea.style.height = '100%';
+                    textarea.style.background = '#1e1e2e';
+                    textarea.style.color = '#eaeaea';
+                    textarea.style.border = '1px solid #667eea';
+                    textarea.style.fontFamily = 'monospace';
+                    textarea.style.fontSize = '12px';
+                    textarea.style.padding = '8px';
+                    textarea.value = originalContent;
+                    sourceContainer.appendChild(textarea);
 
-            // 创建继续按钮
-            const continueBtn = document.createElement('button');
-            continueBtn.className = 'nc-modal-copy-btn';
-            continueBtn.textContent = '▶️ 继续';
-            continueBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
-            continueBtn.style.color = 'white';
-            continueBtn.style.border = 'none';
+                    // 预览容器
+                    previewContainer = document.createElement('div');
+                    previewContainer.style.flex = '1';
+                    previewContainer.style.overflow = 'auto';
+                    previewContainer.style.padding = '10px';
+                    previewContainer.style.display = 'none';
+                    previewContainer.className = 'markdown-body';
 
-            // 创建打回按钮 (使用危险样式)
-            const rejectBtn = document.createElement('button');
-            rejectBtn.className = 'nc-modal-close-btn';
-            rejectBtn.textContent = '↩️ 打回';
-            rejectBtn.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
-            rejectBtn.style.color = 'white';
-            rejectBtn.style.border = 'none';
+                    contentDiv.appendChild(sourceContainer);
+                    contentDiv.appendChild(previewContainer);
 
-            footer.appendChild(saveBtn);
-            footer.appendChild(rejectBtn);
-            footer.appendChild(continueBtn);
-            modal.appendChild(footer);
+                    // 渲染预览函数
+                    const renderPreview = async () => {
 
-            overlay.appendChild(modal);
-            document.body.appendChild(overlay);
-            ModalStack.push(overlay);
-            console.log('[UI.showReviewModal] 模态框已添加到 DOM，ModalStack 长度:', ModalStack._stack.length);
+                        const raw = textarea.value;
+                        const processed = await this._replaceImagePlaceholders(raw);
+                        previewContainer.innerHTML = processed;
+                        // 执行脚本
+                        previewContainer.querySelectorAll('script').forEach(oldScript => {
+                            const newScript = document.createElement('script');
+                            Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                            newScript.textContent = oldScript.textContent;
+                            oldScript.parentNode.replaceChild(newScript, oldScript);
+                        });
 
-            // 内部状态：打回建议暂存
-            let rejectState = {
-                suggestion: '',
-                attachType: 'original' // 'original' 或 'modified'
-            };
+                    };
 
-            // 保存按钮：仅更新内部暂存，不关闭
-            saveBtn.addEventListener('click', () => {
-                console.log('[UI.showReviewModal] 点击保存按钮');
-                currentContent = textarea.value;
-                Notify.success('修改已保存，可继续编辑或预览');
-                if (previewContainer && previewContainer.style.display === 'block') {
-                    renderPreview(); // 刷新预览
+                    // 视图切换
+                    sourceBtn.addEventListener('click', () => {
+
+                        sourceContainer.style.display = 'block';
+                        previewContainer.style.display = 'none';
+                        sourceBtn.style.background = '#667eea';
+                        previewBtn.style.background = '#4a4a6a';
+                    });
+                    previewBtn.addEventListener('click', async () => {
+
+                        sourceContainer.style.display = 'none';
+                        previewContainer.style.display = 'block';
+                        sourceBtn.style.background = '#4a4a6a';
+                        previewBtn.style.background = '#667eea';
+                        await renderPreview();
+                    });
+                } else {
+
+                    // 纯文本：直接一个大的 textarea
+                    textarea = document.createElement('textarea');
+                    textarea.style.width = '100%';
+                    textarea.style.height = '100%';
+                    textarea.style.background = '#1e1e2e';
+                    textarea.style.color = '#eaeaea';
+                    textarea.style.border = '1px solid #667eea';
+                    textarea.style.fontFamily = 'monospace';
+                    textarea.style.fontSize = '12px';
+                    textarea.style.padding = '8px';
+                    textarea.value = originalContent;
+                    contentDiv.appendChild(textarea);
                 }
-            });
 
-            // 继续按钮
-            continueBtn.addEventListener('click', () => {
-                console.log('[UI.showReviewModal] 点击继续按钮');
-                const finalContent = textarea.value;
-                ModalStack.remove(overlay);
-                overlay.remove();
-                console.log('[UI.showReviewModal] 继续，resolve 结果:', {action: 'continue', content: finalContent});
-                resolve({action: 'continue', content: finalContent});
-            });
+                modal.appendChild(contentDiv);
 
-            // 打回按钮：打开次级框
-            rejectBtn.addEventListener('click', async () => {
-                console.log('[UI.showReviewModal] 点击打回按钮，准备打开次级框');
-                try {
-                    const rejectResult = await UI.showRejectModal(rejectState);
-                    console.log('[UI.showReviewModal] 次级框返回:', rejectResult);
-                    if (rejectResult) {
-                        // 更新 rejectState（保留输入）
-                        rejectState = rejectResult.state;
-                        ModalStack.remove(overlay);
-                        overlay.remove();
-                        console.log('[UI.showReviewModal] 打回，resolve 结果:', {
-                            action: 'reject',
-                            suggestion: rejectResult.suggestion,
-                            attachType: rejectResult.attachType
-                        });
-                        resolve({
-                            action: 'reject',
-                            suggestion: rejectResult.suggestion,
-                            attachType: rejectResult.attachType
-                        });
-                    } else {
-                        // 用户取消，不做任何事
-                        console.log('[UI.showReviewModal] 用户取消打回');
+                // 底部按钮 - 使用统一样式
+                const footer = document.createElement('div');
+                footer.className = 'nc-modal-footer';
+                footer.style.justifyContent = 'center';
+                footer.style.gap = '10px';
+                footer.style.padding = '15px 20px';   // 增加内边距，使按钮不贴边
+
+                // 创建保存按钮 (使用保存样式，但功能是暂存)
+                const saveBtn = document.createElement('button');
+                saveBtn.className = 'nc-modal-copy-btn';
+                saveBtn.textContent = '💾 保存';
+                saveBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+                saveBtn.style.color = 'white';
+                saveBtn.style.border = 'none';
+
+                // 创建继续按钮
+                const continueBtn = document.createElement('button');
+                continueBtn.className = 'nc-modal-copy-btn';
+                continueBtn.textContent = '▶️ 继续';
+                continueBtn.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+                continueBtn.style.color = 'white';
+                continueBtn.style.border = 'none';
+
+                // 创建打回按钮 (使用危险样式)
+                const rejectBtn = document.createElement('button');
+                rejectBtn.className = 'nc-modal-close-btn';
+                rejectBtn.textContent = '↩️ 打回';
+                rejectBtn.style.background = 'linear-gradient(135deg, #dc3545, #c82333)';
+                rejectBtn.style.color = 'white';
+                rejectBtn.style.border = 'none';
+
+                footer.appendChild(saveBtn);
+                footer.appendChild(rejectBtn);
+                footer.appendChild(continueBtn);
+                modal.appendChild(footer);
+
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+                ModalStack.push(overlay);
+
+
+                // 内部状态：打回建议暂存
+                let rejectState = {
+                    suggestion: '',
+                    attachType: 'original' // 'original' 或 'modified'
+                };
+
+                // 保存按钮：仅更新内部暂存，不关闭
+                saveBtn.addEventListener('click', () => {
+
+                    currentContent = textarea.value;
+                    Notify.success('修改已保存，可继续编辑或预览');
+                    if (previewContainer && previewContainer.style.display === 'block') {
+                        renderPreview(); // 刷新预览
                     }
-                } catch (err) {
-                    console.error('[UI.showReviewModal] 次级框异常:', err);
-                    Notify.error('打回操作异常');
-                }
-            });
+                });
 
-            // 中断监听
-            const interruptInterval = setInterval(() => {
-                if (WORKFLOW_STATE.shouldStop) {
-                    console.log('[UI.showReviewModal] 检测到工作流中断，关闭审核框');
-                    clearInterval(interruptInterval);
+                // 继续按钮
+                continueBtn.addEventListener('click', () => {
+
+                    const finalContent = textarea.value;
                     ModalStack.remove(overlay);
                     overlay.remove();
-                    reject(new UserInterruptError());
-                }
-            }, 200);
-            console.log('[UI.showReviewModal] 已启动中断监听');
-        });
-    };
 
-    /**
-     * 显示打回建议模态框
-     * @param {Object} initialState - 初始状态 { suggestion, attachType }
-     * @returns {Promise<{suggestion: string, attachType: 'original'|'modified', state: Object} | null>} null表示取消
-     */
-    UI.showRejectModal = function (initialState) {
-        console.log('[UI.showRejectModal] ===== 进入打回模态框 ===== initialState=', initialState);
-        return new Promise((resolve) => {
-            console.log('[UI.showRejectModal] Promise 已创建，开始构建模态框');
-            const overlay = document.createElement('div');
-            overlay.className = 'nc-modal-overlay nc-font';
-            overlay.style.zIndex = '100200';
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) {
-                    console.log('[UI.showRejectModal] 遮罩点击已阻止关闭');
-                    e.stopPropagation();
-                }
+                    resolve({ action: 'continue', content: finalContent });
+                });
+
+                // 打回按钮：打开次级框
+                rejectBtn.addEventListener('click', async () => {
+
+                    try {
+                        const rejectResult = await UI.showRejectModal(rejectState);
+
+                        if (rejectResult) {
+                            // 更新 rejectState（保留输入）
+                            rejectState = rejectResult.state;
+                            ModalStack.remove(overlay);
+                            overlay.remove();
+                            console.log('[UI.showReviewModal] 打回，resolve 结果:', {
+                                action: 'reject',
+                                suggestion: rejectResult.suggestion,
+                                attachType: rejectResult.attachType
+                            });
+                            resolve({
+                                action: 'reject',
+                                suggestion: rejectResult.suggestion,
+                                attachType: rejectResult.attachType
+                            });
+                        } else {
+                            // 用户取消，不做任何事
+
+                        }
+                    } catch (err) {
+                        console.error('[UI.showReviewModal] 次级框异常:', err);
+                        Notify.error('打回操作异常');
+                    }
+                });
+
+                // 中断监听
+                const interruptInterval = setInterval(() => {
+                    if (WORKFLOW_STATE.shouldStop) {
+
+                        clearInterval(interruptInterval);
+                        ModalStack.remove(overlay);
+                        overlay.remove();
+                        reject(new UserInterruptError());
+                    }
+                }, 200);
+
             });
+        },
 
-            const modal = document.createElement('div');
-            modal.className = 'nc-modal';
-            modal.style.maxWidth = '500px';
-            modal.style.width = '100%';
+        /**
+         * 显示打回建议模态框
+         * @param {Object} initialState - 初始状态 { suggestion, attachType }
+         * @returns {Promise<{suggestion: string, attachType: 'original'|'modified', state: Object} | null>} null表示取消
+         */
+        showRejectModal : function (initialState) {
 
-            modal.innerHTML = `
+            return new Promise((resolve) => {
+
+                const overlay = document.createElement('div');
+                overlay.className = 'nc-modal-overlay nc-font';
+                overlay.style.zIndex = '100200';
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+
+                        e.stopPropagation();
+                    }
+                });
+
+                const modal = document.createElement('div');
+                modal.className = 'nc-modal';
+                modal.style.maxWidth = '500px';
+                modal.style.width = '100%';
+
+                modal.innerHTML = `
             <div class="nc-modal-header">
                 <h2 style="margin:0;color:#667eea;">打回原因与建议</h2>
             </div>
@@ -12048,155 +12789,155 @@
             </div>
         `;
 
-            overlay.appendChild(modal);
-            document.body.appendChild(overlay);
-            ModalStack.push(overlay);
-            console.log('[UI.showRejectModal] 模态框已添加到 DOM，ModalStack 长度:', ModalStack._stack.length);
+                overlay.appendChild(modal);
+                document.body.appendChild(overlay);
+                ModalStack.push(overlay);
 
-            const suggestionInput = modal.querySelector('#nc-reject-suggestion');
-            const originalRadio = modal.querySelector('input[value="original"]');
-            const modifiedRadio = modal.querySelector('input[value="modified"]');
-            const confirmBtn = modal.querySelector('#nc-reject-confirm');
-            const cancelBtn = modal.querySelector('#nc-reject-cancel');
 
-            // 实时更新状态
-            const getCurrentState = () => ({
-                suggestion: suggestionInput.value,
-                attachType: originalRadio.checked ? 'original' : 'modified'
-            });
+                const suggestionInput = modal.querySelector('#nc-reject-suggestion');
+                const originalRadio = modal.querySelector('input[value="original"]');
+                const modifiedRadio = modal.querySelector('input[value="modified"]');
+                const confirmBtn = modal.querySelector('#nc-reject-confirm');
+                const cancelBtn = modal.querySelector('#nc-reject-cancel');
 
-            confirmBtn.addEventListener('click', () => {
-                console.log('[UI.showRejectModal] 点击确认打回');
-                const state = getCurrentState();
-                ModalStack.remove(overlay);
-                overlay.remove();
-                console.log('[UI.showRejectModal] 打回结果:', {
-                    suggestion: state.suggestion,
-                    attachType: state.attachType,
-                    state: state
+                // 实时更新状态
+                const getCurrentState = () => ({
+                    suggestion: suggestionInput.value,
+                    attachType: originalRadio.checked ? 'original' : 'modified'
                 });
-                resolve({
-                    suggestion: state.suggestion,
-                    attachType: state.attachType,
-                    state: state
-                });
-            });
 
-            cancelBtn.addEventListener('click', () => {
-                console.log('[UI.showRejectModal] 点击取消');
-                const state = getCurrentState();
-                ModalStack.remove(overlay);
-                overlay.remove();
-                console.log('[UI.showRejectModal] 取消，resolve null');
-                resolve(null);
-            });
+                confirmBtn.addEventListener('click', () => {
 
-            // 中断监听
-            const interruptInterval = setInterval(() => {
-                if (WORKFLOW_STATE.shouldStop) {
-                    console.log('[UI.showRejectModal] 检测到工作流中断，关闭');
-                    clearInterval(interruptInterval);
+                    const state = getCurrentState();
                     ModalStack.remove(overlay);
                     overlay.remove();
+                    console.log('[UI.showRejectModal] 打回结果:', {
+                        suggestion: state.suggestion,
+                        attachType: state.attachType,
+                        state: state
+                    });
+                    resolve({
+                        suggestion: state.suggestion,
+                        attachType: state.attachType,
+                        state: state
+                    });
+                });
+
+                cancelBtn.addEventListener('click', () => {
+
+                    const state = getCurrentState();
+                    ModalStack.remove(overlay);
+                    overlay.remove();
+
                     resolve(null);
-                }
-            }, 200);
-            console.log('[UI.showRejectModal] 已启动中断监听');
-        });
-    };
+                });
 
-    /**
-     * 显示独立预览模态框
-     * @param {string} content - 要预览的HTML内容
-     * @param {string} title - 预览标题
-     */
-    UI.showPreviewModal = async function (content, title = '预览') {
-        console.log(`[UI.showPreviewModal] ===== 进入预览模态框 ===== content长度=${content?.length}`);
-        const overlay = document.createElement('div');
-        overlay.className = 'nc-modal-overlay nc-font';
-        overlay.style.zIndex = '100300';
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) {
-                console.log('[UI.showPreviewModal] 遮罩点击关闭');
-                this._closeModal(overlay);
-            }
-        });
+                // 中断监听
+                const interruptInterval = setInterval(() => {
+                    if (WORKFLOW_STATE.shouldStop) {
 
-        const modal = document.createElement('div');
-        modal.className = 'nc-modal';
-        modal.style.maxWidth = '800px';
-        modal.style.width = '100%';
-        modal.style.height = '80vh';
-        modal.style.display = 'flex';
-        modal.style.flexDirection = 'column';
+                        clearInterval(interruptInterval);
+                        ModalStack.remove(overlay);
+                        overlay.remove();
+                        resolve(null);
+                    }
+                }, 200);
 
-        const header = document.createElement('div');
-        header.className = 'nc-modal-header';
-        header.innerHTML = `<h2 style="margin:0;color:#667eea;">${this._escapeHtml(title)}</h2>`;
-        modal.appendChild(header);
-
-        const body = document.createElement('div');
-        body.className = 'nc-modal-body markdown-body';
-        body.style.flex = '1';
-        body.style.overflow = 'auto';
-        body.style.padding = '12px';
-        body.innerHTML = '加载预览中...';
-        modal.appendChild(body);
-
-        const footer = document.createElement('div');
-        footer.className = 'nc-modal-footer';
-        const closeBtn = this._createButton('关闭', 'nc-modal-close-btn');
-        closeBtn.addEventListener('click', () => this._closeModal(overlay));
-        footer.appendChild(closeBtn);
-        modal.appendChild(footer);
-
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-        this._openModal(overlay);
-
-        // 异步渲染内容
-        try {
-            const processed = await this._replaceImagePlaceholders(content);
-            body.innerHTML = processed;
-            // 执行脚本
-            body.querySelectorAll('script').forEach(oldScript => {
-                const newScript = document.createElement('script');
-                Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
-                newScript.textContent = oldScript.textContent;
-                oldScript.parentNode.replaceChild(newScript, oldScript);
             });
-            console.log('[UI.showPreviewModal] 预览渲染完成');
-        } catch (err) {
-            console.error('[UI.showPreviewModal] 预览渲染失败', err);
-            body.innerHTML = `<div style="color:#ff6b6b;">预览失败: ${err.message}</div>`;
-        }
-    };
+        },
 
-    /**
-     * 创建统一风格的按钮（简化）
-     */
-    UI._createButton = function (text, className = 'nc-btn') {
-        const btn = document.createElement('button');
-        btn.className = className;
-        btn.textContent = text;
-        return btn;
-    };
+        /**
+         * 显示独立预览模态框
+         * @param {string} content - 要预览的HTML内容
+         * @param {string} title - 预览标题
+         */
+        showPreviewModal : async function (content, title = '预览') {
 
-    UI.openConfigGUI = async function () {
-        console.log('[ConfigGUI] ========== 打开配置编辑器（优化版） ==========');
+            const overlay = document.createElement('div');
+            overlay.className = 'nc-modal-overlay nc-font';
+            overlay.style.zIndex = '100300';
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
 
-        const existing = document.querySelector('#nc-config-gui-overlay');
-        if (existing) {
-            UI._closeModal(existing);
-            return;
-        }
+                    this._closeModal(overlay);
+                }
+            });
 
-        // 动态添加样式（仅在当前编辑器有效）
-        const styleId = 'nc-config-gui-styles';
-        if (!document.getElementById(styleId)) {
-            const style = document.createElement('style');
-            style.id = styleId;
-            style.textContent = `
+            const modal = document.createElement('div');
+            modal.className = 'nc-modal';
+            modal.style.maxWidth = '800px';
+            modal.style.width = '100%';
+            modal.style.height = '80vh';
+            modal.style.display = 'flex';
+            modal.style.flexDirection = 'column';
+
+            const header = document.createElement('div');
+            header.className = 'nc-modal-header';
+            header.innerHTML = `<h2 style="margin:0;color:#667eea;">${this._escapeHtml(title)}</h2>`;
+            modal.appendChild(header);
+
+            const body = document.createElement('div');
+            body.className = 'nc-modal-body markdown-body';
+            body.style.flex = '1';
+            body.style.overflow = 'auto';
+            body.style.padding = '12px';
+            body.innerHTML = '加载预览中...';
+            modal.appendChild(body);
+
+            const footer = document.createElement('div');
+            footer.className = 'nc-modal-footer';
+            const closeBtn = this._createButton('关闭', 'nc-modal-close-btn');
+            closeBtn.addEventListener('click', () => this._closeModal(overlay));
+            footer.appendChild(closeBtn);
+            modal.appendChild(footer);
+
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+            this._openModal(overlay);
+
+            // 异步渲染内容
+            try {
+                const processed = await this._replaceImagePlaceholders(content);
+                body.innerHTML = processed;
+                // 执行脚本
+                body.querySelectorAll('script').forEach(oldScript => {
+                    const newScript = document.createElement('script');
+                    Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                    newScript.textContent = oldScript.textContent;
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                });
+
+            } catch (err) {
+                console.error('[UI.showPreviewModal] 预览渲染失败', err);
+                body.innerHTML = `<div style="color:#ff6b6b;">预览失败: ${err.message}</div>`;
+            }
+        },
+
+        /**
+         * 创建统一风格的按钮（简化）
+         */
+        _createButton : function (text, className = 'nc-btn') {
+            const btn = document.createElement('button');
+            btn.className = className;
+            btn.textContent = text;
+            return btn;
+        },
+
+        openConfigGUI : async function () {
+
+
+            const existing = document.querySelector('#nc-config-gui-overlay');
+            if (existing) {
+                UI._closeModal(existing);
+                return;
+            }
+
+            // 动态添加样式（仅在当前编辑器有效）
+            const styleId = 'nc-config-gui-styles';
+            if (!document.getElementById(styleId)) {
+                const style = document.createElement('style');
+                style.id = styleId;
+                style.textContent = `
             .nc-config-editor * {
                 box-sizing: border-box;
             }
@@ -12446,29 +13187,29 @@
                 border-color: #667eea;
             }
         `;
-            document.head.appendChild(style);
-        }
+                document.head.appendChild(style);
+            }
 
-        const overlay = document.createElement('div');
-        overlay.id = 'nc-config-gui-overlay';
-        overlay.className = 'nc-overlay nc-font nc-config-editor';
-        overlay.style.zIndex = '100080';
+            const overlay = document.createElement('div');
+            overlay.id = 'nc-config-gui-overlay';
+            overlay.className = 'nc-overlay nc-font nc-config-editor';
+            overlay.style.zIndex = '100080';
 
-        const modal = document.createElement('div');
-        modal.className = 'nc-modal';
-        modal.style.maxWidth = '1400px';
-        modal.style.width = '95vw';
-        modal.style.height = '85vh';
-        modal.style.padding = '0';
-        modal.style.display = 'flex';
-        modal.style.flexDirection = 'column';
-        modal.style.background = '#1a1a2e';
-        modal.style.borderRadius = '16px';
-        modal.style.overflow = 'hidden';
+            const modal = document.createElement('div');
+            modal.className = 'nc-modal';
+            modal.style.maxWidth = '1400px';
+            modal.style.width = '95vw';
+            modal.style.height = '85vh';
+            modal.style.padding = '0';
+            modal.style.display = 'flex';
+            modal.style.flexDirection = 'column';
+            modal.style.background = '#1a1a2e';
+            modal.style.borderRadius = '16px';
+            modal.style.overflow = 'hidden';
 
-        // 标题栏
-        const header = document.createElement('div');
-        header.style.cssText = `
+            // 标题栏
+            const header = document.createElement('div');
+            header.style.cssText = `
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -12477,7 +13218,7 @@
         background: rgba(0,0,0,0.25);
         flex-shrink: 0;
     `;
-        header.innerHTML = `
+            header.innerHTML = `
         <span style="font-size: 18px; font-weight: 600; color: #667eea;">⚙️ 配置文件可视化编辑器</span>
         <div style="display: flex; gap: 8px;">
             <button id="nc-config-load-current" class="toolbar-btn">📂 加载当前配置</button>
@@ -12488,19 +13229,19 @@
             <button id="nc-config-close" class="toolbar-btn">❌ 关闭</button>
         </div>
     `;
-        modal.appendChild(header);
+            modal.appendChild(header);
 
-        // 主内容区
-        const main = document.createElement('div');
-        main.style.cssText = 'flex:1; display:flex; overflow:hidden; min-height:0;';
-        modal.appendChild(main);
+            // 主内容区
+            const main = document.createElement('div');
+            main.style.cssText = 'flex:1; display:flex; overflow:hidden; min-height:0;';
+            modal.appendChild(main);
 
-        // --- 左侧资源面板（使用新样式类）---
-        const resourcePanel = document.createElement('div');
-        resourcePanel.className = 'resource-panel';
+            // --- 左侧资源面板（使用新样式类）---
+            const resourcePanel = document.createElement('div');
+            resourcePanel.className = 'resource-panel';
 
-        // Agent管理区域
-        resourcePanel.innerHTML = `
+            // Agent管理区域
+            resourcePanel.innerHTML = `
         <div class="resource-section">
             <div class="resource-header">
                 <span>🤖 Agent管理</span>
@@ -12530,413 +13271,484 @@
             <div id="nc-group-list" class="resource-list"></div>
         </div>
     `;
-        main.appendChild(resourcePanel);
+            main.appendChild(resourcePanel);
 
-        // 画布容器（保留原有，增加阴影）
-        const canvasContainer = document.createElement('div');
-        canvasContainer.style.cssText = 'flex:2; background:#0f172a; position:relative; overflow:hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.5);';
-        const canvas = document.createElement('canvas');
-        canvas.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%;';
-        canvasContainer.appendChild(canvas);
-        main.appendChild(canvasContainer);
+            // 画布容器（保留原有，增加阴影）
+            const canvasContainer = document.createElement('div');
+            canvasContainer.style.cssText = 'flex:2; background:#0f172a; position:relative; overflow:hidden; box-shadow: inset 0 0 20px rgba(0,0,0,0.5);';
+            const canvas = document.createElement('canvas');
+            canvas.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%;';
+            canvasContainer.appendChild(canvas);
+            main.appendChild(canvasContainer);
 
-        // 右侧属性面板（使用新样式类）
-        const propertyPanel = document.createElement('div');
-        propertyPanel.id = 'nc-config-property-panel';
-        propertyPanel.className = 'property-panel';
-        propertyPanel.innerHTML = '<div style="color:#aaa; text-align:center; padding:30px;">选择一个节点、API、分类或组查看属性</div>';
-        main.appendChild(propertyPanel);
+            // 右侧属性面板（使用新样式类）
+            const propertyPanel = document.createElement('div');
+            propertyPanel.id = 'nc-config-property-panel';
+            propertyPanel.className = 'property-panel';
+            propertyPanel.innerHTML = '<div style="color:#aaa; text-align:center; padding:30px;">选择一个节点、API、分类或组查看属性</div>';
+            main.appendChild(propertyPanel);
 
-        overlay.appendChild(modal);
-        document.body.appendChild(overlay);
-        UI._openModal(overlay);
+            overlay.appendChild(modal);
+            document.body.appendChild(overlay);
+            UI._openModal(overlay);
 
-        const currentConfig = UI._getCurrentConfigForEditor();
-        const editor = new ConfigEditor(canvas, propertyPanel, currentConfig, {
-            onConfigChange: (newConfig) => {
-                console.log('[ConfigGUI] 配置已变更');
-                window.__editorConfig = newConfig;
-                renderResourceLists(editor);
-            },
-            onSelect: (selected) => {
-                // 属性面板已由编辑器内部更新
-            }
-        });
+            const currentConfig = UI._getCurrentConfigForEditor();
+            const editor = new ConfigEditor(canvas, propertyPanel, currentConfig, {
+                onConfigChange: (newConfig) => {
 
-        overlay.editor = editor;
+                    window.__editorConfig = newConfig;
+                    renderResourceLists(editor);
+                },
+                onSelect: (selected) => {
+                    // 属性面板已由编辑器内部更新
+                }
+            });
 
-        // 渲染左侧资源列表的函数（使用新样式类）
-        const renderResourceLists = (editor) => {
-            const config = editor.config;
-            // Agent 列表
-            const agentList = resourcePanel.querySelector('#nc-agent-list');
-            agentList.innerHTML = '';
-            Object.keys(config.agents || {}).forEach(key => {
-                const div = document.createElement('div');
-                div.className = 'resource-item';
-                div.setAttribute('data-agent', key);
-                div.innerHTML = `
+            overlay.editor = editor;
+
+            // 渲染左侧资源列表的函数（使用新样式类）
+            const renderResourceLists = (editor) => {
+                const config = editor.config;
+                // Agent 列表
+                const agentList = resourcePanel.querySelector('#nc-agent-list');
+                agentList.innerHTML = '';
+                Object.keys(config.agents || {}).forEach(key => {
+                    const div = document.createElement('div');
+                    div.className = 'resource-item';
+                    div.setAttribute('data-agent', key);
+                    div.innerHTML = `
                 <span>${key}</span>
                 <span class="delete-icon" data-action="delete-agent" data-agent="${key}">✖</span>
             `;
-                div.addEventListener('click', async (e) => {
-                    if (e.target.classList.contains('delete-icon')) {
-                        e.stopPropagation();
-                        const confirmed = await UI.showConfirmModal(`确定删除Agent ${key} 吗？`, '确认删除');
-                        if (!confirmed) return;
-                        config.workflowStages.forEach(stage => {
-                            stage.agents = stage.agents.filter(k => k !== key);
-                        });
-                        delete config.agents[key];
-                        editor.loadConfig(config);
-                        renderResourceLists(editor);
-                        if (editor.callbacks.onConfigChange) editor.callbacks.onConfigChange(config);
-                    } else {
-                        editor.selectAgent(key);
-                    }
+                    div.addEventListener('click', async (e) => {
+                        if (e.target.classList.contains('delete-icon')) {
+                            e.stopPropagation();
+                            const confirmed = await UI.showConfirmModal(`确定删除Agent ${key} 吗？`, '确认删除');
+                            if (!confirmed) return;
+                            config.workflowStages.forEach(stage => {
+                                stage.agents = stage.agents.filter(k => k !== key);
+                            });
+                            delete config.agents[key];
+                            editor.loadConfig(config);
+                            renderResourceLists(editor);
+                            if (editor.callbacks.onConfigChange) editor.callbacks.onConfigChange(config);
+                        } else {
+                            editor.selectAgent(key);
+                        }
+                    });
+                    agentList.appendChild(div);
                 });
-                agentList.appendChild(div);
-            });
 
-            // API 列表
-            const apiList = resourcePanel.querySelector('#nc-api-list');
-            apiList.innerHTML = '';
-            Object.keys(config.apiConfigs || {}).forEach(id => {
-                const item = document.createElement('div');
-                item.className = 'resource-item';
-                item.setAttribute('data-api-id', id);
-                item.innerHTML = `
+                // API 列表
+                const apiList = resourcePanel.querySelector('#nc-api-list');
+                apiList.innerHTML = '';
+                Object.keys(config.apiConfigs || {}).forEach(id => {
+                    const item = document.createElement('div');
+                    item.className = 'resource-item';
+                    item.setAttribute('data-api-id', id);
+                    item.innerHTML = `
                 <span>${id}</span>
                 <span class="delete-icon" data-action="delete-api" data-api="${id}">✖</span>
             `;
-                item.addEventListener('click', async (e) => {
-                    if (e.target.classList.contains('delete-icon')) {
-                        e.stopPropagation();
-                        const confirmed = await UI.showConfirmModal(`确定删除API配置 ${id} 吗？`);
-                        if (!confirmed) return;
-                        config.workflowStages.forEach(stage => {
-                            stage.agents = stage.agents.filter(k => k !== key);
-                        });
-                        delete config.agents[key];
-                        editor.loadConfig(config);
-                        renderResourceLists(editor);
-                        if (editor.callbacks.onConfigChange) editor.callbacks.onConfigChange(config);
-                    } else {
-                        editor.selectApiConfig(id);
-                    }
+                    item.addEventListener('click', async (e) => {
+                        if (e.target.classList.contains('delete-icon')) {
+                            e.stopPropagation();
+                            const confirmed = await UI.showConfirmModal(`确定删除API配置 ${id} 吗？`);
+                            if (!confirmed) return;
+                            config.workflowStages.forEach(stage => {
+                                stage.agents = stage.agents.filter(k => k !== key);
+                            });
+                            delete config.agents[key];
+                            editor.loadConfig(config);
+                            renderResourceLists(editor);
+                            if (editor.callbacks.onConfigChange) editor.callbacks.onConfigChange(config);
+                        } else {
+                            editor.selectApiConfig(id);
+                        }
+                    });
+                    apiList.appendChild(item);
                 });
-                apiList.appendChild(item);
-            });
 
-            // 分类列表
-            const categoryList = resourcePanel.querySelector('#nc-category-list');
-            categoryList.innerHTML = '';
-            Object.keys(config.categories || {}).forEach(id => {
-                const cat = config.categories[id];
-                const item = document.createElement('div');
-                item.className = 'resource-item';
-                item.setAttribute('data-category', id);
-                item.innerHTML = `
+                // 分类列表
+                const categoryList = resourcePanel.querySelector('#nc-category-list');
+                categoryList.innerHTML = '';
+                Object.keys(config.categories || {}).forEach(id => {
+                    const cat = config.categories[id];
+                    const item = document.createElement('div');
+                    item.className = 'resource-item';
+                    item.setAttribute('data-category', id);
+                    item.innerHTML = `
                 <span>${id} (${cat?.name || ''})</span>
                 <span class="delete-icon" data-action="delete-category" data-category="${id}">✖</span>
             `;
-                item.addEventListener('click', async (e) => {
-                    if (e.target.classList.contains('delete-icon')) {
-                        e.stopPropagation();
-                        const confirmed = await UI.showConfirmModal(`确定删除分类 ${id} 吗？`);
-                        if (!confirmed) return;
-                        config.workflowStages.forEach(stage => {
-                            stage.agents = stage.agents.filter(k => k !== key);
-                        });
-                        delete config.agents[key];
-                        editor.loadConfig(config);
-                        renderResourceLists(editor);
-                        if (editor.callbacks.onConfigChange) editor.callbacks.onConfigChange(config);
-                    } else {
-                        editor.selectCategory(id);
-                    }
+                    item.addEventListener('click', async (e) => {
+                        if (e.target.classList.contains('delete-icon')) {
+                            e.stopPropagation();
+                            const confirmed = await UI.showConfirmModal(`确定删除分类 ${id} 吗？`);
+                            if (!confirmed) return;
+                            config.workflowStages.forEach(stage => {
+                                stage.agents = stage.agents.filter(k => k !== key);
+                            });
+                            delete config.agents[key];
+                            editor.loadConfig(config);
+                            renderResourceLists(editor);
+                            if (editor.callbacks.onConfigChange) editor.callbacks.onConfigChange(config);
+                        } else {
+                            editor.selectCategory(id);
+                        }
+                    });
+                    categoryList.appendChild(item);
                 });
-                categoryList.appendChild(item);
-            });
 
-            // 互斥组列表
-            const groupList = resourcePanel.querySelector('#nc-group-list');
-            groupList.innerHTML = '';
-            (config.categoryGroups || []).forEach((group, index) => {
-                const groupName = group.name || `组${index + 1}`;
-                const item = document.createElement('div');
-                item.className = 'resource-item';
-                item.setAttribute('data-group-index', index);
-                item.innerHTML = `
+                // 互斥组列表
+                const groupList = resourcePanel.querySelector('#nc-group-list');
+                groupList.innerHTML = '';
+                (config.categoryGroups || []).forEach((group, index) => {
+                    const groupName = group.name || `组${index + 1}`;
+                    const item = document.createElement('div');
+                    item.className = 'resource-item';
+                    item.setAttribute('data-group-index', index);
+                    item.innerHTML = `
                 <span>${groupName}</span>
                 <span class="delete-icon" data-action="delete-group" data-group-index="${index}">✖</span>
             `;
-                item.addEventListener('click', async (e) => {
-                    if (e.target.classList.contains('delete-icon')) {
-                        e.stopPropagation();
-                        const confirmed = await UI.showConfirmModal(`确定删除互斥组 ${groupName} 吗？`);
-                        if (!confirmed) return;
-                        config.workflowStages.forEach(stage => {
-                            stage.agents = stage.agents.filter(k => k !== key);
-                        });
-                        delete config.agents[key];
-                        editor.loadConfig(config);
-                        renderResourceLists(editor);
-                        if (editor.callbacks.onConfigChange) editor.callbacks.onConfigChange(config);
-                    } else {
-                        editor.selectGroup(index);
-                    }
+                    item.addEventListener('click', async (e) => {
+                        if (e.target.classList.contains('delete-icon')) {
+                            e.stopPropagation();
+                            const confirmed = await UI.showConfirmModal(`确定删除互斥组 ${groupName} 吗？`);
+                            if (!confirmed) return;
+                            config.workflowStages.forEach(stage => {
+                                stage.agents = stage.agents.filter(k => k !== key);
+                            });
+                            delete config.agents[key];
+                            editor.loadConfig(config);
+                            renderResourceLists(editor);
+                            if (editor.callbacks.onConfigChange) editor.callbacks.onConfigChange(config);
+                        } else {
+                            editor.selectGroup(index);
+                        }
+                    });
+                    groupList.appendChild(item);
                 });
-                groupList.appendChild(item);
-            });
-        };
+            };
 
-        renderResourceLists(editor);
-
-        // 绑定顶部按钮事件（保持不变）
-        modal.querySelector('#nc-config-load-current').addEventListener('click', () => {
-            const newConfig = UI._getCurrentConfigForEditor();
-            editor.loadConfig(newConfig);
             renderResourceLists(editor);
-        });
 
-        modal.querySelector('#nc-config-apply').addEventListener('click', async () => {
-            const configJSON = editor.getConfig();
-            const validation = validateConfig(configJSON);
-            if (!validation.valid) {
-                editor.showValidationErrors(validation.errors);
-                Notify.error('配置校验失败，请查看错误详情');
-                return;
-            }
-            const success = loadConfigFromJson(configJSON, '编辑器配置', JSON.stringify(configJSON).length);
-            if (success) {
-                Notify.success('配置已应用，重新打开面板...');
-                UI.closeAll();
-                await openPanelWithCheck();
-            } else {
-                Notify.error('配置加载失败');
-            }
-        });
+            // 绑定顶部按钮事件（保持不变）
+            modal.querySelector('#nc-config-load-current').addEventListener('click', () => {
 
-        modal.querySelector('#nc-config-export').addEventListener('click', () => {
-            const configJSON = editor.getConfig();
-            const blob = new Blob([JSON.stringify(configJSON, null, 2)], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'config.json';
-            a.click();
-            URL.revokeObjectURL(url);
-        });
+                const newConfig = UI._getCurrentConfigForEditor();
 
-        modal.querySelector('#nc-config-import').addEventListener('click', () => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.json,application/json';
-            input.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                try {
-                    const text = await file.text();
-                    const json = JSON.parse(text);
-                    editor.loadConfig(json);
-                    renderResourceLists(editor);
-                } catch (err) {
-                    Notify.error('导入失败: ' + err.message);
+
+                editor.loadConfig(newConfig);
+
+                renderResourceLists(editor);
+
+            });
+
+            modal.querySelector('#nc-config-apply').addEventListener('click', async () => {
+
+                const configJSON = editor.getConfig();
+
+
+                const validation = validateConfig(configJSON);
+
+                if (!validation.valid) {
+                    console.error('[ConfigGUI] 验证失败，错误列表:', validation.errors);
+                    editor.showValidationErrors(validation.errors);
+                    Notify.error('配置校验失败，请查看错误详情');
+                    return;
                 }
-            };
-            input.click();
-        });
 
-        modal.querySelector('#nc-config-validate').addEventListener('click', () => {
-            const configJSON = editor.getConfig();
-            const validation = validateConfig(configJSON);
-            if (validation.valid) {
-                editor.showValidationErrors([]); // 清空错误
-                Notify.success('配置校验通过！');
-            } else {
-                editor.showValidationErrors(validation.errors);
-                Notify.error('配置存在错误，请查看右侧面板');
-            }
-        });
+                const success = loadConfigFromJson(configJSON, '编辑器配置', JSON.stringify(configJSON).length);
 
-        modal.querySelector('#nc-config-close').addEventListener('click', () => {
-            UI._closeModal(overlay);
-        });
+                if (success) {
+                    Notify.success('配置已应用，重新打开面板...');
 
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) UI._closeModal(overlay);
-        });
-
-        // 资源面板添加按钮
-        resourcePanel.querySelector('#nc-add-agent').addEventListener('click', async () => {
-            if (!editor.selectedNode || editor.selectedNode.type !== 'stage') {
-                Notify.warning('请先选中一个阶段节点');
-                return;
-            }
-            const stageNode = editor.selectedNode;
-            const stageId = stageNode.stageData.id;
-            const agentKey = await UI.showPromptModal('输入新Agent的唯一键', '', '新建Agent');
-            if (!agentKey) return;
-            if (editor.config.agents[agentKey]) {
-                Notify.error(`Agent键 ${agentKey} 已存在`);
-                return;
-            }
-            const defaultAgent = {
-                name: '',
-                displayName: agentKey,
-                hover: '',
-                stage: stageId,
-                order: 10,
-                required: false,
-                parallel: false,
-                apiConfigId: '',
-                inputs: [],
-                inputTemplate: '',
-                inputMode: [],
-                autoConfig: [],
-                inputPrompts: [],
-                outputs: [],
-                description: '',
-                reflowConditions: [],
-                executeInterval: 0,
-                role: '',
-                review: false,
-            };
-            editor.config.agents[agentKey] = defaultAgent;
-            const stage = editor.config.workflowStages.find(s => s.id === stageId);
-            if (stage) {
-                stage.agents.push(agentKey);
-            }
-            editor.loadConfig(editor.config);
-            renderResourceLists(editor);
-            Notify.success(`Agent ${agentKey} 已添加到阶段 ${stageNode.label}`);
-        });
-
-        resourcePanel.querySelector('#nc-add-api').addEventListener('click', async () => {
-            const apiId = await UI.showPromptModal('输入API配置ID（唯一）', '', '新建API');
-            if (!apiId) return;
-            if (editor.config.apiConfigs[apiId]) {
-                Notify.error(`API ID ${apiId} 已存在`);
-                return;
-            }
-            editor.config.apiConfigs[apiId] = {
-                type: 'text',
-                source: 'openai',
-                apiUrl: '',
-                key: '',
-                model: '',
-                timeout: 60000,
-            };
-            renderResourceLists(editor);
-            editor.selectApiConfig(apiId);
-            Notify.success(`API配置 ${apiId} 已创建`);
-        });
-
-        resourcePanel.querySelector('#nc-add-category').addEventListener('click', async () => {
-            const catId = await UI.showPromptModal('输入分类ID（唯一）', '', '新建分类');
-            if (!catId) return;
-            if (editor.config.categories[catId]) {
-                Notify.error(`分类ID ${catId} 已存在`);
-                return;
-            }
-            editor.config.categories[catId] = {
-                name: catId,
-                description: '',
-                selectionMode: 'single',
-                options: {}
-            };
-            renderResourceLists(editor);
-            editor.selectCategory(catId);
-            Notify.success(`分类 ${catId} 已创建`);
-        });
-
-        resourcePanel.querySelector('#nc-add-group').addEventListener('click', async () => {
-            const groupName = await UI.showPromptModal('输入互斥组名称', '', '新建互斥组');
-            if (!groupName) return;
-            editor.config.categoryGroups = editor.config.categoryGroups || [];
-            editor.config.categoryGroups.push({
-                name: groupName,
-                categories: []
+                    UI.closeAll();
+                    await openPanelWithCheck();
+                } else {
+                    Notify.error('配置加载失败');
+                }
             });
-            renderResourceLists(editor);
-            editor.selectGroup(editor.config.categoryGroups.length - 1);
-            Notify.success(`互斥组 ${groupName} 已创建`);
-        });
 
-        // 编辑器关闭时移除动态样式
-        overlay.addEventListener('remove', () => {
-            const styleEl = document.getElementById(styleId);
-            if (styleEl) styleEl.remove();
-        });
-    };
+            modal.querySelector('#nc-config-export').addEventListener('click', () => {
+                const configJSON = editor.getConfig();
+                const blob = new Blob([JSON.stringify(configJSON, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'config.json';
+                a.click();
+                URL.revokeObjectURL(url);
+            });
 
-    // ==================== 新增：获取当前配置的深拷贝（用于编辑器） ====================
+            modal.querySelector('#nc-config-import').addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json,application/json';
+                input.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    try {
+                        const text = await file.text();
+                        const json = JSON.parse(text);
+                        editor.loadConfig(json);
+                        renderResourceLists(editor);
+                    } catch (err) {
+                        Notify.error('导入失败: ' + err.message);
+                    }
+                };
+                input.click();
+            });
 
-    UI._getCurrentConfigForEditor = function () {
-        console.log('[ConfigGUI] 获取当前配置');
-        const configCopy = {
-            version: WORKFLOW_STATE.configVersion || CONFIG.VERSION,          // 从 WORKFLOW_STATE 读取
-            description: WORKFLOW_STATE.configDescription || '',              // 从 WORKFLOW_STATE 读取
-            mode: WORKFLOW_STATE.configMode || 'normal',                      // 从 WORKFLOW_STATE 读取
-            maxStateBooks: CONFIG.MAX_STATE_BOOKS,
-            stateTypeLimit: CONFIG.STATE_TYPE_LIMIT,
-            maxImagesPerBook: CONFIG.MAX_IMAGES_PER_BOOK,
-            maxAudiosPerBook: CONFIG.MAX_AUDIOS_PER_BOOK,
-            maxConsecutiveReflows: CONFIG.MAX_CONSECUTIVE_REFLOWS,
-            maxReflowDepth: CONFIG.MAX_REFLOOP_DEPTH,
-            apiConfigs: CONFIG.apiConfigs || {},
-            agents: {},
-            workflowStages: CONFIG.WORKFLOW_STAGES || [],
-            categories: CONFIG.categories || {},
-            categoryGroups: CONFIG.categoryGroups || [],
-            extensions: {}
-        };
+            modal.querySelector('#nc-config-validate').addEventListener('click', () => {
+                const configJSON = editor.getConfig();
+                const validation = validateConfig(configJSON);
+                if (validation.valid) {
+                    editor.showValidationErrors([]); // 清空错误
+                    Notify.success('配置校验通过！');
+                } else {
+                    editor.showValidationErrors(validation.errors);
+                    Notify.error('配置存在错误，请查看右侧面板');
+                }
+            });
 
-        // 复制 agents
-        for (const [key, agent] of Object.entries(CONFIG.AGENTS)) {
-            configCopy.agents[key] = {
-                name: agent.name,
-                displayName: agent.displayName,
-                hover: agent.hover,
-                stage: agent.stage,
-                order: agent.order,
-                required: agent.required,
-                parallel: agent.parallel,
-                apiConfigId: agent.apiConfigId,
-                inputs: agent.inputs.slice(),
-                inputTemplate: agent.inputTemplate,
-                inputMode: agent.inputMode.slice(),
-                autoConfig: agent.autoConfig.slice(),
-                inputPrompts: agent.inputPrompts.slice(),
-                description: agent.description,
-                reflowConditions: agent.reflowConditions.slice(),
-                executeInterval: agent.executeInterval,
-                role: agent.role,
-                review: agent.review
+            modal.querySelector('#nc-config-close').addEventListener('click', () => {
+                UI._closeModal(overlay);
+            });
+
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) UI._closeModal(overlay);
+            });
+
+            // 资源面板添加按钮
+            resourcePanel.querySelector('#nc-add-agent').addEventListener('click', async () => {
+                if (!editor.selectedNode || editor.selectedNode.type !== 'stage') {
+                    Notify.warning('请先选中一个阶段节点');
+                    return;
+                }
+                const stageNode = editor.selectedNode;
+                const stageId = stageNode.stageData.id;
+                const agentKey = await UI.showPromptModal('输入新Agent的唯一键', '', '新建Agent');
+                if (!agentKey) return;
+                if (editor.config.agents[agentKey]) {
+                    Notify.error(`Agent键 ${agentKey} 已存在`);
+                    return;
+                }
+                const defaultAgent = {
+                    name: '',
+                    displayName: agentKey,
+                    hover: '',
+                    stage: stageId,
+                    order: 10,
+                    required: false,
+                    parallel: false,
+                    apiConfigId: '',
+                    inputs: [],
+                    inputTemplate: '',
+                    inputMode: [],
+                    autoConfig: [],
+                    inputPrompts: [],
+                    outputs: [],
+                    description: '',
+                    reflowConditions: [],
+                    executeInterval: 0,
+                    role: '',
+                    review: false,
+                };
+                editor.config.agents[agentKey] = defaultAgent;
+                const stage = editor.config.workflowStages.find(s => s.id === stageId);
+                if (stage) {
+                    stage.agents.push(agentKey);
+                }
+                editor.loadConfig(editor.config);
+                renderResourceLists(editor);
+                Notify.success(`Agent ${agentKey} 已添加到阶段 ${stageNode.label}`);
+            });
+
+            resourcePanel.querySelector('#nc-add-api').addEventListener('click', async () => {
+                const apiId = await UI.showPromptModal('输入API配置ID（唯一）', '', '新建API');
+                if (!apiId) return;
+                if (editor.config.apiConfigs[apiId]) {
+                    Notify.error(`API ID ${apiId} 已存在`);
+                    return;
+                }
+                editor.config.apiConfigs[apiId] = {
+                    type: 'text',
+                    source: 'openai',
+                    apiUrl: '',
+                    key: '',
+                    model: '',
+                    timeout: 60000,
+                };
+                renderResourceLists(editor);
+                editor.selectApiConfig(apiId);
+                Notify.success(`API配置 ${apiId} 已创建`);
+            });
+
+            resourcePanel.querySelector('#nc-add-category').addEventListener('click', async () => {
+                const catId = await UI.showPromptModal('输入分类ID（唯一）', '', '新建分类');
+                if (!catId) return;
+                if (editor.config.categories[catId]) {
+                    Notify.error(`分类ID ${catId} 已存在`);
+                    return;
+                }
+                editor.config.categories[catId] = {
+                    name: catId,
+                    description: '',
+                    selectionMode: 'single',
+                    options: {}
+                };
+                renderResourceLists(editor);
+                editor.selectCategory(catId);
+                Notify.success(`分类 ${catId} 已创建`);
+            });
+
+            resourcePanel.querySelector('#nc-add-group').addEventListener('click', async () => {
+                const groupName = await UI.showPromptModal('输入互斥组名称', '', '新建互斥组');
+                if (!groupName) return;
+                editor.config.categoryGroups = editor.config.categoryGroups || [];
+                editor.config.categoryGroups.push({
+                    name: groupName,
+                    categories: []
+                });
+                renderResourceLists(editor);
+                editor.selectGroup(editor.config.categoryGroups.length - 1);
+                Notify.success(`互斥组 ${groupName} 已创建`);
+            });
+
+            // 编辑器关闭时移除动态样式
+            overlay.addEventListener('remove', () => {
+                const styleEl = document.getElementById(styleId);
+                if (styleEl) styleEl.remove();
+            });
+        },
+
+        // ==================== 新增：获取当前配置的深拷贝（用于编辑器） ====================
+
+        _getCurrentConfigForEditor: function () {
+
+
+
+
+
+
+
+
+
+            const configCopy = {
+                version: WORKFLOW_STATE.configVersion || CONFIG.VERSION,
+                description: WORKFLOW_STATE.configDescription || '',
+                mode: WORKFLOW_STATE.configMode || 'normal',
+                maxStateBooks: CONFIG.MAX_STATE_BOOKS,
+                stateTypeLimit: CONFIG.STATE_TYPE_LIMIT,
+                maxImagesPerBook: CONFIG.MAX_IMAGES_PER_BOOK,
+                maxAudiosPerBook: CONFIG.MAX_AUDIOS_PER_BOOK,
+                maxConsecutiveReflows: CONFIG.MAX_CONSECUTIVE_REFLOWS,
+                maxReflowDepth: CONFIG.MAX_REFLOOP_DEPTH,
+                apiConfigs: CONFIG.apiConfigs || {},
+                agents: {},
+                workflowStages: CONFIG.WORKFLOW_STAGES || [],
+                categories: CONFIG.categories || {},
+                categoryGroups: CONFIG.categoryGroups || [],
+                extensions: {}
             };
+
+            // 复制 agents
+            for (const [key, agent] of Object.entries(CONFIG.AGENTS)) {
+                configCopy.agents[key] = {
+                    name: agent.name,
+                    displayName: agent.displayName,
+                    hover: agent.hover,
+                    stage: agent.stage,
+                    order: agent.order,
+                    required: agent.required,
+                    parallel: agent.parallel,
+                    apiConfigId: agent.apiConfigId,
+                    inputs: agent.inputs.slice(),
+                    inputTemplate: agent.inputTemplate,
+                    inputMode: agent.inputMode.slice(),
+                    autoConfig: agent.autoConfig.slice(),
+                    inputPrompts: agent.inputPrompts.slice(),
+                    description: agent.description,
+                    reflowConditions: agent.reflowConditions.slice(),
+                    executeInterval: agent.executeInterval,
+                    role: agent.role,
+                    review: agent.review
+                };
+            }
+
+
+
+
+            return configCopy;
+        },
+
+        _loadScript : function (src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = resolve;
+                script.onerror = () => reject(new Error(`加载脚本失败: ${src}`));
+                document.head.appendChild(script);
+            });
         }
-
-        console.log('[ConfigGUI] 当前配置提取完成，Agent数量:', Object.keys(configCopy.agents).length);
-        return configCopy;
     };
 
-    UI._loadScript = function (src) {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = src;
-            script.onload = resolve;
-            script.onerror = () => reject(new Error(`加载脚本失败: ${src}`));
-            document.head.appendChild(script);
-        });
-    };
+    UI.updateWorkflowAgentStates = (function () {
+        let timeout;
+        return function () {
+            if (timeout) clearTimeout(timeout);
+            timeout = setTimeout(() => {
+
+                const container = document.getElementById('nc-workflow-viz');
+                if (container) {
+                    container.querySelectorAll('[data-agent]').forEach(btn => {
+                        const agentKey = btn.dataset.agent;
+                        if (agentKey === 'DISCARD') {
+                            if (WORKFLOW_STATE.discardedChapter) {
+                                btn.classList.add('has-discard');
+                            } else {
+                                btn.classList.remove('has-discard');
+                            }
+                        } else {
+                            const newState = AgentStateManager.getState(agentKey);
+                            const oldState = btn.dataset.state;
+                            if (oldState !== newState) {
+
+                                btn.dataset.state = newState;
+                            }
+                        }
+                    });
+                }
+
+                const launchLayer = document.getElementById('nc-launch-layer');
+                if (launchLayer) {
+                    launchLayer.querySelectorAll('[data-agent]').forEach(btn => {
+                        const agentKey = btn.dataset.agent;
+                        const newState = AgentStateManager.getState(agentKey);
+                        btn.dataset.state = newState;
+                    });
+                }
+
+            }, 50);
+
+        };
+    })();
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 20：配置编辑器                                              ║
+    // ║  ConfigEditor 类 — 可视化 Agent 配置图编辑器                      ║
+    // ╚══════════════════════════════════════════════════════════════════╝
 
     // ==================== ConfigEditor 类 ====================
 
     class ConfigEditor {
 
         constructor(canvas, propertyPanel, initialConfig, callbacks) {
-            console.log('[ConfigEditor] 初始化，配置版本:', initialConfig.version);
+
             this.canvas = canvas;
             this.ctx = canvas.getContext('2d');
             this.propertyPanel = propertyPanel;
@@ -13062,16 +13874,15 @@
 
         // ---------- 构建和布局 ----------
         _buildFromConfig() {
-            console.log('[ConfigEditor] ===== 从配置构建节点和边 =====');
-            console.log('[ConfigEditor] 传入配置的 workflowStages:', JSON.stringify(this.config.workflowStages, null, 2));
+
+
             const stages = this.config.workflowStages || [];
 
             // 创建阶段节点，按 stage 排序
             this.nodes = [];
             stages.sort((a, b) => a.stage - b.stage).forEach((stage, index) => {
-                // 确保 stage 字段为数字类型，并保存到 stageData 中
                 const stageNum = typeof stage.stage === 'number' ? stage.stage : index + 1;
-                console.log(`[ConfigEditor] 构建节点: id=${stage.id}, 原始stage=${stage.stage}, 使用stage=${stageNum}, Y坐标=${100 + index * (this.nodeHeight + 50)}`);
+
                 this.nodes.push({
                     id: `stage-${stage.stage}`,
                     type: 'stage',
@@ -13083,7 +13894,7 @@
                     width: this.nodeWidth,
                     height: this.nodeHeight,
                     stageData: {
-                        stage: stageNum,          // 关键：保存用户定义的 stage 序号
+                        stage: stageNum,
                         id: stage.id,
                         name: stage.name,
                         color: stage.color,
@@ -13094,7 +13905,7 @@
                 });
             });
 
-            // 创建边（按顺序连接相邻阶段）
+            // 创建边
             this.edges = [];
             for (let i = 0; i < this.nodes.length - 1; i++) {
                 const source = this.nodes[i];
@@ -13110,14 +13921,17 @@
                 });
             }
 
-            console.log('[ConfigEditor] 节点数:', this.nodes.length, '边数:', this.edges.length);
-            console.log('[ConfigEditor] 构建后的节点 stageData:', this.nodes.map(n => ({ id: n.id, stage: n.stageData.stage })));
+
+
+
         }
 
         loadConfig(newConfig) {
-            console.log('[ConfigEditor] ===== 加载新配置 =====');
-            console.log('[ConfigEditor] 加载前的 workflowStages:', JSON.stringify(newConfig.workflowStages, null, 2));
+
+
+
             this.config = newConfig;
+
             this._buildFromConfig();
             this.selectedNode = null;
             this.selectedEdge = null;
@@ -13130,20 +13944,24 @@
             this.draggingAgentKey = null;
             this.dropTargetStageId = null;
             this.validationErrors = [];
+
             this._renderPropertyPanel(null);
+
             this._fitView();
+
         }
 
         getConfig() {
-            console.log('[ConfigEditor] ===== 从画布重建配置 =====');
-            console.log('[ConfigEditor] 当前节点列表:', this.nodes.map(n => ({ id: n.id, type: n.type, label: n.label, y: n.y })));
+
+
             const newConfig = JSON.parse(JSON.stringify(this.config));
+
             const stageNodes = this.nodes.filter(n => n.type === 'stage').sort((a, b) => a.y - b.y);
-            console.log(`[ConfigEditor] 阶段节点数量: ${stageNodes.length}`);
+
             newConfig.workflowStages = stageNodes.map((node, index) => {
                 const oldStage = node.stageData || {};
                 const userStage = oldStage.stage !== undefined ? oldStage.stage : index + 1;
-                console.log(`[ConfigEditor] 节点 ${node.key} (label: ${node.label}) 原始 stage: ${oldStage.stage}, 使用 stage: ${userStage}, Y坐标: ${node.y}`);
+
                 const stageObj = {
                     stage: userStage,
                     id: node.key,
@@ -13153,10 +13971,11 @@
                     agents: oldStage.agents || [],
                     description: oldStage.description || '',
                 };
-                console.log(`[ConfigEditor] 生成的阶段对象:`, JSON.stringify(stageObj));
+
                 return stageObj;
             });
-            console.log('[ConfigEditor] 重建后的 workflowStages:', JSON.stringify(newConfig.workflowStages, null, 2));
+
+
             return newConfig;
         }
 
@@ -13172,7 +13991,7 @@
             this.canvas.addEventListener('mousedown', this._onMouseDown.bind(this));
             this.canvas.addEventListener('mousemove', this._onMouseMove.bind(this));
             this.canvas.addEventListener('mouseup', this._onMouseUp.bind(this));
-            this.canvas.addEventListener('wheel', this._onWheel.bind(this), {passive: false});
+            this.canvas.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
             this.canvas.addEventListener('contextmenu', e => e.preventDefault());
             window.addEventListener('keydown', this._onKeyDown.bind(this));
         }
@@ -13182,7 +14001,7 @@
             const stage = this.config.workflowStages.find(s => s.id === stageId);
             if (!stage) return [];
             return stage.agents
-                .map(key => ({key, agent: this.config.agents[key]}))
+                .map(key => ({ key, agent: this.config.agents[key] }))
                 .filter(item => item.agent)
                 .sort((a, b) => (a.agent.order || 999) - (b.agent.order || 999));
         }
@@ -13210,7 +14029,7 @@
             const allAgents = Object.entries(this.config.agents || {});
             return allAgents
                 .filter(([key, agent]) => !agent.stage || agent.stage.trim() === '')
-                .map(([key, agent]) => ({key, agent}))
+                .map(([key, agent]) => ({ key, agent }))
                 .sort((a, b) => (a.agent.order || 999) - (b.agent.order || 999));
         }
 
@@ -13225,7 +14044,7 @@
                 if (node.type !== 'stage') continue;
                 if (worldX >= node.x && worldX <= node.x + node.width &&
                     worldY >= node.y && worldY <= node.y + node.height) {
-                    console.log(`[ConfigEditor._detectDropTarget] 命中阶段: ${node.key}`);
+
                     return node;
                 }
             }
@@ -13264,21 +14083,21 @@
             const stageCenterY = stageNode.y + stageNode.height / 2;
             const distY = Math.abs(worldY - stageCenterY);
             if (distY > 20) {
-                console.log(`[ConfigEditor._getNearestPlusIndex] 垂直距离过大 (${distY.toFixed(2)}), 可能不打算插入`);
+
                 // 仍返回索引，但释放时可依据此决定是否插入
             }
 
-            console.log(`[ConfigEditor._getNearestPlusIndex] 目标阶段 ${stageNode.key} 最近插入索引: ${bestIndex}`);
+
             return bestIndex;
         }
 
         _onMouseDown(e) {
-            console.log(`[ConfigEditor._onMouseDown] ===== 鼠标按下 ===== 时间戳: ${Date.now()}`);
+
             const rect = this.canvas.getBoundingClientRect();
             const x = (e.clientX - rect.left - this.offsetX) / this.scale;
             const y = (e.clientY - rect.top - this.offsetY) / this.scale;
 
-            console.log(`[ConfigEditor._onMouseDown] 鼠标世界坐标: (${x.toFixed(2)}, ${y.toFixed(2)})`);
+
 
             // 清除潜在拖拽状态
             this.potentialDragAgentKey = null;
@@ -13308,7 +14127,7 @@
                     const ay = this.unassignedAreaY + row * (agentTotalHeight + this.agentHPadding) + this.orderRectHeight + this.orderTopMargin;
                     const agentWidth = this._getAgentWidth(agent);
                     if (x >= ax && x <= ax + agentWidth && y >= ay && y <= ay + this.agentNodeHeight) {
-                        console.log(`[ConfigEditor._onMouseDown] 点击未分配Agent: ${key}`);
+
 
                         this.potentialDragAgentKey = key;
                         this.potentialDragStageId = null;
@@ -13332,7 +14151,7 @@
                     const { x: ax, y: ay } = this._getAgentPosition(node, j);
                     const agentWidth = this._getAgentWidth(agent);
                     if (x >= ax && x <= ax + agentWidth && y >= ay && y <= ay + this.agentNodeHeight) {
-                        console.log(`[ConfigEditor._onMouseDown] 点击阶段 ${node.key} 内的 Agent: ${key}`);
+
 
                         this.potentialDragAgentKey = key;
                         this.potentialDragStageId = node.key;
@@ -13349,7 +14168,7 @@
             // 检查点击阶段节点
             const clickedNode = this._getNodeAt(x, y);
             if (clickedNode) {
-                console.log(`[ConfigEditor._onMouseDown] 点击阶段节点: ${clickedNode.id}`);
+
                 this.selectedNode = clickedNode;
                 this.selectedEdge = null;
                 this.selectedAgentKey = null;
@@ -13363,7 +14182,7 @@
             // 检查点击边
             const clickedEdge = this._getEdgeNear(x, y);
             if (clickedEdge) {
-                console.log(`[ConfigEditor._onMouseDown] 点击边: ${clickedEdge.id}`);
+
                 this.selectedEdge = clickedEdge;
                 this.selectedNode = null;
                 this.selectedAgentKey = null;
@@ -13375,7 +14194,7 @@
             }
 
             // 点击空白
-            console.log('[ConfigEditor._onMouseDown] 点击空白区域');
+
             this.selectedNode = null;
             this.selectedEdge = null;
             this.selectedAgentKey = null;
@@ -13422,9 +14241,9 @@
                 const dy = worldY - this.dragStartY;
                 const dist = Math.hypot(dx, dy);
                 const screenDist = dist * this.scale;
-                console.log(`[ConfigEditor._onMouseMove] 潜在拖拽检测: dx=${dx.toFixed(2)}, dy=${dy.toFixed(2)}, dist=${dist.toFixed(2)}, screenDist=${screenDist.toFixed(2)}`);
+
                 if (screenDist > this.dragThreshold) {
-                    console.log(`[ConfigEditor._onMouseMove] 开始拖拽 Agent: ${this.potentialDragAgentKey}`);
+
                     this.draggingAgentKey = this.potentialDragAgentKey;
                     this.draggingAgentWorldX = worldX;
                     this.draggingAgentWorldY = worldY;
@@ -13439,19 +14258,19 @@
             }
 
             if (this.draggingAgentKey) {
-                console.log(`[ConfigEditor._onMouseMove] 拖拽中, 鼠标世界: (${worldX.toFixed(2)}, ${worldY.toFixed(2)})`);
+
 
                 // 检测目标阶段
                 const targetNode = this._detectDropTarget(worldX, worldY);
                 if (targetNode) {
                     if (this.draggingTargetStageNode !== targetNode) {
-                        console.log(`[ConfigEditor._onMouseMove] 目标阶段变更为: ${targetNode.key}`);
+
                         this.draggingTargetStageNode = targetNode;
                         this.draggingInsertIndex = 0; // 固定插入索引为 0
                     }
                 } else {
                     if (this.draggingTargetStageNode !== null) {
-                        console.log(`[ConfigEditor._onMouseMove] 移出目标阶段`);
+
                         this.draggingTargetStageNode = null;
                         this.draggingInsertIndex = -1;
                     }
@@ -13477,11 +14296,11 @@
         }
 
         _onMouseUp(e) {
-            console.log(`[ConfigEditor._onMouseUp] 鼠标释放，拖拽中 Agent: ${this.draggingAgentKey}, 潜在拖拽: ${this.potentialDragAgentKey}`);
+
 
             // 处理单击（未开始拖拽）
             if (this.potentialDragAgentKey && !this.draggingAgentKey) {
-                console.log(`[ConfigEditor._onMouseUp] 单击 Agent: ${this.potentialDragAgentKey}，保持选中`);
+
                 this.potentialDragAgentKey = null;
                 this.potentialDragStageId = null;
                 this._requestRender();
@@ -13503,7 +14322,7 @@
                 const targetStage = targetStageId ? this.config.workflowStages.find(s => s.id === targetStageId) : null;
                 const sourceStage = sourceStageId ? this.config.workflowStages.find(s => s.id === sourceStageId) : null;
 
-                console.log(`[ConfigEditor._onMouseUp] 目标阶段: ${targetStageId}, 源阶段: ${sourceStageId}`);
+
 
                 // 移除模式兼容性检查：任何 Agent 均可放入任何阶段
 
@@ -13514,7 +14333,7 @@
                     const idx = sourceStage.agents.indexOf(agentKey);
                     if (idx !== -1) {
                         sourceStage.agents.splice(idx, 1);
-                        console.log(`[ConfigEditor._onMouseUp] 从阶段 ${sourceStageId} 移除 Agent ${agentKey}`);
+
                         configChanged = true;
                     }
                 }
@@ -13532,7 +14351,7 @@
                     if (!currentAgents.includes(agentKey)) {
                         currentAgents.splice(insertIndex, 0, agentKey);
                         targetStage.agents = currentAgents;
-                        console.log(`[ConfigEditor._onMouseUp] 将 Agent ${agentKey} 插入阶段 ${targetStageId} 最前面`);
+
                         configChanged = true;
                     } else {
                         console.warn(`[ConfigEditor._onMouseUp] Agent ${agentKey} 已在目标阶段 ${targetStageId} 中，跳过添加`);
@@ -13543,12 +14362,12 @@
                     updatedList.forEach((key, idx) => {
                         this.config.agents[key].order = (idx + 1) * 10;
                     });
-                    console.log(`[ConfigEditor._onMouseUp] 目标阶段 ${targetStageId} 已重新分配 order`);
+
                 } else {
                     // 拖入空白区：移入未分配区
                     if (sourceStage) {
                         agent.stage = '';
-                        console.log(`[ConfigEditor._onMouseUp] Agent ${agentKey} 移入未分配区`);
+
                         configChanged = true;
                     }
                 }
@@ -13618,32 +14437,32 @@
          * @param {KeyboardEvent} e
          */
         async _onKeyDown(e) {
-            console.log(`[ConfigEditor._onKeyDown] ===== 按键按下 =====`);
-            console.log(`[ConfigEditor._onKeyDown] 事件信息: key="${e.key}", ctrlKey=${e.ctrlKey}, shiftKey=${e.shiftKey}, metaKey=${e.metaKey}`);
-            console.log(`[ConfigEditor._onKeyDown] 当前活动元素:`, document.activeElement);
-            console.log(`[ConfigEditor._onKeyDown] 活动元素标签: ${document.activeElement?.tagName}, 类型: ${document.activeElement?.type}`);
+
+
+
+
 
             // 检查当前焦点是否在输入框或文本域内
             const activeElement = document.activeElement;
             const isInput = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA');
-            console.log(`[ConfigEditor._onKeyDown] 焦点在输入控件内: ${isInput}`);
+
 
             if (e.key === 'Delete') {
                 if (this.selectedEdge) {
-                    console.log('[ConfigEditor._onKeyDown] 用户尝试删除连线，但不可删除');
+
                     Notify.warning('阶段线由顺序自动生成，无法手动删除');
                 } else if (this.selectedNode) {
                     e.preventDefault(); // 阻止默认删除行为（比如删除文本）
-                    console.log(`[ConfigEditor._onKeyDown] 尝试删除阶段节点 ${this.selectedNode.label}`);
+
                     const confirmed = await UI.showConfirmModal(
                         `确定删除阶段节点 ${this.selectedNode.label} 吗？`,
                         '确认删除'
                     );
                     if (!confirmed) {
-                        console.log('[ConfigEditor._onKeyDown] 用户取消删除');
+
                         return;
                     }
-                    console.log('[ConfigEditor._onKeyDown] 用户确认删除，开始执行删除逻辑');
+
                     const stageIdx = this.config.workflowStages.findIndex(s => s.stage === this.selectedNode.key);
                     if (stageIdx !== -1) {
                         const stage = this.config.workflowStages[stageIdx];
@@ -13658,24 +14477,24 @@
                     this._renderPropertyPanel(null);
                     this._requestRender();
                     if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
-                    console.log('[ConfigEditor._onKeyDown] 节点删除完成');
+
                 }
             } else if (e.ctrlKey && e.key === 'a') {
-                console.log('[ConfigEditor._onKeyDown] 检测到 Ctrl+A');
+
                 if (isInput) {
-                    console.log('[ConfigEditor._onKeyDown] 焦点在输入控件内，允许浏览器默认全选');
+
                     // 让浏览器处理默认行为，不执行任何自定义逻辑
                     return;
                 }
                 e.preventDefault();
-                console.log('[ConfigEditor._onKeyDown] 执行自定义全选阶段节点');
+
                 if (this.nodes.length > 0) {
                     this.selectedNode = this.nodes[0];
                     this._renderPropertyPanel(this.selectedNode);
                     this._requestRender();
                 }
             } else {
-                console.log(`[ConfigEditor._onKeyDown] 按键未处理，继续默认行为`);
+
             }
         }
 
@@ -13695,16 +14514,14 @@
         }
 
         _reorderStagesByPosition() {
-            console.log('[ConfigEditor._reorderStagesByPosition] ===== 根据位置重新排序阶段 =====');
-            const stageNodes = this.nodes.filter(n => n.type === 'stage').sort((a, b) => a.y - b.y);
-            console.log('[ConfigEditor] 排序后的阶段节点:', stageNodes.map(n => ({ key: n.key, label: n.label, y: n.y })));
 
-            // 构建新的 workflowStages 数组，保留每个节点原有的 stageData，但按照新的顺序排列
+            const stageNodes = this.nodes.filter(n => n.type === 'stage').sort((a, b) => a.y - b.y);
+
+
             const newStages = stageNodes.map((node, index) => {
                 const oldStage = node.stageData || {};
-                // 保留用户设定的 stage，如果没有则使用 index+1
                 const userStage = oldStage.stage !== undefined ? oldStage.stage : index + 1;
-                console.log(`[ConfigEditor] 节点 ${node.key} 原stage=${oldStage.stage}, 保留为 ${userStage}`);
+
                 return {
                     stage: userStage,
                     id: node.key,
@@ -13716,7 +14533,6 @@
                 };
             });
 
-            // 检查是否有重复的 stage 值，若有则发出警告（但不自动修复，由用户手动调整）
             const stageSet = new Set();
             const duplicates = [];
             newStages.forEach(s => {
@@ -13726,12 +14542,14 @@
                 stageSet.add(s.stage);
             });
             if (duplicates.length > 0) {
-                console.warn('[ConfigEditor] 检测到重复的阶段序号，请手动调整:', duplicates);
+                console.warn('[ConfigEditor._reorderStagesByPosition] 检测到重复的阶段序号:', duplicates);
             }
 
             this.config.workflowStages = newStages;
+
+
             stageNodes.forEach((node, index) => {
-                node.stageData = newStages[index]; // 更新节点存储的 stageData
+                node.stageData = newStages[index];
             });
 
             // 重建边
@@ -13748,7 +14566,8 @@
                 });
             }
 
-            console.log('[ConfigEditor] 新的 workflowStages:', JSON.stringify(this.config.workflowStages, null, 2));
+
+
         }
 
         /**
@@ -13758,7 +14577,7 @@
         _getMaxUnassignedWidth() {
             const unassignedAgents = this._getUnassignedAgents();
             if (unassignedAgents.length === 0) {
-                console.log('[ConfigEditor._getMaxUnassignedWidth] 无未分配 Agent，返回 80');
+
                 return 80;
             }
             let max = 0;
@@ -13766,7 +14585,7 @@
                 const w = this._getAgentWidth(item.agent);
                 if (w > max) max = w;
             });
-            console.log(`[ConfigEditor._getMaxUnassignedWidth] 最大宽度 = ${max}`);
+
             return max;
         }
 
@@ -13849,7 +14668,7 @@
             // 最小缩放限制（可根据需要调整）
             const MIN_SCALE = 0.8;
             if (scale < MIN_SCALE) {
-                console.log(`[ConfigEditor._fitView] 计算缩放 ${scale.toFixed(2)} 小于最小值 ${MIN_SCALE}，强制设为 ${MIN_SCALE}`);
+
                 scale = MIN_SCALE;
             }
 
@@ -13858,7 +14677,7 @@
             this.offsetX = (canvasWidth - contentWidth * this.scale) / 2 - minX * this.scale;
             this.offsetY = (canvasHeight - contentHeight * this.scale) / 2 - minY * this.scale;
 
-            console.log(`[ConfigEditor._fitView] 最终缩放: ${this.scale.toFixed(2)}, offsetX: ${this.offsetX.toFixed(2)}, offsetY: ${this.offsetY.toFixed(2)}`);
+
             this._requestRender();
         }
 
@@ -13914,7 +14733,7 @@
                 const sourceMode = sourceNode.stageData?.mode || 'serial';
                 const targetMode = targetNode.stageData?.mode || 'serial';
                 const isParallel = sourceMode === 'parallel' && targetMode === 'parallel';
-                console.log(`[ConfigEditor.render] 边 ${sourceNode.key} -> ${targetNode.key}, sourceMode=${sourceMode}, targetMode=${targetMode}, isParallel=${isParallel}`);
+
 
                 const offset = 20 / this.scale;
                 const cpx1 = sx + (tx - sx) * 0.25;
@@ -14012,7 +14831,7 @@
             // ========== 修改：未分配区网格布局（调整间距和边框） ==========
             const unassignedAgents = this._getUnassignedAgents();
             if (unassignedAgents.length > 0) {
-                console.log(`[ConfigEditor.render] 开始绘制未分配区，Agent 数量: ${unassignedAgents.length}`);
+
                 // 计算最大宽度用于列对齐
                 const maxWidth = this._getMaxUnassignedWidth();
                 const columnWidth = maxWidth + this.agentHPadding;
@@ -14022,15 +14841,15 @@
                 // 计算区域总高度：考虑 order 区域的高度和边距
                 const agentTotalHeight = this.orderRectHeight + this.orderTopMargin + this.agentNodeHeight;
                 const areaHeight = rowsPerColumn * agentTotalHeight + (rowsPerColumn - 1) * this.agentHPadding
-                                    + this.unassignedAreaTopPadding + this.unassignedAreaBottomPadding;
+                    + this.unassignedAreaTopPadding + this.unassignedAreaBottomPadding;
                 const areaWidth = totalColumns * columnWidth + 20;
 
                 // 边框左上角坐标
                 const borderX = this.unassignedAreaX - 10;
                 const borderY = this.unassignedAreaY - this.unassignedAreaTopPadding;
 
-                console.log(`[ConfigEditor.render] 未分配区参数: agentTotalHeight=${agentTotalHeight}, agentHPadding=${this.agentHPadding}, maxWidth=${maxWidth}, columnWidth=${columnWidth}, totalColumns=${totalColumns}, areaHeight=${areaHeight}, areaWidth=${areaWidth}`);
-                console.log(`[ConfigEditor.render] 边框位置: borderX=${borderX.toFixed(2)}, borderY=${borderY.toFixed(2)}`);
+
+
 
                 ctx.save();
                 ctx.fillStyle = 'rgba(255,255,255,0.03)';
@@ -14049,7 +14868,7 @@
                     const baseY = borderY + this.unassignedAreaTopPadding + row * (agentTotalHeight + this.agentHPadding);
                     const agentY = baseY + this.orderRectHeight + this.orderTopMargin; // 主体左上角 Y
                     const x = this.unassignedAreaX + col * columnWidth;
-                    console.log(`[ConfigEditor.render] 绘制未分配 Agent ${item.key} 于 (${x.toFixed(2)}, ${agentY.toFixed(2)})，baseY=${baseY.toFixed(2)}`);
+
                     this._drawAgent(ctx, item.key, item.agent, x, agentY, 1.0);
                 });
             }
@@ -14087,7 +14906,7 @@
                     const totalColumns = Math.ceil(unassignedAgents.length / rowsPerColumn);
                     const agentTotalHeight = this.orderRectHeight + this.orderTopMargin + this.agentNodeHeight;
                     const areaHeight = rowsPerColumn * agentTotalHeight + (rowsPerColumn - 1) * this.agentHPadding
-                                        + this.unassignedAreaTopPadding + this.unassignedAreaBottomPadding;
+                        + this.unassignedAreaTopPadding + this.unassignedAreaBottomPadding;
                     const areaWidth = totalColumns * columnWidth + 20;
                     const borderX = this.unassignedAreaX - 10;
                     const borderY = this.unassignedAreaY - this.unassignedAreaTopPadding;
@@ -14112,7 +14931,7 @@
          * @param {Object} node - 节点对象
          */
         _drawStageNode(ctx, node) {
-            console.log(`[ConfigEditor._drawStageNode] 绘制阶段节点: ${node.id}, label=${node.label}, scale=${this.scale}`);
+
             const isSelected = this.selectedNode === node;
             const bgColor = isSelected ? '#3a3a5a' : node.color + '40';
             const borderColor = node.color;
@@ -14156,7 +14975,7 @@
          * @param {Object} stageNode - 阶段节点对象
          */
         _moveIncompatibleAgentsToUnassigned(stageNode) {
-            console.log(`[ConfigEditor._moveIncompatibleAgentsToUnassigned] ===== 开始处理阶段 ${stageNode.key} 的不兼容 Agent =====`);
+
             const stageId = stageNode.key;
             const stage = this.config.workflowStages.find(s => s.id === stageId);
             if (!stage) {
@@ -14164,7 +14983,7 @@
                 return;
             }
             const newMode = stage.mode;
-            console.log(`[ConfigEditor._moveIncompatibleAgentsToUnassigned] 阶段 ${stageId} 新模式: ${newMode}`);
+
 
             const agentsInStage = stage.agents || [];
             const incompatibleAgents = [];
@@ -14174,29 +14993,29 @@
                 if (!agent) continue;
                 const isParallel = agent.parallel === true;
                 const isCompatible = (newMode === 'parallel' && isParallel) || (newMode === 'serial' && !isParallel);
-                console.log(`[ConfigEditor._moveIncompatibleAgentsToUnassigned] Agent ${agentKey}: parallel=${isParallel}, 兼容? ${isCompatible}`);
+
                 if (!isCompatible) {
                     incompatibleAgents.push(agentKey);
                 }
             }
 
             if (incompatibleAgents.length === 0) {
-                console.log('[ConfigEditor._moveIncompatibleAgentsToUnassigned] 无不兼容Agent，无需移动');
+
                 return;
             }
 
-            console.log(`[ConfigEditor._moveIncompatibleAgentsToUnassigned] 发现 ${incompatibleAgents.length} 个不兼容Agent: ${incompatibleAgents.join(', ')}`);
+
 
             // 从阶段 agents 列表中移除
             stage.agents = stage.agents.filter(key => !incompatibleAgents.includes(key));
             for (const agentKey of incompatibleAgents) {
                 this.config.agents[agentKey].stage = '';
-                console.log(`[ConfigEditor._moveIncompatibleAgentsToUnassigned] Agent ${agentKey} 已移至未分配区`);
+
             }
 
             // 触发回调并重绘
             if (this.callbacks.onConfigChange) {
-                console.log('[ConfigEditor._moveIncompatibleAgentsToUnassigned] 触发 onConfigChange');
+
                 this.callbacks.onConfigChange(this.getConfig());
             }
             this._requestRender();
@@ -14210,7 +15029,7 @@
          * - 第三行：彩色标记 + order 数字（仅数字，无前缀）
          */
         _drawAgent(ctx, key, agent, x, y, alpha = 1.0) {
-            console.log(`[ConfigEditor._drawAgent] 绘制 agent ${key} 于 (${x.toFixed(2)}, ${y.toFixed(2)}), alpha=${alpha}`);
+
             const isSelected = this.selectedAgentKey === key;
             const isHighlighted = this.highlightedAgents.has(key) && !isSelected;
             const isDragging = this.draggingAgentKey === key;
@@ -14323,7 +15142,7 @@
          * @returns {number} 宽度
          */
         _getAgentWidth(agent) {
-            console.log(`[ConfigEditor._getAgentWidth] 计算宽度, agent.key=${agent.key}, displayName=${agent.displayName}`);
+
             const displayName = agent.displayName || agent.key;
             // 测量完整文本的宽度（使用与绘制一致的字体）
             this.measureCtx.font = '14px Arial'; // 原为 '10px Arial'
@@ -14332,20 +15151,20 @@
             const maxWidth = 250;                 // 原为 200
             // 左右内边距从 12 增加到 16
             const width = Math.min(maxWidth, Math.max(minWidth, textWidth + 16));
-            console.log(`[ConfigEditor._getAgentWidth] textWidth=${textWidth.toFixed(2)}, final width=${width}`);
+
             return width;
         }
 
         // ---------- 属性面板更新 ----------
         _renderPropertyPanel(selected) {
             if (this.selectedAgentKey) {
-                console.log('[ConfigEditor._renderPropertyPanel] 选中 Agent 键:', this.selectedAgentKey);
+
                 this._renderAgentPropertiesInPanel(this.selectedAgentKey, this.selectedAgentStageNode);
                 return;
             }
 
             if (this.selectedGlobal) {
-                console.log('[ConfigEditor._renderPropertyPanel] 选中全局配置，渲染全局属性');
+
                 this._renderGlobalProperties();
                 return;
             }
@@ -14353,7 +15172,7 @@
             this.propertyPanel.innerHTML = '';
 
             if (this.validationErrors.length > 0) {
-                console.log('[ConfigEditor._renderPropertyPanel] 显示错误信息，错误数:', this.validationErrors.length);
+
                 const errorDiv = document.createElement('div');
                 errorDiv.style.cssText = 'background:#2a1a1a; border:1px solid #dc3545; border-radius:4px; padding:8px; margin-bottom:10px;';
                 errorDiv.innerHTML = `<div style="color:#ff6b6b; font-weight:bold; margin-bottom:5px;">❌ 配置错误</div>`;
@@ -14369,28 +15188,28 @@
             }
 
             if (selected === null) {
-                console.log('[ConfigEditor._renderPropertyPanel] 选中空白，渲染全局配置面板');
+
                 this._renderGlobalProperties();
                 return;
             }
 
             if (selected.type === 'stage') {
-                console.log('[ConfigEditor._renderPropertyPanel] 选中阶段节点:', selected.id);
+
                 this._renderStageProperties(selected);
             } else if (selected.type === 'edge') {
-                console.log('[ConfigEditor._renderPropertyPanel] 选中连线:', selected.id);
+
                 this._renderEdgeProperties(selected);
             } else if (this.selectedApiId) {
-                console.log('[ConfigEditor._renderPropertyPanel] 选中 API 配置:', this.selectedApiId);
+
                 this._renderApiProperties(this.selectedApiId);
             } else if (this.selectedCategoryId) {
-                console.log('[ConfigEditor._renderPropertyPanel] 选中分类:', this.selectedCategoryId);
+
                 this._renderCategoryProperties(this.selectedCategoryId);
             } else if (this.selectedGroupIndex !== null) {
-                console.log('[ConfigEditor._renderPropertyPanel] 选中互斥组索引:', this.selectedGroupIndex);
+
                 this._renderGroupProperties(this.selectedGroupIndex);
             } else {
-                console.log('[ConfigEditor._renderPropertyPanel] 未知选中对象，显示空提示');
+
                 const div = document.createElement('div');
                 div.style.cssText = 'color:#aaa; text-align:center; padding:20px;';
                 div.textContent = '选择一个阶段节点、API、分类或组查看属性';
@@ -14403,7 +15222,7 @@
          * @param {Object} node - 阶段节点对象
          */
         _renderStageProperties(node) {
-            console.log(`[ConfigEditor._renderStageProperties] ===== 开始渲染阶段属性 ===== stageId=${node.key}, label=${node.label}`);
+
             const stageData = node.stageData || {};
             const panel = this.propertyPanel;
             panel.innerHTML = '';
@@ -14481,7 +15300,7 @@
             panel.appendChild(container);
 
             const updateField = (field, value) => {
-                console.log(`[ConfigEditor._renderStageProperties] 更新字段 ${field} = ${value}`);
+
                 stageData[field] = value;
                 if (field === 'color') node.color = value;
                 if (field === 'name') node.label = value; // 同步节点标签
@@ -14584,14 +15403,14 @@
         }
 
         _renderApiProperties(apiId) {
-            console.log(`[ConfigEditor._renderApiProperties] ========== 开始渲染 API 属性 ==========`);
-            console.log(`[ConfigEditor._renderApiProperties] apiId: ${apiId}`);
+
+
             const api = this.config.apiConfigs[apiId];
             if (!api) {
                 console.error(`[ConfigEditor._renderApiProperties] API ${apiId} 不存在`);
                 return;
             }
-            console.log(`[ConfigEditor._renderApiProperties] API 原始配置:`, JSON.stringify(api, null, 2));
+
 
             const panel = this.propertyPanel;
             panel.innerHTML = '';
@@ -14682,7 +15501,7 @@
                 };
                 const availableSources = sources[type] || [];
                 sourceSelect.innerHTML = availableSources.map(s => `<option value="${s}" ${api.source === s ? 'selected' : ''}>${s}</option>`).join('');
-                console.log(`[ConfigEditor._renderApiProperties] 更新 source 选项:`, availableSources);
+
             };
             updateSourceOptions(api.type);
 
@@ -14872,13 +15691,13 @@
                 }
 
                 extraContainer.innerHTML = extraHTML;
-                console.log(`[ConfigEditor._renderApiProperties] 已渲染额外字段，type=${currentType}, source=${currentSource}`);
+
             };
             renderExtraFields();
 
             // ---------- 绑定事件 ----------
             const updateField = (field, value) => {
-                console.log(`[ConfigEditor._renderApiProperties] 更新字段 ${field} =`, value);
+
                 this.config.apiConfigs[apiId][field] = value;
                 if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
             };
@@ -15013,9 +15832,9 @@
                     timeout: parseInt(basicCard.querySelector('#api-timeout').value) || 60000,
                 };
 
-                console.log(`[ConfigEditor] 测试 API 连通性，配置:`, currentConfig);
+
                 const result = await testAPIConnection(currentConfig);
-                console.log(`[ConfigEditor] 测试结果:`, result);
+
 
                 if (result.ok) {
                     testResultDiv.innerHTML = '<span style="color:#28a745;">✅ 连接成功</span>';
@@ -15026,11 +15845,11 @@
                 testBtn.textContent = '测试连通性';
             });
 
-            console.log('[ConfigEditor._renderApiProperties] ========== API 属性渲染完成 ==========');
+
         }
 
         _renderCategoryProperties(catId) {
-            console.log('[ConfigEditor._renderCategoryProperties] 开始渲染分类属性', catId);
+
             const cat = this.config.categories[catId];
             if (!cat) return;
 
@@ -15254,7 +16073,7 @@
         }
 
         _renderGroupProperties(index) {
-            console.log('[ConfigEditor._renderGroupProperties] 开始渲染互斥组属性', index);
+
             const group = this.config.categoryGroups[index];
             if (!group) return;
 
@@ -15298,7 +16117,7 @@
         }
 
         _renderGlobalProperties() {
-            console.log('[ConfigEditor._renderGlobalProperties] 开始渲染全局配置');
+
             const panel = this.propertyPanel;
             const config = this.config;
 
@@ -15372,7 +16191,7 @@
             panel.appendChild(container);
 
             const updateField = (field, value) => {
-                console.log(`[ConfigEditor._renderGlobalProperties] 更新字段 ${field} =`, value);
+
                 this.config[field] = value;
                 if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
             };
@@ -15393,9 +16212,9 @@
          * @param {Object} stageNode - 所属阶段节点（可能为空）
          */
         _renderAgentPropertiesInPanel(agentKey, stageNode) {
-            console.log(`[ConfigEditor._renderAgentPropertiesInPanel] ===== 开始渲染 Agent 属性面板 ===== agentKey=${agentKey}`);
-            console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 传入的 stageNode:`, stageNode);
-            console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 当前 this.config.workflowStages:`, this.config.workflowStages);
+
+
+
 
             const agent = this.config.agents[agentKey];
             if (!agent) {
@@ -15413,10 +16232,10 @@
             let contextError = null;
             try {
                 const context = API.getContext();
-                console.log('[ConfigEditor._renderAgentPropertiesInPanel] 获取到 SillyTavern 上下文:', context);
+
                 if (context.characters && Array.isArray(context.characters)) {
                     characterNames = context.characters.map(c => c.name || c.data?.name).filter(Boolean);
-                    console.log('[ConfigEditor._renderAgentPropertiesInPanel] 角色卡名称列表:', characterNames);
+
                 } else {
                     console.warn('[ConfigEditor._renderAgentPropertiesInPanel] context.characters 不存在或不是数组');
                 }
@@ -15575,17 +16394,17 @@
             const inputTemplateTextarea = panel.querySelector('#agent-inputTemplate');
             if (inputTemplateTextarea) {
                 let templateValue = agent.inputTemplate || '';
-                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 原始 inputTemplate 内容 (JSON 字符串化):`, JSON.stringify(templateValue));
-                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 原始 inputTemplate 长度: ${templateValue.length}`);
+
+
 
                 const convertedValue = templateValue.replace(/\\n/g, '\n');
                 const afterLength = convertedValue.length;
 
-                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 转换前包含 \\n 序列? ${/\\n/.test(templateValue)}`);
-                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 转换后长度: ${afterLength}, 减少了 ${templateValue.length - afterLength} 个字符 (每个 \\n 变为 1 个换行符)`);
+
+
 
                 if (templateValue !== convertedValue) {
-                    console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 检测到字面 \\n，已转换为真实换行符。`);
+
                 }
                 inputTemplateTextarea.value = convertedValue;
             } else {
@@ -15661,7 +16480,7 @@
                     if (currentStage) {
                         currentStageNum = currentStage.stage;
                         currentStageMode = currentStage.mode || 'serial';
-                        console.log(`[renderInputSources] 当前Agent阶段: ${currentStageNum} (${currentStageMode})`);
+
                     } else {
                         console.warn(`[renderInputSources] 未找到阶段 ${agent.stage}，将允许所有Agent`);
                     }
@@ -15746,7 +16565,7 @@
                 allCandidates.push('id.other_example', 'id.img_example', 'id.audio_example');
                 const uniqueCandidates = [...new Set(allCandidates)];
 
-                console.log(`[renderInputSources] uniqueCandidates:`, uniqueCandidates);
+
 
                 let html = '';
                 sourceItems.forEach((item, index) => {
@@ -15866,7 +16685,7 @@
 
             // 其他字段更新函数
             const updateField = (field, value) => {
-                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] updateField: field=${field}, value=${value}, agentKey=${agentKey}`);
+
 
                 if (field === 'stage') {
                     const oldStage = agent.stage;
@@ -15876,7 +16695,7 @@
                         const oldStage = this.config.workflowStages.find(s => s.id === oldStage);
                         if (oldStage && oldStage.agents) {
                             oldStage.agents = oldStage.agents.filter(k => k !== agentKey);
-                            console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 从阶段 ${oldStage} 的 agents 中移除 ${agentKey}`);
+
                         }
                     }
 
@@ -15887,9 +16706,9 @@
                         if (newStage) {
                             if (!newStage.agents.includes(agentKey)) {
                                 newStage.agents.push(agentKey);
-                                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 将 Agent ${agentKey} 添加到阶段 ${value} 的 agents 列表`);
+
                             } else {
-                                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] Agent ${agentKey} 已在阶段 ${value} 的 agents 列表中`);
+
                             }
                         } else {
                             console.warn(`[ConfigEditor._renderAgentPropertiesInPanel] 未找到阶段 ${value}，无法添加 Agent`);
@@ -15908,7 +16727,7 @@
             };
 
             container.querySelector('#agent-name').addEventListener('change', e => {
-                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] name 变更为: ${e.target.value}`);
+
                 updateField('name', e.target.value);
             });
             container.querySelector('#agent-displayName').addEventListener('input', e => updateField('displayName', e.target.value));
@@ -15921,7 +16740,7 @@
             container.querySelector('#agent-review').addEventListener('change', e => updateField('review', e.target.checked));
             container.querySelector('#agent-apiConfigId').addEventListener('change', e => updateField('apiConfigId', e.target.value));
             container.querySelector('#agent-inputTemplate').addEventListener('input', e => {
-                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] inputTemplate 内容已修改，新长度: ${e.target.value.length}`);
+
                 updateField('inputTemplate', e.target.value);
             });
             container.querySelector('#agent-executeInterval').addEventListener('input', e => updateField('executeInterval', parseInt(e.target.value) || 0));
@@ -15931,9 +16750,9 @@
             const keyInput = container.querySelector('#agent-key-input');
             keyInput.addEventListener('blur', () => {
                 const newKey = keyInput.value.trim();
-                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] key 输入框 blur 触发, 新值="${newKey}", 旧值="${agentKey}"`);
+
                 if (newKey === agentKey) {
-                    console.log('[ConfigEditor._renderAgentPropertiesInPanel] 新旧键相同，忽略');
+
                     return;
                 }
                 if (!newKey) {
@@ -15948,7 +16767,7 @@
                     keyInput.value = agentKey;
                     return;
                 }
-                console.log(`[ConfigEditor._renderAgentPropertiesInPanel] 准备调用 _updateAgentKey(${agentKey}, ${newKey})`);
+
                 this._updateAgentKey(agentKey, newKey);
             });
 
@@ -15966,7 +16785,7 @@
 
         // ---------- 资源管理方法 ----------
         selectApiConfig(id) {
-            console.log('[ConfigEditor] 选中 API 配置:', id);
+
             this.selectedApiId = id;
             this.selectedNode = null;
             this.selectedEdge = null;
@@ -15979,7 +16798,7 @@
         }
 
         selectCategory(id) {
-            console.log('[ConfigEditor] 选中分类:', id);
+
             this.selectedCategoryId = id;
             this.selectedNode = null;
             this.selectedEdge = null;
@@ -15992,7 +16811,7 @@
         }
 
         selectGroup(index) {
-            console.log('[ConfigEditor] 选中互斥组索引:', index);
+
             this.selectedGroupIndex = index;
             this.selectedNode = null;
             this.selectedEdge = null;
@@ -16005,7 +16824,7 @@
         }
 
         selectAgent(agentKey) {
-            console.log('[ConfigEditor.selectAgent] ===== 选中 Agent =====', agentKey);
+
             this.selectedNode = null;
             this.selectedEdge = null;
             this.selectedApiId = null;
@@ -16017,30 +16836,30 @@
             // 清空并重新计算高亮依赖
             this.highlightedAgents.clear();
             if (agentKey) {
-                console.log(`[ConfigEditor.selectAgent] 调用 _calculateAgentDependencies(${agentKey})`);
+
                 this._calculateAgentDependencies(agentKey);
-                console.log('[ConfigEditor.selectAgent] 高亮依赖集合:', Array.from(this.highlightedAgents));
+
             }
 
             const owningStage = this.config.workflowStages.find(stage => stage.agents.includes(agentKey));
             if (owningStage) {
                 const stageNode = this.nodes.find(n => n.type === 'stage' && n.key === owningStage.stage);
                 this.selectedAgentStageNode = stageNode;
-                console.log('[ConfigEditor.selectAgent] 所属阶段节点:', stageNode ? stageNode.key : 'null');
+
             } else {
                 this.selectedAgentStageNode = null;
-                console.log('[ConfigEditor.selectAgent] Agent 未分配给任何阶段');
+
             }
 
-            console.log('[ConfigEditor.selectAgent] 开始渲染属性面板');
+
             this._renderAgentPropertiesInPanel(agentKey, this.selectedAgentStageNode);
 
-            console.log('[ConfigEditor.selectAgent] 请求重绘');
+
             this._requestRender();
         }
 
         selectGlobal() {
-            console.log('[ConfigEditor] 选中全局配置');
+
             this.selectedGlobal = true;
             this.selectedNode = null;
             this.selectedEdge = null;
@@ -16083,7 +16902,7 @@
         }
 
         _calculateAgentDependencies(agentKey) {
-            console.log(`[ConfigEditor._calculateAgentDependencies] ===== 开始计算 Agent ${agentKey} 的依赖关系 =====`);
+
             const agents = this.config.agents || {};
             const stages = this.config.workflowStages || [];
             const dependsOn = new Set(); // 当前 Agent 依赖的其他 Agent
@@ -16106,13 +16925,13 @@
             // 1. 找出当前 Agent 依赖的其他 Agent（包括阶段内的所有 Agent）
             const currentAgent = agents[agentKey];
             if (currentAgent && currentAgent.inputs) {
-                console.log(`[ConfigEditor._calculateAgentDependencies] 当前 Agent ${agentKey} 的 inputs:`, currentAgent.inputs);
+
                 for (const src of currentAgent.inputs) {
                     // 处理直接 Agent 键
                     const depKey = extractAgentKeyFromSrc(src);
                     if (depKey && depKey !== agentKey) {
                         dependsOn.add(depKey);
-                        console.log(`[依赖] ${agentKey} 直接依赖 ${depKey} (源: ${src})`);
+
                         continue;
                     }
                     // 处理阶段 ID：该阶段内的所有 Agent 都是依赖
@@ -16122,7 +16941,7 @@
                             stage.agents.forEach(key => {
                                 if (key !== agentKey && agents[key]) {
                                     dependsOn.add(key);
-                                    console.log(`[依赖] ${agentKey} 通过阶段 ${src} 依赖 Agent ${key}`);
+
                                 }
                             });
                         }
@@ -16139,7 +16958,7 @@
                     const depKey = extractAgentKeyFromSrc(src);
                     if (depKey === agentKey) {
                         dependedBy.add(otherKey);
-                        console.log(`[依赖] ${otherKey} 直接依赖 ${agentKey} (源: ${src})`);
+
                         continue;
                     }
                     // 通过阶段引用：如果 src 是阶段 ID 且该阶段包含当前 Agent
@@ -16147,7 +16966,7 @@
                         const stage = stages.find(s => s.id === src);
                         if (stage && stage.agents && stage.agents.includes(agentKey)) {
                             dependedBy.add(otherKey);
-                            console.log(`[依赖] ${otherKey} 通过阶段 ${src} 依赖 ${agentKey}`);
+
                         }
                     }
                 }
@@ -16157,7 +16976,7 @@
             dependsOn.forEach(key => this.highlightedAgents.add(key));
             dependedBy.forEach(key => this.highlightedAgents.add(key));
 
-            console.log('[ConfigEditor._calculateAgentDependencies] 最终高亮依赖集合:', Array.from(this.highlightedAgents));
+
         }
 
         showValidationErrors(errors) {
@@ -16207,7 +17026,7 @@
             const stageData = stageNode.stageData;
             if (!stageData) return;
 
-            console.log(`[ConfigEditor._openAgentManager] ===== 打开管理Agent弹窗，阶段ID=${stageData.id}，名称=${stageNode.label} =====`);
+
 
             const overlay = document.createElement('div');
             overlay.className = 'nc-modal-overlay nc-font';
@@ -16357,26 +17176,26 @@
 
         // ========== 新增：Agent键名更新辅助方法 ==========
         _updateAgentKey(oldKey, newKey) {
-            console.log(`[ConfigEditor._updateAgentKey] ===== 开始修改 Agent 键名 =====`);
-            console.log(`[ConfigEditor._updateAgentKey] 旧键: ${oldKey}, 新键: ${newKey}`);
+
+
 
             // 1. 更新 agents 对象
-            console.log(`[ConfigEditor._updateAgentKey] 更新 agents 对象: 将 ${oldKey} 改为 ${newKey}`);
+
             this.config.agents[newKey] = this.config.agents[oldKey];
             delete this.config.agents[oldKey];
 
             // 2. 更新所有阶段中的 agents 列表
-            console.log(`[ConfigEditor._updateAgentKey] 更新阶段 agents 列表...`);
+
             this.config.workflowStages.forEach(stage => {
                 const idx = stage.agents.indexOf(oldKey);
                 if (idx !== -1) {
                     stage.agents[idx] = newKey;
-                    console.log(`[ConfigEditor._updateAgentKey] 阶段 ${stage.id} 的 agents 列表已更新: 将 ${oldKey} 替换为 ${newKey}`);
+
                 }
             });
 
             // 3. 更新所有 Agent 的 inputs 数组中的引用
-            console.log(`[ConfigEditor._updateAgentKey] 更新其他 Agent 的 inputs 引用...`);
+
             Object.entries(this.config.agents).forEach(([key, agent]) => {
                 if (agent.inputs && Array.isArray(agent.inputs)) {
                     const originalInputs = [...agent.inputs];
@@ -16387,38 +17206,38 @@
                         return src;
                     });
                     if (JSON.stringify(originalInputs) !== JSON.stringify(agent.inputs)) {
-                        console.log(`[ConfigEditor._updateAgentKey] Agent ${key} 的 inputs 已更新:`, originalInputs, '->', agent.inputs);
+
                     }
                 }
             });
 
             // 4. 更新当前选中的 AgentKey
             this.selectedAgentKey = newKey;
-            console.log(`[ConfigEditor._updateAgentKey] 当前选中键更新为: ${newKey}`);
+
 
             // 5. 重新计算高亮依赖
             this.highlightedAgents.clear();
             this._calculateAgentDependencies(newKey);
-            console.log('[ConfigEditor._updateAgentKey] 已重新计算依赖，高亮集合:', Array.from(this.highlightedAgents));
+
 
             // 6. 请求重绘画布
-            console.log('[ConfigEditor._updateAgentKey] 请求重绘');
+
             this._requestRender();
 
             // 7. 重新渲染属性面板为当前 Agent
             const owningStage = this.config.workflowStages.find(stage => stage.agents.includes(newKey));
             const stageNode = owningStage ? this.nodes.find(n => n.type === 'stage' && n.key === owningStage.stage) : null;
-            console.log(`[ConfigEditor._updateAgentKey] 查找所属阶段节点:`, stageNode ? stageNode.key : 'null');
+
             this._renderAgentPropertiesInPanel(newKey, stageNode);
 
             // 8. 触发配置变更回调
             if (this.callbacks.onConfigChange) {
-                console.log('[ConfigEditor._updateAgentKey] 触发 onConfigChange 回调');
+
                 this.callbacks.onConfigChange(this.getConfig());
             }
 
             Notify.success(`Agent 键名已修改为 ${newKey}`);
-            console.log('[ConfigEditor._updateAgentKey] ===== 修改完成 =====');
+
         }
 
         // ---------- 辅助：HTML转义 ----------
@@ -16431,6 +17250,12 @@
                 .replace(/'/g, '&#039;');
         }
     }
+
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 21：Galgame 编辑器与播放器                                  ║
+    // ║  GalgameEditor / GalgamePlayer — 视觉小说制作与播放               ║
+    // ╚══════════════════════════════════════════════════════════════════╝
 
     // ==================== Galgame 编辑器类 ====================
 
@@ -16551,7 +17376,7 @@
             for (const node of this.nodes) {
                 if (x >= node.x && x <= node.x + this.nodeWidth &&
                     y >= node.y && y <= node.y + this.nodeHeight) {
-                    console.log('[GalgameEditor] 命中节点 ID:', node.id, node.title);
+
 
                     // 多选逻辑
                     if (e.ctrlKey || e.metaKey) {
@@ -16578,7 +17403,7 @@
 
                     // 触发回调，更新属性面板
                     if (this.callbacks.onNodeSelect) {
-                        console.log('[GalgameEditor] 触发 onNodeSelect 回调，节点:', this.selectedNode);
+
                         this.callbacks.onNodeSelect(this.selectedNode);
                     }
 
@@ -16599,7 +17424,7 @@
                 this.selectedNodes.clear();
                 this.selectedNode = null;
                 if (this.callbacks.onNodeSelect) {
-                    console.log('[GalgameEditor] 触发 onNodeSelect 回调，节点为 null');
+
                     this.callbacks.onNodeSelect(null);
                 }
             }
@@ -16623,13 +17448,13 @@
             const rect = this.canvas.getBoundingClientRect();
             const x = (e.clientX - rect.left - this.offsetX) / this.scale;
             const y = (e.clientY - rect.top - this.offsetY) / this.scale;
-            console.log('[GalgameEditor] 双击画布，坐标:', x, y);
+
 
             // 检测是否点击到节点
             for (const node of this.nodes) {
                 if (x >= node.x && x <= node.x + this.nodeWidth &&
                     y >= node.y && y <= node.y + this.nodeHeight) {
-                    console.log('[GalgameEditor] 双击节点 ID:', node.id, node.title);
+
                     if (node.chapterNum) {
                         HistoryUI.viewChapter(node.chapterNum, { mode: 'readonly' });
                     } else {
@@ -16660,7 +17485,7 @@
             this.selectedNodes.add(newNode.id);
             this.selectedNode = newNode;
             if (this.callbacks.onNodeSelect) {
-                console.log('[GalgameEditor] 双击创建节点，触发回调');
+
                 this.callbacks.onNodeSelect(this.selectedNode);
             }
             this._requestRender();
@@ -16730,7 +17555,7 @@
                     }
                 }
                 if (targetNode) {
-                    console.log(`[GalgameEditor] 连接节点 ${this.draggingFrom.node.id} 的 "${this.draggingFrom.key}" 到节点 ${targetNode.id}`);
+
                     const oldTarget = this.draggingFrom.node.resultMap[this.draggingFrom.key];
                     this.draggingFrom.node.resultMap[this.draggingFrom.key] = targetNode.id;
                     this._recordAction({
@@ -16845,7 +17670,7 @@
          * @param {Object} draggedNode - 当前拖拽的节点
          */
         _updateAlignLines(draggedNode) {
-            console.log(`[GalgameEditor._updateAlignLines] ===== 开始更新对齐线 ===== draggedNode=${draggedNode?.id}`);
+
             const threshold = this.snapThreshold || 10;
             this.alignLines = [];
 
@@ -16856,30 +17681,30 @@
                 const draggedCenterY = draggedNode.y + this.nodeHeight / 2;
                 const nodeCenterY = node.y + this.nodeHeight / 2;
                 if (Math.abs(draggedCenterY - nodeCenterY) < threshold) {
-                    console.log(`[GalgameEditor._updateAlignLines] 添加水平中心对齐线 y=${nodeCenterY}`);
+
                     this.alignLines.push({ y: nodeCenterY, horizontal: true });
                 }
                 if (Math.abs(draggedNode.y - node.y) < threshold) {
-                    console.log(`[GalgameEditor._updateAlignLines] 添加上边缘对齐线 y=${node.y}`);
+
                     this.alignLines.push({ y: node.y, horizontal: true });
                 }
                 if (Math.abs(draggedNode.y + this.nodeHeight - node.y - this.nodeHeight) < threshold) {
-                    console.log(`[GalgameEditor._updateAlignLines] 添加下边缘对齐线 y=${node.y + this.nodeHeight}`);
+
                     this.alignLines.push({ y: node.y + this.nodeHeight, horizontal: true });
                 }
 
                 const draggedCenterX = draggedNode.x + this.nodeWidth / 2;
                 const nodeCenterX = node.x + this.nodeWidth / 2;
                 if (Math.abs(draggedCenterX - nodeCenterX) < threshold) {
-                    console.log(`[GalgameEditor._updateAlignLines] 添加垂直中心对齐线 x=${nodeCenterX}`);
+
                     this.alignLines.push({ x: nodeCenterX, horizontal: false });
                 }
                 if (Math.abs(draggedNode.x - node.x) < threshold) {
-                    console.log(`[GalgameEditor._updateAlignLines] 添加左边缘对齐线 x=${node.x}`);
+
                     this.alignLines.push({ x: node.x, horizontal: false });
                 }
                 if (Math.abs(draggedNode.x + this.nodeWidth - node.x - this.nodeWidth) < threshold) {
-                    console.log(`[GalgameEditor._updateAlignLines] 添加右边缘对齐线 x=${node.x + this.nodeWidth}`);
+
                     this.alignLines.push({ x: node.x + this.nodeWidth, horizontal: false });
                 }
             }
@@ -16890,12 +17715,12 @@
             const viewRight = (this.canvas.width - this.offsetX) / this.scale;
             const startCol = Math.floor(viewLeft / this.columnWidth) * this.columnWidth;
             const endCol = Math.ceil(viewRight / this.columnWidth) * this.columnWidth;
-            console.log(`[GalgameEditor._updateAlignLines] 列边界范围: ${startCol} ~ ${endCol}，步长 ${this.columnWidth}`);
+
 
             for (let x = startCol; x <= endCol; x += this.columnWidth) {
                 const dist = Math.abs(draggedNode.x + this.nodeWidth / 2 - x);
                 if (dist < threshold) {
-                    console.log(`[GalgameEditor._updateAlignLines] 添加列边界对齐线 x=${x}，距离=${dist.toFixed(2)}`);
+
                     this.alignLines.push({ x: x, horizontal: false, isColumn: true });
                 }
             }
@@ -16906,12 +17731,12 @@
             const viewBottom = (this.canvas.height - this.offsetY) / this.scale;
             const startRow = Math.floor(viewTop / this.rowHeight) * this.rowHeight;
             const endRow = Math.ceil(viewBottom / this.rowHeight) * this.rowHeight;
-            console.log(`[GalgameEditor._updateAlignLines] 行边界范围: ${startRow} ~ ${endRow}，步长 ${this.rowHeight}`);
+
 
             for (let y = startRow; y <= endRow; y += this.rowHeight) {
                 const dist = Math.abs(draggedNode.y + this.nodeHeight / 2 - y);
                 if (dist < threshold) {
-                    console.log(`[GalgameEditor._updateAlignLines] 添加行边界对齐线 y=${y}，距离=${dist.toFixed(2)}`);
+
                     this.alignLines.push({ y: y, horizontal: true, isRow: true });
                 }
             }
@@ -16921,9 +17746,9 @@
          * 将选中节点吸附到最近的对齐线（支持列边界）
          */
         _snapToAlignLines() {
-            console.log(`[GalgameEditor._snapToAlignLines] ===== 开始吸附 =====`);
+
             if (this.selectedNodes.size === 0 || this.alignLines.length === 0) {
-                console.log('[GalgameEditor._snapToAlignLines] 无选中节点或无对齐线，跳过');
+
                 return;
             }
 
@@ -16935,7 +17760,7 @@
                 return;
             }
 
-            console.log(`[GalgameEditor._snapToAlignLines] 基准节点 ID=${primary.id}, 位置 (${primary.x.toFixed(2)}, ${primary.y.toFixed(2)})`);
+
 
             let snapX = null, snapY = null;
             let minDistX = Infinity, minDistY = Infinity;
@@ -16946,14 +17771,14 @@
                     if (dist < this.snapThreshold && dist < minDistY) {
                         minDistY = dist;
                         snapY = line.y;
-                        console.log(`[GalgameEditor._snapToAlignLines] 候选水平吸附线 y=${line.y}，距离=${dist.toFixed(2)}`);
+
                     }
                 } else {
                     const dist = Math.abs(primary.x + this.nodeWidth / 2 - line.x);
                     if (dist < this.snapThreshold && dist < minDistX) {
                         minDistX = dist;
                         snapX = line.x;
-                        console.log(`[GalgameEditor._snapToAlignLines] 候选垂直吸附线 x=${line.x}，距离=${dist.toFixed(2)}`);
+
                     }
                 }
             }
@@ -16961,18 +17786,18 @@
             if (snapX !== null || snapY !== null) {
                 const dx = snapX !== null ? snapX - (primary.x + this.nodeWidth / 2) : 0;
                 const dy = snapY !== null ? snapY - primary.y : 0;
-                console.log(`[GalgameEditor._snapToAlignLines] 最终偏移: dx=${dx.toFixed(2)}, dy=${dy.toFixed(2)}`);
+
 
                 for (const nodeId of this.selectedNodes) {
                     const node = this.getNodeById(nodeId);
                     if (node) {
                         node.x += dx;
                         node.y += dy;
-                        console.log(`[GalgameEditor._snapToAlignLines] 节点 ${nodeId} 新位置 (${node.x.toFixed(2)}, ${node.y.toFixed(2)})`);
+
                     }
                 }
             } else {
-                console.log('[GalgameEditor._snapToAlignLines] 无有效吸附');
+
             }
         }
 
@@ -17268,10 +18093,10 @@
         _requestRender() {
             if (this._renderPending) return;
             this._renderPending = true;
-            console.log(`[ConfigEditor._requestRender] 请求重绘，时间戳: ${Date.now()}`);
+
             requestAnimationFrame(() => {
                 this._renderPending = false;
-                console.log(`[ConfigEditor._requestRender] 执行重绘，时间戳: ${Date.now()}`);
+
                 this.render();
             });
         }
@@ -17479,15 +18304,15 @@
          * 自动布局节点：按网格中心对齐，若目标网格被占用，则通过 BFS 寻找最近的空闲网格
          */
         autoLayout() {
-            console.log('[GalgameEditor.autoLayout] ===== 开始自动布局（无限制 BFS 版） =====');
+
             // 初始化列宽和行高（若未设置）
             if (!this.columnWidth) {
                 this.columnWidth = 200;
-                console.log(`[GalgameEditor.autoLayout] 初始化 columnWidth = ${this.columnWidth}`);
+
             }
             if (!this.rowHeight) {
                 this.rowHeight = 150;
-                console.log(`[GalgameEditor.autoLayout] 初始化 rowHeight = ${this.rowHeight}`);
+
             }
 
             const movedNodes = [];
@@ -17505,7 +18330,7 @@
 
                 // 若目标单元格已被占用，则搜索最近的空闲单元格
                 if (occupied.has(key)) {
-                    console.log(`[GalgameEditor.autoLayout] 节点 ${node.id} 的目标单元格 (${targetCol},${targetRow}) 已被占用，开始 BFS 搜索最近空闲网格`);
+
 
                     // BFS 逐层向外搜索（无半径限制）
                     let found = false;
@@ -17521,7 +18346,7 @@
                             bestCol = col;
                             bestRow = row;
                             found = true;
-                            console.log(`[GalgameEditor.autoLayout] 在距离 ${dist} 格处找到空闲单元格 (${col},${row})`);
+
                             break;
                         }
 
@@ -17571,9 +18396,9 @@
                     });
                     node.x = newX;
                     node.y = newY;
-                    console.log(`[GalgameEditor.autoLayout] 节点 ${node.id} 移动到 (${newX.toFixed(2)}, ${newY.toFixed(2)})，对应网格 (${targetCol},${targetRow})`);
+
                 } else {
-                    console.log(`[GalgameEditor.autoLayout] 节点 ${node.id} 位置未变，保持在 (${node.x.toFixed(2)}, ${node.y.toFixed(2)})`);
+
                 }
 
                 // 标记该单元格为已占用
@@ -17582,25 +18407,26 @@
 
             if (movedNodes.length > 0) {
                 this._recordAction({ type: 'moveMultiple', nodes: movedNodes });
-                console.log(`[GalgameEditor.autoLayout] 记录了 ${movedNodes.length} 个节点的移动`);
+
             } else {
-                console.log('[GalgameEditor.autoLayout] 无节点需要移动');
+
             }
 
             this._requestRender();
             if (this.callbacks.onNodesChange) {
                 this.callbacks.onNodesChange();
-                console.log('[GalgameEditor.autoLayout] 触发 onNodesChange 回调');
+
             }
-            console.log('[GalgameEditor.autoLayout] 自动布局完成');
+
         }
     }
+
 
     // ==================== Galgame 播放器类 ====================
 
     class GalgamePlayer {
         constructor(container, project, optionsContainer, callbacks = {}) {
-            console.log('[GalgamePlayer] 初始化，项目:', project);
+
             this.container = container;
             this.optionsContainer = optionsContainer;
             this.project = project;
@@ -17610,7 +18436,7 @@
             this.history = [];
             this.canGoBack = false;
             this.originalResolver = null;
-            console.log('[GalgamePlayer] 变量初始值:', this.variables);
+
         }
 
         start() {
@@ -17625,11 +18451,11 @@
         }
 
         _evalScript(script, result) {
-            console.log('[GalgamePlayer] 执行脚本，result:', result);
+
             const utils = {
                 getControl: (res) => {
                     const match = res.match(/^\[([^:]+):\s*(.*)\]$/);
-                    return match ? {type: match[1], value: match[2]} : null;
+                    return match ? { type: match[1], value: match[2] } : null;
                 },
                 getNumber: (res) => {
                     const ctrl = utils.getControl(res);
@@ -17643,7 +18469,7 @@
             try {
                 const fn = new Function('vars', 'result', 'utils', script);
                 const resultValue = fn(this.variables, result, utils);
-                console.log('[GalgamePlayer] 脚本执行结果:', resultValue);
+
                 return resultValue;
             } catch (e) {
                 console.error('[GalgamePlayer] 脚本执行错误:', e);
@@ -17678,7 +18504,7 @@
         }
 
         async loadNode(nodeId, skipHistory = false) {
-            console.log('[GalgamePlayer] 加载节点:', nodeId, 'skipHistory:', skipHistory);
+
             if (!skipHistory && this.currentNodeId && this.currentNodeId !== nodeId) {
                 this.history.push(this.currentNodeId);
                 this.canGoBack = true;
@@ -17705,7 +18531,7 @@
                 return;
             }
 
-            console.log(`[GalgamePlayer] 加载节点 ${nodeId}，章节号 ${node.chapterNum}`);
+
             const processed = await UI._replaceImagePlaceholders(chapter.content);
             this.container.innerHTML = processed;
             this.executeScripts(this.container);
@@ -17720,7 +18546,7 @@
         }
 
         handleInteraction(result) {
-            console.log('[GalgamePlayer] 处理交互结果:', result);
+
             const node = this.getCurrentNode();
             if (!node) return;
 
@@ -17734,7 +18560,7 @@
 
             if (targetId === null && node.defaultTarget !== undefined) {
                 targetId = this._resolveTarget(node.defaultTarget);
-                console.log('[GalgamePlayer] 使用默认目标:', node.defaultTarget, '->', targetId);
+
             }
 
             if (targetId !== null) {
@@ -17744,7 +18570,7 @@
             }
 
             window.__interactionResolver = function (result) {
-                console.log('[Player] 收到交互结果:', result);
+
                 const node = findNode(currentNodeId);
                 if (!node) return;
 
@@ -17758,7 +18584,7 @@
 
                 if (targetId === null && node.defaultTarget !== undefined) {
                     targetId = resolveTarget(node.defaultTarget);
-                    console.log('[Player] 使用默认目标:', node.defaultTarget, '->', targetId);
+
                 }
 
                 if (targetId !== null) {
@@ -17786,440 +18612,11 @@
         }
     }
 
-    // ==================== 图片存储管理器 ====================
 
-    const ImageStore = {
-        DB_NAME: 'NovelCreatorImagesDB',
-        DB_VERSION: 1,
-        STORE_NAME: 'images',
-
-        async _openDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
-                request.onerror = () => reject(request.error);
-                request.onsuccess = () => resolve(request.result);
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
-                    }
-                };
-            });
-        },
-
-        /**
-         * 保存图片（接受 Blob/File 或 base64 字符串）
-         * @param {Blob|string} imageData - 图片 Blob 或 base64 字符串
-         * @param {string} [format] - 图片格式（如 'png', 'jpeg'），当 imageData 为 Blob 时可自动推断
-         * @returns {Promise<string>} 图片 ID（格式：img_时间戳_随机数）
-         */
-        async save(imageData, format, providedId) {
-            let id = providedId;
-            if (!id) {
-                id = `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            }
-            let blob;
-            if (typeof imageData === 'string' && imageData.startsWith('data:')) {
-                const response = await fetch(imageData);
-                blob = await response.blob();
-            } else if (imageData instanceof Blob) {
-                blob = imageData;
-            } else {
-                throw new Error('不支持的图片数据格式');
-            }
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.put({id, blob});
-                request.onsuccess = () => resolve(id);
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 根据 ID 获取图片 Blob
-         * @param {string} id
-         * @returns {Promise<Blob|null>}
-         */
-        async get(id) {
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readonly');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.get(id);
-                request.onsuccess = () => resolve(request.result ? request.result.blob : null);
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 获取所有图片（用于导出）
-         * @returns {Promise<Array<{id: string, blob: Blob}>>}
-         */
-        async getAll() {
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readonly');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.getAll();
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 删除指定 ID 的图片
-         * @param {string} id
-         * @returns {Promise<void>}
-         */
-        async delete(id) {
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.delete(id);
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 清空所有图片
-         * @returns {Promise<void>}
-         */
-        async clear() {
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.clear();
-                request.onsuccess = () => resolve();
-                request.onerror = () => reject(request.error);
-                transaction.oncomplete = () => db.close();
-            });
-        }
-    };
-
-    // ==================== 其余文件存储管理器 ====================
-
-    const OtherFileStore = {
-        DB_NAME: 'NovelCreatorTextsDB',       // 保持原数据库名，避免数据丢失
-        DB_VERSION: 1,
-        STORE_NAME: 'texts',                   // 保持原存储名，避免数据丢失
-
-        async _openDB() {
-            console.log('[OtherFileStore._openDB] 打开数据库', this.DB_NAME);
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
-                request.onerror = () => {
-                    console.error('[OtherFileStore._openDB] 打开失败', request.error);
-                    reject(request.error);
-                };
-                request.onsuccess = () => {
-                    console.log('[OtherFileStore._openDB] 打开成功');
-                    resolve(request.result);
-                };
-                request.onupgradeneeded = (event) => {
-                    console.log('[OtherFileStore] 升级数据库', event);
-                    const db = event.target.result;
-                    if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
-                    }
-                };
-            });
-        },
-
-        /**
-         * 保存其余文件内容（如 HTML、JS、CSS、纯文本等）
-         * @param {string} text - 文件内容
-         * @param {string} format - 格式，如 'txt', 'html', 'js'
-         * @param {string} [providedId] - 可选，指定ID
-         * @returns {Promise<string>} 文件ID（格式：other_时间戳_随机数）
-         */
-        async save(text, format, providedId) {
-            console.log(`[OtherFileStore.save] ===== 开始保存其余文件 =====`);
-            console.log(`[OtherFileStore.save] format=${format}, text长度=${text.length}, providedId=${providedId}`);
-            let id = providedId;
-            if (!id) {
-                id = `other_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-                console.log(`[OtherFileStore.save] 自动生成ID: ${id}`);
-            } else {
-                console.log(`[OtherFileStore.save] 使用指定ID: ${id}`);
-            }
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const entry = { id, text, format, timestamp: Date.now() };
-                console.log(`[OtherFileStore.save] 写入数据:`, { id, format, textLength: text.length });
-                const request = store.put(entry);
-                request.onsuccess = () => {
-                    console.log(`[OtherFileStore.save] 保存成功, id=${id}`);
-                    resolve(id);
-                };
-                request.onerror = () => {
-                    console.error('[OtherFileStore.save] 保存失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => {
-                    console.log('[OtherFileStore.save] 事务完成，关闭数据库');
-                    db.close();
-                };
-            });
-        },
-
-        /**
-         * 根据ID获取其余文件内容
-         * @param {string} id
-         * @returns {Promise<{text: string, format: string}|null>}
-         */
-        async get(id) {
-            console.log(`[OtherFileStore.get] ===== 获取其余文件 ===== id=${id}`);
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readonly');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.get(id);
-                request.onsuccess = () => {
-                    const result = request.result;
-                    if (result) {
-                        console.log(`[OtherFileStore.get] 获取成功, format=${result.format}, text长度=${result.text.length}`);
-                        resolve(result);
-                    } else {
-                        console.warn(`[OtherFileStore.get] 未找到id=${id}`);
-                        resolve(null);
-                    }
-                };
-                request.onerror = () => {
-                    console.error('[OtherFileStore.get] 获取失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 删除指定ID的其余文件
-         * @param {string} id
-         */
-        async delete(id) {
-            console.log(`[OtherFileStore.delete] 删除其余文件, id=${id}`);
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.delete(id);
-                request.onsuccess = () => {
-                    console.log(`[OtherFileStore.delete] 删除成功, id=${id}`);
-                    resolve();
-                };
-                request.onerror = () => {
-                    console.error('[OtherFileStore.delete] 删除失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 清空所有其余文件
-         */
-        async clear() {
-            console.log('[OtherFileStore.clear] 清空所有其余文件');
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.clear();
-                request.onsuccess = () => {
-                    console.log('[OtherFileStore.clear] 清空成功');
-                    resolve();
-                };
-                request.onerror = () => {
-                    console.error('[OtherFileStore.clear] 清空失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        async getAll() {
-            console.log('[OtherFileStore.getAll] 获取所有其余文件');
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readonly');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.getAll();
-                request.onsuccess = () => {
-                    console.log(`[OtherFileStore.getAll] 获取到 ${request.result.length} 条其余文件`);
-                    resolve(request.result);
-                };
-                request.onerror = () => {
-                    console.error('[OtherFileStore.getAll] 获取失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => db.close();
-            });
-        }
-    };
-
-    // ==================== 音频存储管理器 ====================
-
-    const AudioStore = {
-        DB_NAME: 'NovelCreatorAudiosDB',
-        DB_VERSION: 1,
-        STORE_NAME: 'audios',
-
-        async _openDB() {
-            return new Promise((resolve, reject) => {
-                const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
-                request.onerror = () => reject(request.error);
-                request.onsuccess = () => resolve(request.result);
-                request.onupgradeneeded = (event) => {
-                    const db = event.target.result;
-                    if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
-                    }
-                };
-            });
-        },
-
-        /**
-         * 保存音频 Blob
-         * @param {Blob} audioBlob - 音频 Blob
-         * @param {string} [providedId] - 可选，指定 ID
-         * @returns {Promise<string>} 音频 ID（格式：audio_时间戳_随机数）
-         */
-        async save(audioBlob, providedId) {
-            console.log(`[AudioStore.save] ========== 开始保存音频 ==========`);
-            console.log(`[AudioStore.save] providedId: ${providedId}, blob 类型: ${audioBlob?.type}, 大小: ${audioBlob?.size} 字节`);
-
-            let id = providedId;
-            if (!id) {
-                id = `audio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            }
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.put({id, blob: audioBlob, timestamp: Date.now()});
-                request.onsuccess = () => {
-                    console.log(`[AudioStore.save] 保存成功，ID: ${id}`);
-                    resolve(id);
-                };
-                request.onerror = () => {
-                    console.error('[AudioStore.save] 保存失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 根据 ID 获取音频 Blob
-         * @param {string} id
-         * @returns {Promise<Blob|null>}
-         */
-        async get(id) {
-            console.log(`[AudioStore.get] 获取音频，ID: ${id}`);
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readonly');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.get(id);
-                request.onsuccess = () => {
-                    const result = request.result;
-                    if (result) {
-                        console.log(`[AudioStore.get] 获取成功，blob 类型: ${result.blob?.type}, 大小: ${result.blob?.size}`);
-                        resolve(result.blob);
-                    } else {
-                        console.warn(`[AudioStore.get] 未找到 ID: ${id}`);
-                        resolve(null);
-                    }
-                };
-                request.onerror = () => {
-                    console.error('[AudioStore.get] 获取失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 获取所有音频（用于导出）
-         * @returns {Promise<Array<{id: string, blob: Blob}>>}
-         */
-        async getAll() {
-            console.log('[AudioStore.getAll] 获取所有音频');
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readonly');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.getAll();
-                request.onsuccess = () => {
-                    console.log(`[AudioStore.getAll] 获取到 ${request.result.length} 条音频`);
-                    resolve(request.result);
-                };
-                request.onerror = () => {
-                    console.error('[AudioStore.getAll] 获取失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 删除指定 ID 的音频
-         * @param {string} id
-         * @returns {Promise<void>}
-         */
-        async delete(id) {
-            console.log(`[AudioStore.delete] 删除音频，ID: ${id}`);
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.delete(id);
-                request.onsuccess = () => {
-                    console.log(`[AudioStore.delete] 删除成功`);
-                    resolve();
-                };
-                request.onerror = () => {
-                    console.error('[AudioStore.delete] 删除失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => db.close();
-            });
-        },
-
-        /**
-         * 清空所有音频
-         * @returns {Promise<void>}
-         */
-        async clear() {
-            console.log('[AudioStore.clear] 清空所有音频');
-            const db = await this._openDB();
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.clear();
-                request.onsuccess = () => {
-                    console.log('[AudioStore.clear] 清空成功');
-                    resolve();
-                };
-                request.onerror = () => {
-                    console.error('[AudioStore.clear] 清空失败', request.error);
-                    reject(request.error);
-                };
-                transaction.oncomplete = () => db.close();
-            });
-        }
-    };
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 22：历史记录 UI                                            ║
+    // ║  HistoryUI — 章节历史、分支树、章节操作（含分支核心操作）         ║
+    // ╚══════════════════════════════════════════════════════════════════╝
 
     // ==================== 历史记录UI ====================
 
@@ -18227,11 +18624,11 @@
 
         show() {
             console.time('HistoryUI.show');
-            console.log('[HistoryUI.show] ========== 开始渲染历史面板 ==========');
+
             UI.closeAll();
 
             const chapters = Storage.loadChapters();
-            console.log(`[HistoryUI.show] 加载到 ${chapters.length} 个章节`);
+
 
             const { childrenMap, chapterMap } = buildTreeMaps(chapters);
             const roots = chapters.filter(ch => ch.parent === null).sort((a, b) => a.num - b.num);
@@ -18450,7 +18847,7 @@
                             else Notify.warning('请至少选择一个章节');
                             break;
                         case 'importBackup':
-                            console.log('[HistoryUI] 点击导入备份按钮');
+
                             await this.importBackup();
                             break;
                         case 'refresh':
@@ -18465,7 +18862,7 @@
                 }
             });
 
-            console.log('[HistoryUI.show] 渲染完成');
+
             console.timeEnd('HistoryUI.show');
         },
 
@@ -18480,7 +18877,7 @@
         // 在 HistoryUI 对象内添加此方法
         async exportArticles(selectedNums) {
             UI.updateProgress('开始导出选中文章...');
-            console.log(`[HistoryUI.exportArticles] 选中章节: ${selectedNums.join(', ')}`);
+
 
             try {
                 const chapters = Storage.loadChapters().filter(c => selectedNums.includes(c.num));
@@ -18488,7 +18885,7 @@
                     Notify.warning('没有可导出的章节', '', { timeOut: 2000 });
                     return;
                 }
-                console.log(`[HistoryUI.exportArticles] 导出章节数量: ${chapters.length}`);
+
 
                 // 准备章节备份数据
                 const chapterBackup = {
@@ -18517,19 +18914,19 @@
 
                     while ((match = imageIdRegex.exec(content)) !== null) {
                         imageIds.add(match[1]);
-                        console.log(`[HistoryUI.exportArticles] 找到图片ID: ${match[1]}`);
+
                     }
                     while ((match = audioIdRegex.exec(content)) !== null) {
                         audioIds.add(match[1]);
-                        console.log(`[HistoryUI.exportArticles] 找到音频ID: ${match[1]}`);
+
                     }
                     while ((match = otherFileIdRegex.exec(content)) !== null) {
                         otherFileIds.add(match[1]);
-                        console.log(`[HistoryUI.exportArticles] 找到其余文件ID: ${match[1]}`);
+
                     }
                 }
 
-                console.log(`[HistoryUI.exportArticles] 共收集到图片ID: ${imageIds.size}, 音频ID: ${audioIds.size}, 其余文件ID: ${otherFileIds.size}`);
+
 
                 // 如果没有需要导出的文件，直接导出JSON
                 if (imageIds.size === 0 && audioIds.size === 0 && otherFileIds.size === 0) {
@@ -18543,7 +18940,7 @@
                 // 创建ZIP
                 const zip = new JSZip();
                 zip.file('chapters.json', JSON.stringify(chapterBackup, null, 2));
-                console.log('[HistoryUI.exportArticles] chapters.json 已添加到ZIP');
+
 
                 // 添加图片文件夹
                 if (imageIds.size > 0) {
@@ -18560,7 +18957,7 @@
                                 const fileName = `${id}.${ext}`;
                                 imageFolder.file(fileName, blob, { binary: true });
                                 imageCount++;
-                                console.log(`[HistoryUI.exportArticles] 图片 ${id} 已添加到ZIP`);
+
                             } else {
                                 console.warn(`[HistoryUI.exportArticles] 图片 ${id} 不存在，跳过`);
                             }
@@ -18569,7 +18966,7 @@
                             UI.updateProgress(`  ⚠️ 图片 ${id} 获取失败`, true);
                         }
                     }
-                    console.log(`[HistoryUI.exportArticles] 已添加 ${imageCount} 张图片`);
+
                 }
 
                 // 添加音频文件夹
@@ -18588,7 +18985,7 @@
                                 const fileName = `${id}.${ext}`;
                                 audioFolder.file(fileName, blob, { binary: true });
                                 audioCount++;
-                                console.log(`[HistoryUI.exportArticles] 音频 ${id} 已添加到ZIP`);
+
                             } else {
                                 console.warn(`[HistoryUI.exportArticles] 音频 ${id} 不存在，跳过`);
                             }
@@ -18597,7 +18994,7 @@
                             UI.updateProgress(`  ⚠️ 音频 ${id} 获取失败`, true);
                         }
                     }
-                    console.log(`[HistoryUI.exportArticles] 已添加 ${audioCount} 个音频`);
+
                 }
 
                 // 添加其余文件文件夹
@@ -18614,7 +19011,7 @@
                                 const fileName = `${id}.${ext}`;
                                 otherFolder.file(fileName, item.text, { binary: false });
                                 otherCount++;
-                                console.log(`[HistoryUI.exportArticles] 其余文件 ${id} 已添加到ZIP (文件夹: others)`);
+
                             } else {
                                 console.warn(`[HistoryUI.exportArticles] 其余文件 ${id} 不存在，跳过`);
                             }
@@ -18623,7 +19020,7 @@
                             UI.updateProgress(`  ⚠️ 其余文件 ${id} 获取失败`, true);
                         }
                     }
-                    console.log(`[HistoryUI.exportArticles] 已添加 ${otherCount} 个其余文件`);
+
                 }
 
                 // 生成ZIP并下载
@@ -18636,7 +19033,7 @@
                 URL.revokeObjectURL(url);
 
                 UI.updateProgress(`✅ 已导出包含 ${imageIds.size} 张图片、${audioIds.size} 个音频、${otherFileIds.size} 个其余文件的 ZIP 备份 (${chapters.length}章)`);
-                console.log('[HistoryUI.exportArticles] 导出完成');
+
 
             } catch (err) {
                 console.error('[HistoryUI.exportArticles] 导出失败:', err);
@@ -18802,7 +19199,7 @@
         viewChapter: async function (num, options = {}) {
             const mode = options.mode || 'readonly';
             const fromHistory = options.fromHistory || false;
-            console.log(`[DEBUG][HistoryUI.viewChapter] 被调用：num=${num}, mode=${mode}, fromHistory=${fromHistory}, 时间戳=${Date.now()}`);
+
 
             if (num === 0) {
                 this.editChapter(0);
@@ -18835,7 +19232,7 @@
             let bodyHTML = '';
 
             const isHtml = UI._detectHTML(chapter.content);
-            console.log(`[HistoryUI.viewChapter] 内容是否为HTML: ${isHtml}`);
+
 
             if (mode === 'readonly') {
                 // 元信息行
@@ -18926,7 +19323,7 @@
 
                 // 预览渲染函数
                 const renderPreview = async () => {
-                    console.log('[HistoryUI.viewChapter] 渲染预览');
+
                     const processed = await UI._replaceImagePlaceholders(chapter.content);
                     previewContainer.innerHTML = processed;
                     // 执行脚本
@@ -18952,7 +19349,7 @@
                     sourceBtn.style.boxShadow = 'none';
 
                     sourceBtn.addEventListener('click', () => {
-                        console.log('[HistoryUI.viewChapter] 切换到源码视图');
+
                         sourceContainer.style.display = 'block';
                         previewContainer.style.display = 'none';
                         // 高亮源码按钮
@@ -18963,7 +19360,7 @@
                         if (refreshBtn) refreshBtn.style.display = 'none';
                     });
                     previewBtn.addEventListener('click', async () => {
-                        console.log('[HistoryUI.viewChapter] 切换到预览视图');
+
                         sourceContainer.style.display = 'none';
                         previewContainer.style.display = 'block';
                         // 高亮预览按钮
@@ -18985,7 +19382,7 @@
                 // 复制按钮事件（原有逻辑）
                 const copyBtn = modal.querySelector('.nc-modal-copy-btn');
                 copyBtn.addEventListener('click', async () => {
-                    console.log('[HistoryUI.viewChapter] 复制按钮点击');
+
                     try {
                         await navigator.clipboard.writeText(chapter.content);
                         Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
@@ -19011,7 +19408,7 @@
                 const switchBtn = modal.querySelector('#nc-switch-mode');
                 if (switchBtn) {
                     switchBtn.addEventListener('click', () => {
-                        console.log('[HistoryUI.viewChapter] 切换模式');
+
                         UI._closeModal(overlay);
                         const newMode = mode === 'readonly' ? 'edit' : 'readonly';
                         this.viewChapter(num, { mode: newMode, fromHistory });
@@ -19037,7 +19434,7 @@
 
                 // 预览按钮
                 previewBtn.addEventListener('click', async () => {
-                    console.log('[HistoryUI.viewChapter] 编辑模式点击预览');
+
                     const title = editTitle.value.trim() || `第${chapter.num}章`;
                     const content = editContent.value;
                     UI.showPreviewModal(content, `预览: ${title}`);
@@ -19045,7 +19442,7 @@
 
                 // 保存按钮（原有逻辑）
                 saveBtn.addEventListener('click', async () => {
-                    console.log('[HistoryUI.viewChapter] 保存按钮点击');
+
                     const newTitle = editTitle.value.trim();
                     const newContent = editContent.value;
                     if (!newTitle) {
@@ -19097,7 +19494,7 @@
                         for (const id of toDeleteImages) {
                             try {
                                 await ImageStore.delete(id);
-                                console.log(`[编辑保存] 已删除图片 ${id}`);
+
                             } catch (e) {
                                 console.warn(`[编辑保存] 删除图片 ${id} 失败:`, e);
                             }
@@ -19118,7 +19515,7 @@
 
                 // 复制按钮
                 copyBtn.addEventListener('click', async () => {
-                    console.log('[HistoryUI.viewChapter] 复制按钮点击');
+
                     const textToCopy = `# ${editTitle.value}\n\n${editContent.value}`;
                     try {
                         await navigator.clipboard.writeText(textToCopy);
@@ -19139,7 +19536,7 @@
 
                 // 切换模式
                 switchBtn.addEventListener('click', () => {
-                    console.log('[HistoryUI.viewChapter] 切换模式');
+
                     UI._closeModal(overlay);
                     this.viewChapter(num, { mode: 'readonly', fromHistory });
                 });
@@ -19226,7 +19623,7 @@
 
             // 预览按钮
             previewBtn.addEventListener('click', async () => {
-                console.log('[HistoryUI.editChapter] 点击预览');
+
                 const title = titleInput.value.trim() || (isNew ? '新建章节' : `第${chapter.num}章`);
                 const content = contentInput.value;
                 UI.showPreviewModal(content, `预览: ${title}`);
@@ -19234,11 +19631,11 @@
 
             // 保存按钮（原有逻辑）
             saveBtn.addEventListener('click', async () => {
-                console.log('[HistoryUI.editChapter] 保存按钮点击');
+
                 const newTitle = titleInput.value.trim();
                 const newContent = contentInput.value;
                 if (!newTitle) {
-                    Notify.warning('请输入章节标题', '', {timeOut: 2000});
+                    Notify.warning('请输入章节标题', '', { timeOut: 2000 });
                     return;
                 }
 
@@ -19270,7 +19667,7 @@
                     };
                     const success = Storage.saveChapter(newChapter, newChapter.num, snapshot);
                     if (success) {
-                        Notify.success(`第${newChapter.num}章已保存，并附带状态快照`, '', {timeOut: 2000});
+                        Notify.success(`第${newChapter.num}章已保存，并附带状态快照`, '', { timeOut: 2000 });
                         if (document.getElementById(CONFIG.UI.panelId)) {
                             UI.createPanel();
                         }
@@ -19300,8 +19697,8 @@
                         snapshot: snapshot
                     };
                     chapters.sort((a, b) => a.num - b.num);
-                    if (Storage.save({chapters})) {
-                        Notify.success(`第${chapter.num}章已更新`, '', {timeOut: 2000});
+                    if (Storage.save({ chapters })) {
+                        Notify.success(`第${chapter.num}章已更新`, '', { timeOut: 2000 });
                         if (document.getElementById(CONFIG.UI.panelId)) {
                             UI.createPanel();
                         }
@@ -19332,7 +19729,7 @@
             const chapter = chapters.find(c => c.num === num);
             if (!chapter) {
 
-                Notify.info('未找到对应章节', '', {timeOut: 2000});
+                Notify.info('未找到对应章节', '', { timeOut: 2000 });
                 return;
             }
 
@@ -19340,7 +19737,7 @@
 
             if (!chapter.snapshot || snapshotCount === 0) {
 
-                Notify.info('该章节没有状态快照', '', {timeOut: 2000});
+                Notify.info('该章节没有状态快照', '', { timeOut: 2000 });
                 return;
             }
 
@@ -19349,7 +19746,7 @@
         },
 
         async rollbackChapter(num) {
-            console.log(`[HistoryUI.rollbackChapter] ===== 开始回滚到章节 ${num} =====`);
+
             const chapters = Storage.loadChapters();
             const chapter = chapters.find(c => c.num === num);
             if (!chapter || !chapter.snapshot) {
@@ -19364,22 +19761,22 @@
                 `• 恢复 ${entryCount} 个状态条目（可能包含多本状态书）\n` +
                 `• 删除 ${descendants.length} 个后续章节\n• 第${num}章本身将保留\n• 此操作不可撤销！\n\n确定继续吗？`;
 
-            console.log('[HistoryUI.rollbackChapter] 弹出确认框');
+
             const confirmed = await UI.showConfirmModal(msg, '确认');
             if (!confirmed) {
-                console.log('[HistoryUI.rollbackChapter] 用户取消回滚');
+
                 return false;
             }
-            console.log('[HistoryUI.rollbackChapter] 用户确认，开始删除后代章节');
+
             await this.deleteChaptersAndImages(descendants, chapters);
 
-            console.log('[HistoryUI.rollbackChapter] 开始恢复快照');
+
             const restored = await Snapshot.restore(chapter.snapshot);
             if (restored) {
                 WORKFLOW_STATE.activeChapterNum = num;
                 WORKFLOW_STATE.currentBranchStart = num;
                 WORKFLOW_STATE.currentBranchLatest = num;
-                console.log(`[HistoryUI.rollbackChapter] 回滚成功，已切换到第${num}章`);
+
                 Notify.success(`已回滚到第${num}章`);
                 this.refresh();
                 return true;
@@ -19402,7 +19799,7 @@
                 await AudioStore.clear();
                 // ===== 结束 =====
 
-                Notify.success('历史章节已清空，状态书已清空', '', {timeOut: 2000});
+                Notify.success('历史章节已清空，状态书已清空', '', { timeOut: 2000 });
                 if (document.getElementById(CONFIG.UI.panelId)) {
                     UI.createPanel();
                 }
@@ -19411,12 +19808,12 @@
         },
 
         async importBackup() {
-            console.log('[HistoryUI.importBackup] ========== 开始执行导入备份 ==========');
-            console.log('[HistoryUI.importBackup] 正在清空图片库、其余文件库、音频库...');
+
+
             await ImageStore.clear();
             await OtherFileStore.clear();
             await AudioStore.clear();
-            console.log('[HistoryUI.importBackup] 图片库、其余文件库、音频库已清空');
+
 
             const fileInput = Object.assign(document.createElement('input'), {
                 type: 'file', accept: '.json,.zip,application/json,application/zip', style: 'display:none'
@@ -19427,40 +19824,40 @@
                 fileInput.addEventListener('change', async e => {
                     const file = e.target.files[0];
                     if (!file) {
-                        console.log('[HistoryUI.importBackup] 用户取消选择文件');
+
                         fileInput.remove();
                         resolve();
                         return;
                     }
-                    console.log(`[HistoryUI.importBackup] 用户选择了文件: name=${file.name}, size=${file.size} bytes, type=${file.type}`);
+
 
                     try {
                         // 判断文件类型
                         const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
-                        console.log(`[HistoryUI.importBackup] 文件类型判断: isZip = ${isZip}`);
+
 
                         if (isZip) {
                             // ========== ZIP 导入 ==========
-                            console.log('[HistoryUI.importBackup] 开始处理 ZIP 备份...');
+
                             UI.updateProgress('正在处理 ZIP 备份...');
                             const arrayBuffer = await file.arrayBuffer();
-                            console.log('[HistoryUI.importBackup] 已读取 arrayBuffer，大小:', arrayBuffer.byteLength);
+
                             const zip = await JSZip.loadAsync(arrayBuffer);
-                            console.log('[HistoryUI.importBackup] ZIP 加载成功，文件列表:', Object.keys(zip.files));
+
 
                             // 恢复图片
                             const imageFolder = zip.folder('images');
                             if (imageFolder) {
                                 const imageFiles = Object.keys(imageFolder.files).filter(name => name.startsWith('images/') && !name.endsWith('/'));
-                                console.log(`[HistoryUI.importBackup] 发现 ${imageFiles.length} 个图片文件`);
+
                                 UI.updateProgress(`  恢复图片...`);
                                 for (const fileName of imageFiles) {
                                     try {
                                         const blob = await zip.file(fileName).async('blob');
                                         const id = fileName.replace('images/', '').replace(/\.[^/.]+$/, '');
-                                        console.log(`[HistoryUI.importBackup] 恢复图片: ${fileName} -> ID=${id}, blob 类型=${blob.type}, 大小=${blob.size}`);
+
                                         await ImageStore.save(blob, null, id);
-                                        console.log(`[HistoryUI.importBackup] 图片 ${id} 恢复成功`);
+
                                     } catch (err) {
                                         console.error(`[HistoryUI.importBackup] 恢复图片 ${fileName} 失败:`, err);
                                         UI.updateProgress(`    ⚠️ 图片 ${fileName} 恢复失败`, true);
@@ -19468,22 +19865,22 @@
                                 }
                                 UI.updateProgress(`  ✓ 图片恢复完成`);
                             } else {
-                                console.log('[HistoryUI.importBackup] ZIP 中未找到 images 文件夹');
+
                             }
 
                             // 恢复音频
                             const audioFolder = zip.folder('audios');
                             if (audioFolder) {
                                 const audioFiles = Object.keys(audioFolder.files).filter(name => name.startsWith('audios/') && !name.endsWith('/'));
-                                console.log(`[HistoryUI.importBackup] 发现 ${audioFiles.length} 个音频文件`);
+
                                 UI.updateProgress(`  恢复音频...`);
                                 for (const fileName of audioFiles) {
                                     try {
                                         const blob = await zip.file(fileName).async('blob');
                                         const id = fileName.replace('audios/', '').replace(/\.[^/.]+$/, '');
-                                        console.log(`[HistoryUI.importBackup] 恢复音频: ${fileName} -> ID=${id}, blob 类型=${blob.type}, 大小=${blob.size}`);
+
                                         await AudioStore.save(blob, null, id);
-                                        console.log(`[HistoryUI.importBackup] 音频 ${id} 恢复成功`);
+
                                     } catch (err) {
                                         console.error(`[HistoryUI.importBackup] 恢复音频 ${fileName} 失败:`, err);
                                         UI.updateProgress(`    ⚠️ 音频 ${fileName} 恢复失败`, true);
@@ -19491,14 +19888,14 @@
                                 }
                                 UI.updateProgress(`  ✓ 音频恢复完成`);
                             } else {
-                                console.log('[HistoryUI.importBackup] ZIP 中未找到 audios 文件夹');
+
                             }
 
                             // 恢复其余文件
                             const otherFolder = zip.folder('others');
                             if (otherFolder) {
                                 const otherFiles = Object.keys(otherFolder.files).filter(name => name.startsWith('others/') && !name.endsWith('/'));
-                                console.log(`[HistoryUI.importBackup] 发现 ${otherFiles.length} 个其余文件`);
+
                                 UI.updateProgress(`  恢复其余文件...`);
                                 for (const fileName of otherFiles) {
                                     try {
@@ -19506,9 +19903,9 @@
                                         const id = fileName.replace('others/', '').replace(/\.[^/.]+$/, '');
                                         const ext = fileName.split('.').pop();
                                         const format = ext === 'html' ? 'html' : ext === 'js' ? 'js' : 'txt';
-                                        console.log(`[HistoryUI.importBackup] 恢复其余文件: ${fileName} -> ID=${id}, format=${format}, content 长度=${content.length}`);
+
                                         await OtherFileStore.save(content, format, id);
-                                        console.log(`[HistoryUI.importBackup] 其余文件 ${id} 恢复成功`);
+
                                     } catch (err) {
                                         console.error(`[HistoryUI.importBackup] 恢复其余文件 ${fileName} 失败:`, err);
                                         UI.updateProgress(`    ⚠️ 其余文件 ${fileName} 恢复失败`, true);
@@ -19516,18 +19913,18 @@
                                 }
                                 UI.updateProgress(`  ✓ 其余文件恢复完成`);
                             } else {
-                                console.log('[HistoryUI.importBackup] ZIP 中未找到 others 文件夹');
+
                             }
 
                             // ========== 恢复映射表 ==========
                             const mappingsFile = zip.file('mappings.json');
                             if (mappingsFile) {
-                                console.log('[HistoryUI.importBackup] 找到 mappings.json，开始恢复映射表...');
+
                                 UI.updateProgress('  正在恢复映射表...');
                                 try {
                                     const mappingsJson = await mappingsFile.async('string');
                                     const mappings = JSON.parse(mappingsJson);
-                                    console.log(`[HistoryUI.importBackup] 解析 mappings.json，共 ${mappings.length} 条映射`);
+
                                     await MappingManager.importAll(mappings);
                                     UI.updateProgress(`  ✓ 已恢复 ${mappings.length} 条映射`);
                                 } catch (e) {
@@ -19535,7 +19932,7 @@
                                     UI.updateProgress(`  ⚠️ 映射表恢复失败: ${e.message}`, true);
                                 }
                             } else {
-                                console.log('[HistoryUI.importBackup] 未找到 mappings.json，尝试从章节数据重建映射...');
+
                                 UI.updateProgress('  未找到映射表文件，尝试从章节数据重建...');
                                 try {
                                     const chapters = Storage.loadChapters();
@@ -19561,7 +19958,7 @@
                                         }
                                     });
                                     const uniqueMappings = Array.from(uniqueMap.values());
-                                    console.log(`[HistoryUI.importBackup] 从章节数据重建了 ${uniqueMappings.length} 条映射`);
+
                                     await MappingManager.importAll(uniqueMappings);
                                     UI.updateProgress(`  ✓ 从章节数据重建了 ${uniqueMappings.length} 条映射`);
                                 } catch (e) {
@@ -19574,12 +19971,12 @@
                             // 2. 恢复章节
                             const chaptersFile = zip.file('chapters.json');
                             if (chaptersFile) {
-                                console.log('[HistoryUI.importBackup] 找到 chapters.json，开始恢复章节...');
+
                                 const chaptersJson = await chaptersFile.async('string');
                                 const chaptersData = JSON.parse(chaptersJson);
 
                                 if (chaptersData.data && Array.isArray(chaptersData.data.chapters)) {
-                                    console.log(`[HistoryUI.importBackup] 解析到 ${chaptersData.data.chapters.length} 章数据`);
+
                                     // 直接覆盖存储
                                     if (Storage.save(chaptersData.data)) {
                                         UI.updateProgress(`  ✓ 已恢复 ${chaptersData.data.chapters.length} 章`);
@@ -19591,7 +19988,7 @@
                                     UI.updateProgress(`  ⚠️ chapters.json 格式错误，跳过`, true);
                                 }
                             } else {
-                                console.log('[HistoryUI.importBackup] ZIP 中未找到 chapters.json');
+
                             }
 
                             // 3. 恢复世界书
@@ -19605,7 +20002,7 @@
                                 !name.startsWith('audios/') &&
                                 !name.startsWith('others/')
                             );
-                            console.log(`[HistoryUI.importBackup] 发现 ${worldbookFiles.length} 个世界书 JSON 文件`);
+
 
                             // 收集所有恢复的世界书名称
                             const restoredBooks = new Set();
@@ -19615,7 +20012,7 @@
                                     const content = await zip.file(fileName).async('string');
                                     const bookData = JSON.parse(content);
                                     const bookName = bookData.name || fileName.replace('.json', '');
-                                    console.log(`[HistoryUI.importBackup] 恢复世界书: ${bookName}`);
+
                                     restoredBooks.add(bookName);
 
                                     // 检查是否存在
@@ -19623,21 +20020,21 @@
                                     try {
                                         await API.getWorldbook(bookName);
                                         exists = true;
-                                        console.log(`[HistoryUI.importBackup] 世界书 ${bookName} 已存在`);
+
                                     } catch (e) {
-                                        console.log(`[HistoryUI.importBackup] 世界书 ${bookName} 不存在，准备创建`);
+
                                     }
                                     if (!exists) {
                                         if (typeof TavernHelper?.createWorldbook === 'function') {
                                             await TavernHelper.createWorldbook(bookName);
-                                            console.log(`[HistoryUI.importBackup] 世界书 ${bookName} 创建成功`);
+
                                         } else {
                                             console.warn('[HistoryUI.importBackup] 无法创建世界书，跳过');
                                             continue;
                                         }
                                     }
-                                    await API.updateWorldbook(bookName, () => bookData.entries, {render: 'immediate'});
-                                    console.log(`[HistoryUI.importBackup] 世界书 ${bookName} 条目更新成功`);
+                                    await API.updateWorldbook(bookName, () => bookData.entries, { render: 'immediate' });
+
                                     UI.updateProgress(`  ✓ 已恢复世界书 ${bookName}`);
                                 } catch (err) {
                                     console.error(`[HistoryUI.importBackup] 恢复世界书 ${fileName} 失败:`, err);
@@ -19647,25 +20044,25 @@
 
                             // ========== 新增：激活所有恢复的世界书 ==========
                             if (restoredBooks.size > 0) {
-                                console.log(`[HistoryUI.importBackup] 开始激活 ${restoredBooks.size} 本恢复的世界书...`);
+
                                 UI.updateProgress('  正在激活恢复的世界书...');
                                 try {
                                     // 获取当前全局激活列表
                                     let currentGlobalBooks = [];
                                     if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
                                         currentGlobalBooks = await TavernHelper.getGlobalWorldbookNames();
-                                        console.log('[HistoryUI.importBackup] 当前全局激活的世界书:', currentGlobalBooks);
+
                                     } else {
                                         console.warn('[HistoryUI.importBackup] 无法获取全局激活列表，跳过激活');
                                     }
 
                                     // 合并去重
                                     const newGlobalBooks = [...new Set([...currentGlobalBooks, ...restoredBooks])];
-                                    console.log('[HistoryUI.importBackup] 新的全局激活列表:', newGlobalBooks);
+
 
                                     if (typeof TavernHelper?.rebindGlobalWorldbooks === 'function') {
                                         await TavernHelper.rebindGlobalWorldbooks(newGlobalBooks);
-                                        console.log('[HistoryUI.importBackup] 重新绑定全局世界书成功');
+
                                         UI.updateProgress(`  ✓ 已激活 ${restoredBooks.size} 本世界书`);
                                     } else {
                                         console.warn('[HistoryUI.importBackup] rebindGlobalWorldbooks 不可用，跳过激活');
@@ -19675,39 +20072,39 @@
                                     UI.updateProgress(`  ⚠️ 激活世界书失败: ${e.message}`, true);
                                 }
                             } else {
-                                console.log('[HistoryUI.importBackup] 没有恢复任何世界书，跳过激活');
+
                             }
                             // ========== 结束新增 ==========
 
                             // 4. 工作流输出（可选，仅恢复内存？这里只记录）
                             const workflowFile = zip.file('workflow_outputs.json');
                             if (workflowFile) {
-                                console.log('[HistoryUI.importBackup] 找到 workflow_outputs.json，但仅作记录，不自动恢复');
+
                                 const workflowJson = await workflowFile.async('string');
                                 const workflowData = JSON.parse(workflowJson);
-                                console.log('[HistoryUI.importBackup] workflow 数据预览:', workflowData);
+
                                 UI.updateProgress('  ⚠️ 工作流输出数据已解析，未自动恢复', true);
                             }
 
                             UI.updateProgress('✅ ZIP 导入完成！');
-                            Notify.success('完整备份导入成功', '', {timeOut: 2000});
+                            Notify.success('完整备份导入成功', '', { timeOut: 2000 });
 
                         } else {
                             // ========== 旧版 JSON 导入（仅章节） ==========
-                            console.log('[HistoryUI.importBackup] 开始处理 JSON 备份...');
+
                             UI.updateProgress('正在处理 JSON 备份...');
                             const json = JSON.parse(await file.text());
-                            console.log('[HistoryUI.importBackup] JSON 解析成功');
+
                             let dataToImport;
                             if (json.data && Array.isArray(json.data.chapters)) dataToImport = json.data;
                             else if (Array.isArray(json.chapters)) dataToImport = json;
                             else throw new Error('无效的备份文件格式：缺少 chapters 数组');
 
-                            console.log(`[HistoryUI.importBackup] 解析到 ${dataToImport.chapters?.length} 章数据`);
+
 
                             const confirmed = await UI.showConfirmModal('导入将覆盖当前所有历史章节，确定继续吗？', '确认');
                             if (!confirmed) {
-                                console.log('[HistoryUI.importBackup] 用户取消导入');
+
                                 fileInput.remove();
                                 resolve();
                                 return;
@@ -19720,26 +20117,26 @@
                                 const last = imported[imported.length - 1];
                                 if (last.snapshot) {
                                     UI.updateProgress(`正在恢复状态书到第${last.num}章结束时的状态...`);
-                                    console.log(`[HistoryUI.importBackup] 恢复状态书到第${last.num}章快照`);
+
                                     const ok = await Snapshot.restore(last.snapshot);
                                     UI.updateProgress(ok ? '✓ 状态书状态已恢复' : '❌ 状态书状态恢复失败', !ok);
-                                    if (!ok) Notify.warning('状态书状态恢复失败，但章节数据已导入', '', {timeOut: 2000});
+                                    if (!ok) Notify.warning('状态书状态恢复失败，但章节数据已导入', '', { timeOut: 2000 });
                                 } else {
                                     UI.updateProgress('导入章节无快照，清空状态书...');
-                                    console.log('[HistoryUI.importBackup] 导入章节无快照，清空状态书');
+
                                     await resetWorldStateToInitial();
                                 }
                             } else {
                                 UI.updateProgress('导入章节为空，清空状态书...');
-                                console.log('[HistoryUI.importBackup] 导入章节为空，清空状态书');
+
                                 await resetWorldStateToInitial();
                             }
 
-                            Notify.success('备份导入成功', '', {timeOut: 2000});
+                            Notify.success('备份导入成功', '', { timeOut: 2000 });
                         }
 
                         // 刷新界面
-                        console.log('[HistoryUI.importBackup] 导入完成，刷新历史面板');
+
                         this.show();
                         resolve();
                     } catch (err) {
@@ -19748,11 +20145,11 @@
                         reject(err);
                     } finally {
                         fileInput.remove();
-                        console.log('[HistoryUI.importBackup] ========== 导入结束 ==========');
+
                     }
                 });
                 fileInput.click();
-                console.log('[HistoryUI.importBackup] 文件选择器已打开');
+
             });
         },
 
@@ -19775,22 +20172,22 @@
          * @param {Function} callback 回调函数，接收选中章节数组
          */
         showChapterSelectionModal(callback) {
-            console.log('[HistorySelection] ========== 开始 showChapterSelectionModal ==========');
+
 
             const existingModals = document.querySelectorAll('.nc-modal-overlay');
             existingModals.forEach(modal => {
                 if (modal.querySelector('#nc-select-submit')) {
                     ModalStack.remove(modal);
                     modal.remove();
-                    console.log('[HistorySelection] 已关闭已存在的选择框');
+
                 }
             });
 
             const chapters = Storage.loadChapters();
-            console.log('[HistorySelection] 加载到历史章节数:', chapters.length);
+
 
             if (chapters.length === 0) {
-                Notify.info('暂无历史章节', '', {timeOut: 2000});
+                Notify.info('暂无历史章节', '', { timeOut: 2000 });
                 console.warn('[HistorySelection] 无章节，退出');
                 return;
             }
@@ -19848,20 +20245,20 @@
 
             const checkboxes = modal.querySelectorAll('.chapter-select-checkbox');
             const chapterItems = modal.querySelectorAll('.nc-chapter-item');
-            console.log('[HistorySelection] 共生成条目:', chapterItems.length);
+
 
             chapterItems.forEach(item => {
                 item.addEventListener('click', (e) => {
                     if (e.target.classList.contains('chapter-select-checkbox')) {
-                        console.log('[HistorySelection] 点击复选框，不处理条目点击');
+
                         return;
                     }
                     const num = parseInt(item.dataset.num);
                     const checkbox = item.querySelector('.chapter-select-checkbox');
                     if (checkbox) {
                         checkbox.checked = !checkbox.checked;
-                        console.log(`[HistorySelection] 点击条目 ${num}，切换复选框至: ${checkbox.checked}`);
-                        const changeEvent = new Event('change', {bubbles: true});
+
+                        const changeEvent = new Event('change', { bubbles: true });
                         checkbox.dispatchEvent(changeEvent);
                     }
                 });
@@ -19869,7 +20266,7 @@
                 item.addEventListener('dblclick', (e) => {
                     e.stopPropagation();
                     const num = parseInt(item.dataset.num);
-                    console.log(`[HistorySelection] 双击条目 ${num}，立即提交`);
+
                     checkboxes.forEach(cb => cb.checked = false);
                     const checkbox = item.querySelector('.chapter-select-checkbox');
                     if (checkbox) checkbox.checked = true;
@@ -19877,7 +20274,7 @@
                     const selectedChapter = chapters.find(ch => ch.num === num);
                     if (selectedChapter) {
                         ModalStack.closeTop();
-                        console.log('[HistorySelection] 回调传入章节:', selectedChapter);
+
                         callback([selectedChapter]);
                     } else {
                         console.error('[HistorySelection] 未找到章节', num);
@@ -19886,17 +20283,17 @@
             });
 
             modal.querySelector('#nc-select-all').addEventListener('click', () => {
-                console.log('[HistorySelection] 点击全选');
+
                 checkboxes.forEach(cb => cb.checked = true);
             });
 
             modal.querySelector('#nc-select-invert').addEventListener('click', () => {
-                console.log('[HistorySelection] 点击反选');
+
                 checkboxes.forEach(cb => cb.checked = !cb.checked);
             });
 
             modal.querySelector('#nc-select-cancel').addEventListener('click', () => {
-                console.log('[HistorySelection] 点击取消');
+
                 ModalStack.closeTop();
             });
 
@@ -19905,7 +20302,7 @@
                 checkboxes.forEach(cb => {
                     if (cb.checked) selectedNums.push(parseInt(cb.value));
                 });
-                console.log('[HistorySelection] 提交选中章节号:', selectedNums);
+
                 const selectedChapters = chapters.filter(ch => selectedNums.includes(ch.num));
                 ModalStack.closeTop();
                 callback(selectedChapters);
@@ -19913,7 +20310,7 @@
 
             overlay.addEventListener('click', e => {
                 if (e.target === overlay) {
-                    console.log('[HistorySelection] 点击遮罩层关闭');
+
                     ModalStack.closeTop();
                 }
             });
@@ -19925,7 +20322,7 @@
 
             if (books.length === 0) {
 
-                Notify.info('没有状态书', '', {timeOut: 2000});
+                Notify.info('没有状态书', '', { timeOut: 2000 });
                 return;
             }
 
@@ -19939,7 +20336,7 @@
         async openStateEditor(chapterNum, initialBookName = null, stayOpenAfterSave = false, readonly = false) {
             const books = await getAllStateBooks();
             if (books.length === 0) {
-                Notify.info('没有状态书', '', {timeOut: 2000});
+                Notify.info('没有状态书', '', { timeOut: 2000 });
                 return;
             }
             // 确保模板已加载
@@ -20002,7 +20399,7 @@
             // 如果没有书籍，则关闭模态框并提示
             if (!books || books.length === 0) {
                 console.warn('[HistoryUI._openStateEditorModal] 没有可用的状态书，关闭编辑器');
-                Notify.info('没有可用的状态书', '', {timeOut: 2000});
+                Notify.info('没有可用的状态书', '', { timeOut: 2000 });
                 return;
             }
 
@@ -20077,7 +20474,7 @@
                         const catId = match[1];
                         const catName = match[2].trim();
                         const definition = match[3].trim();
-                        map[catId] = {name: catName, definition};
+                        map[catId] = { name: catName, definition };
                         count++;
                     }
                     // 输出最终映射的键，便于确认
@@ -20352,7 +20749,7 @@
                         const bookName = item.bookName || currentBook;
                         if (!updatesByBook[bookName]) updatesByBook[bookName] = {};
                         if (!updatesByBook[bookName][item.stateName]) {
-                            updatesByBook[bookName][item.stateName] = {type: 'structured', fields: []};
+                            updatesByBook[bookName][item.stateName] = { type: 'structured', fields: [] };
                         }
                         updatesByBook[bookName][item.stateName].fields.push({
                             node: item.node,
@@ -20363,7 +20760,7 @@
                     currentFallbackInputs.forEach(item => {
                         const bookName = item.bookName || currentBook;
                         if (!updatesByBook[bookName]) updatesByBook[bookName] = {};
-                        updatesByBook[bookName][item.stateName] = {type: 'fallback', content: item.textarea.value};
+                        updatesByBook[bookName][item.stateName] = { type: 'fallback', content: item.textarea.value };
                     });
 
                     for (const [bookName, stateUpdates] of Object.entries(updatesByBook)) {
@@ -20385,7 +20782,7 @@
                                 const catId = update.fields[0]?.catId;
                                 const templateDef = catId ? templateMap[catId]?.definition : null;
                                 if (!templateDef) {
-                                    Notify.warning(`无法重组 ${stateName}：缺少模板定义`, '', {timeOut: 2000});
+                                    Notify.warning(`无法重组 ${stateName}：缺少模板定义`, '', { timeOut: 2000 });
                                     continue;
                                 }
                                 const tree = this._parseStateDefinition(templateDef);
@@ -20414,7 +20811,7 @@
                         }
 
                         // 保存到实时世界书
-                        await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                        await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                         UI.updateProgress(`✓ 已更新 ${bookName}`);
                     }
 
@@ -20424,12 +20821,12 @@
                         const chapter = chapters.find(c => c.num === chapterNum);
                         if (chapter) {
                             chapter.snapshot = await Snapshot.create();
-                            Storage.save({chapters});
+                            Storage.save({ chapters });
                             UI.updateProgress(`✓ 已更新第${chapterNum}章的快照`);
                         }
                     }
 
-                    Notify.success('状态修改已保存', '', {timeOut: 2000});
+                    Notify.success('状态修改已保存', '', { timeOut: 2000 });
 
                     if (stayOpen) {
                         // 重新加载当前书
@@ -20456,13 +20853,13 @@
                         const stateGroups = {};
                         currentFieldInputs.forEach(item => {
                             if (!stateGroups[item.stateName]) {
-                                stateGroups[item.stateName] = {fields: [], fallback: null};
+                                stateGroups[item.stateName] = { fields: [], fallback: null };
                             }
                             stateGroups[item.stateName].fields.push(item);
                         });
                         currentFallbackInputs.forEach(item => {
                             if (!stateGroups[item.stateName]) {
-                                stateGroups[item.stateName] = {fields: [], fallback: item};
+                                stateGroups[item.stateName] = { fields: [], fallback: item };
                             } else {
                                 stateGroups[item.stateName].fallback = item;
                             }
@@ -20511,7 +20908,7 @@
 
                         const fullText = texts.join('\n\n');
                         await navigator.clipboard.writeText(fullText);
-                        Notify.success('状态内容已复制到剪贴板', '', {timeOut: 2000});
+                        Notify.success('状态内容已复制到剪贴板', '', { timeOut: 2000 });
                     } catch (err) {
                         Notify.error('复制失败: ' + err.message);
                     }
@@ -20526,7 +20923,7 @@
         // ==================== 分支核心操作 ====================
 
         async deleteChaptersAndImages(toDeleteNums, allChapters) {
-            console.log(`[deleteChaptersAndImages] 开始删除章节: ${toDeleteNums.join(', ')}`);
+
             const remainingChapters = allChapters.filter(c => !toDeleteNums.includes(c.num));
 
             // 收集剩余章节使用的图片、音频、文本 ID
@@ -20571,8 +20968,8 @@
             // ===== 结束新增 =====
 
             // 保存剩余章节
-            Storage.save({chapters: remainingChapters});
-            console.log('[deleteChaptersAndImages] 章节删除完成');
+            Storage.save({ chapters: remainingChapters });
+
         },
 
         /**
@@ -20580,7 +20977,7 @@
          * @param {number} chapterNum - 目标章节号
          */
         async rollbackToChapter(chapterNum) {
-            console.log(`[rollbackToChapter] 开始回滚到章节 ${chapterNum}`);
+
             const chapters = Storage.loadChapters();
             const chapter = chapters.find(c => c.num === chapterNum);
             if (!chapter || !chapter.snapshot) {
@@ -20605,7 +21002,7 @@
                 WORKFLOW_STATE.currentBranchStart = chapterNum;
                 WORKFLOW_STATE.currentBranchLatest = chapterNum;
                 Notify.success(`已回滚到第${chapterNum}章`);
-                console.log(`[rollbackToChapter] 回滚成功`);
+
                 this.refresh();
                 return true;
             }
@@ -20618,7 +21015,7 @@
          * @param {number} chapterNum - 目标章节号
          */
         async startBranchFrom(chapterNum) {
-            console.log(`[startBranchFrom] 从章节 ${chapterNum} 开始新分支`);
+
             const chapters = Storage.loadChapters();
             const chapter = chapters.find(c => c.num === chapterNum);
             if (!chapter || !chapter.snapshot) {
@@ -20631,7 +21028,7 @@
                 WORKFLOW_STATE.currentBranchStart = chapterNum;
                 WORKFLOW_STATE.currentBranchLatest = chapterNum;
                 Notify.success(`已切换到第${chapterNum}章开始新分支`);
-                console.log(`[startBranchFrom] 切换成功`);
+
                 this.refresh();
             }
         },
@@ -20641,7 +21038,7 @@
          * @param {number} chapterNum - 起始章节号
          */
         async deleteChapter(chapterNum) {
-            console.log(`[deleteChapter] 删除章节 ${chapterNum} 及其后代`);
+
             const chapters = Storage.loadChapters();
             const toDelete = collectDescendants(chapterNum, chapters, true); // 包含自身
             const msg = `确定删除该章节及其所有子分支（共 ${toDelete.length} 章）吗？`;
@@ -20656,7 +21053,7 @@
                 WORKFLOW_STATE.currentBranchStart = undefined;
                 WORKFLOW_STATE.currentBranchLatest = undefined;
             }
-            console.log('[deleteChapter] 删除完成');
+
             this.refresh();
         },
 
@@ -20665,7 +21062,7 @@
          * @param {Array<number>} selectedNums - 用户勾选的章节号数组
          */
         async deleteSelectedChapters(selectedNums) {
-            console.log(`[deleteSelectedChapters] 选中章节: ${selectedNums.join(', ')}`);
+
             const chapters = Storage.loadChapters();
             const toDeleteSet = new Set();
             selectedNums.forEach(num => {
@@ -20682,7 +21079,7 @@
                 WORKFLOW_STATE.currentBranchStart = undefined;
                 WORKFLOW_STATE.currentBranchLatest = undefined;
             }
-            console.log('[deleteSelectedChapters] 批量删除完成');
+
             this.refresh();
         },
 
@@ -20690,7 +21087,7 @@
          * 全选当前分支（当前活跃节点及其所有后代）
          */
         selectCurrentBranch() {
-            console.log('[selectCurrentBranch] 开始全选当前分支');
+
             const activeNum = WORKFLOW_STATE.activeChapterNum;
             if (!activeNum) {
                 Notify.warning('请先点击一个章节');
@@ -20698,7 +21095,7 @@
             }
             const chapters = Storage.loadChapters();
             const branchNums = collectDescendants(activeNum, chapters, true); // 包含自身
-            console.log(`[selectCurrentBranch] 分支章节: ${branchNums.join(', ')}`);
+
 
             const panel = document.querySelector('.nc-history-panel');
             if (panel) {
@@ -20707,21 +21104,77 @@
                     cb.checked = branchNums.includes(num);
                 });
             }
-            console.log('[selectCurrentBranch] 全选完成');
+
         }
     };
 
-    class AbortChapterError extends Error {
-        constructor(message) {
-            // 若未传入消息，使用默认回流超限消息
-            super(message || '本章因连续回流超过3次被标记为废章，已终止');
-            this.name = 'AbortChapterError';
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 23：工作流                                                 ║
+    // ║  openPanelWithCheck / activateAllExistingStateBooks / Workflow — 主执行引擎║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    // ==================== 打开面板检测函数 ====================
+
+    async function openPanelWithCheck(force = false) {
+
+
+
+
+        // 如果存在上次检查失败的结果且不是强制重新检查，则直接显示错误面板
+        if (!force && WORKFLOW_STATE.lastCheckFailed) {
+
+            UI.showErrorPanel(WORKFLOW_STATE.lastCheckErrorMessage);
+            return;
+        }
+
+        try {
+            UI.closeAll();
+
+
+
+            const checkResults = await PreCheck.checkAll();
+
+
+
+            if (!checkResults.allPassed) {
+                const errorMsg = PreCheck.formatErrorMessage(checkResults);
+                console.warn('[openPanelWithCheck] 前置检测未通过，格式化后的错误信息：\n', errorMsg);
+                UI.showErrorPanel(errorMsg);
+                return;
+            }
+
+            WORKFLOW_STATE.apiStatus = checkResults.apiStatus || {};
+
+
+            try {
+
+                const templates = await loadAllStateTemplates();
+                stateTemplatesByBook = {};
+                templates.forEach(t => {
+                    stateTemplatesByBook[t.bookIndex] = t.categoryMap;
+                });
+
+            } catch (e) {
+                console.warn('[openPanelWithCheck] 加载状态模板失败，状态编辑器可能降级为文本模式', e);
+                stateTemplatesByBook = {};
+            }
+
+
+            await UI.createPanel();
+
+
+        } catch (e) {
+            console.error('[openPanelWithCheck] 未捕获的错误:', e);
+            UI.showErrorPanel('打开面板时发生错误：\n' + e.message + '\n\n' + e.stack);
         }
     }
+
 
     // ==================== 工作流 ====================
 
     async function activateAllExistingStateBooks() {
+
         // 获取所有存在的状态书（通过尝试读取）
         const allExisting = [];
         let index = 1;
@@ -20775,6 +21228,7 @@
         }
     }
 
+
     const Workflow = {
 
         // 执行单章工作流
@@ -20793,7 +21247,7 @@
             if (missingRequired.length > 0) {
                 const missingNames = missingRequired.map(k => CONFIG.AGENTS[k]?.name || k).join(', ');
                 Notify.error(`配置缺少以下必选Agent:\n${missingNames}`, '配置错误');
-                return {success: false, error: '缺少必选Agent'};
+                return { success: false, error: '缺少必选Agent' };
             }
 
             WORKFLOW_STATE.enabledAgents = calculatedAgents;
@@ -20831,7 +21285,7 @@
                 }
             }
             WORKFLOW_STATE.abortController = new AbortController();
-            console.log('[executeOneChapter] 创建新的AbortController');
+
 
             // 计算下一章编号
             const chapters = Storage.loadChapters();
@@ -20842,11 +21296,11 @@
             let parentNum = null;
             if (WORKFLOW_STATE.currentBranchLatest !== undefined) {
                 parentNum = WORKFLOW_STATE.currentBranchLatest;
-                console.log(`[executeOneChapter] 使用分支起点 parent = ${parentNum}`);
+
             } else {
                 const last = chapters.length ? Math.max(...chapters.map(c => c.num)) : 0;
                 parentNum = last > 0 ? last : null;
-                console.log(`[executeOneChapter] 使用线性 parent = ${parentNum}`);
+
             }
             // 存入临时状态，供 executeWorkflow 使用
             WORKFLOW_STATE.currentParentNum = parentNum;
@@ -20880,12 +21334,12 @@
 
         async startDatafication(chapters) {
             if (!chapters || chapters.length === 0) {
-                Notify.warning('没有选中任何章节，请先选择要数据化的章节', '', {timeOut: 2000});
+                Notify.warning('没有选中任何章节，请先选择要数据化的章节', '', { timeOut: 2000 });
                 return;
             }
 
             if (WORKFLOW_STATE.isRunning) {
-                Notify.warning('已有工作流正在运行，请先停止', '', {timeOut: 2000});
+                Notify.warning('已有工作流正在运行，请先停止', '', { timeOut: 2000 });
                 return;
             }
 
@@ -20991,7 +21445,7 @@
                 UI.updateAllAgentStatusButtons();
                 UI.updateFloatButtonText();
                 UI.updateWorkflowViz();  // 刷新工作流预览，隐藏数据化横幅
-                Notify.success('数据化处理结束', '', {timeOut: 2000});
+                Notify.success('数据化处理结束', '', { timeOut: 2000 });
             }
         },
 
@@ -21114,7 +21568,7 @@
             }
 
 
-            return {deletedCount, deactivatedCount};
+            return { deletedCount, deactivatedCount };
         },
 
         async _deactivateAllWorldbooks() {
@@ -21165,7 +21619,7 @@
          * @returns {Promise<void>}
          */
         async _executeAgentByRole(agentKey, isReflow, options = {}) {
-            const {userInput = '', isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { userInput = '', isParallel = false, parallelBeforeSnapshot = null } = options;
             const agent = CONFIG.AGENTS[agentKey];
             if (!agent) return;
 
@@ -21184,13 +21638,13 @@
                     });
                     break;
                 case 'imageVariator':
-                    await this._executeImageVariator(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeImageVariator(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'imageLibrarian':
-                    await this._executeImageLibrarian(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeImageLibrarian(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'typesetter':
-                    await this._executeTypesetter(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeTypesetter(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
 
                 // 状态管理（优化师、维护师暂不支持回流和并行参数）
@@ -21203,21 +21657,21 @@
 
                 // 音频相关
                 case 'musicGenerator':
-                    await this._executeMusicGenerator(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeMusicGenerator(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'voiceCloner':
-                    await this._executeVoiceCloner(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeVoiceCloner(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'audioEditor':
-                    await this._executeAudioEditor(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeAudioEditor(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'audioLibrarian':
-                    await this._executeAudioLibrarian(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeAudioLibrarian(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
 
                 // 默认通用 Agent
                 default:
-                    await this._executeAgent(agentKey, userInput, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeAgent(agentKey, userInput, isReflow, { isParallel, parallelBeforeSnapshot });
             }
         },
 
@@ -21269,7 +21723,7 @@
             } else {
                 console.error(`[DEBUG][_executeDataficationChapter] 未找到 finalChapter 角色，数据化可能失败`);
                 UI.updateProgress(`❌ 未找到最终章节师角色，无法继续`, true);
-                return {success: false};
+                return { success: false };
             }
 
             const preSnapshot = await Snapshot.create();
@@ -21298,7 +21752,7 @@
                         );
                         for (const agentKey of sorted) {
                             // ===== 替换点：串行阶段调用公共函数 =====
-                            await this._executeAgentByRole(agentKey, false, {userInput, isParallel: false});
+                            await this._executeAgentByRole(agentKey, false, { userInput, isParallel: false });
                         }
                     } else {
                         // 并行阶段：需要处理 before 快照
@@ -21376,7 +21830,7 @@
 
                 const snapshot = await Snapshot.create();
                 const title = chapter.title || `第${chapter.num}章`;
-                const saveSuccess = Storage.saveChapter({title, content: finalContent}, chapter.num, snapshot);
+                const saveSuccess = Storage.saveChapter({ title, content: finalContent }, chapter.num, snapshot);
                 if (saveSuccess) {
                     UI.updateProgress(`📚 第${chapter.num}章已保存`);
                     UI.updateCurrentChapterNum();
@@ -21393,7 +21847,7 @@
                     }
                 }
 
-                return {success: true};
+                return { success: true };
 
             } catch (error) {
                 if (error.name === 'AbortChapterError') {
@@ -21406,7 +21860,7 @@
                     WORKFLOW_STATE.discarded = true;
                 }
 
-                return {success: false};
+                return { success: false };
             }
         },
 
@@ -21419,20 +21873,20 @@
             if (panel) {
                 const footer = panel.querySelector('.nc-panel-footer');
                 const progressContent = document.getElementById('nc-progress-content');
-                console.log('[Workflow.start] 启动前面板状态:');
+
                 if (footer) {
                     const footerRect = footer.getBoundingClientRect();
-                    console.log(`  footer: top=${footerRect.top}, bottom=${footerRect.bottom}, height=${footerRect.height}`);
+
                 }
                 if (progressContent) {
                     const progressRect = progressContent.getBoundingClientRect();
-                    console.log(`  progressContent: top=${progressRect.top}, bottom=${progressRect.bottom}, height=${progressRect.height}, scrollHeight=${progressContent.scrollHeight}`);
+
                 }
             }
 
             // ===== 新增：清除上次执行的错误状态 =====
             WORKFLOW_STATE.lastAgentError = {};
-            console.log('[Workflow.start] 已清除 lastAgentError');
+
 
             // 启动前检查API状态
             const apiStatus = WORKFLOW_STATE.apiStatus || {};
@@ -21442,7 +21896,7 @@
                 console.error('[Workflow.start] 启动失败，API不可用:', unavailable);
                 return;
             }
-            console.log('[Workflow.start] API检查通过，创建AbortController');
+
 
             // 创建新的AbortController用于本章的图像请求
             if (WORKFLOW_STATE.abortController) {
@@ -21485,14 +21939,14 @@
                     if (panel) {
                         const footer = panel.querySelector('.nc-panel-footer');
                         const progressContent = document.getElementById('nc-progress-content');
-                        console.log(`[Workflow.start] 第 ${WORKFLOW_STATE.currentChapter} 章结束后状态:`);
+
                         if (footer) {
                             const footerRect = footer.getBoundingClientRect();
-                            console.log(`  footer: top=${footerRect.top}, bottom=${footerRect.bottom}, height=${footerRect.height}`);
+
                         }
                         if (progressContent) {
                             const progressRect = progressContent.getBoundingClientRect();
-                            console.log(`  progressContent: top=${progressRect.top}, bottom=${progressRect.bottom}, height=${progressRect.height}, scrollHeight=${progressContent.scrollHeight}`);
+
                         }
                     }
 
@@ -21528,7 +21982,7 @@
                 } while (WORKFLOW_STATE.autoMode && !WORKFLOW_STATE.shouldStop);
 
                 if (!interrupted) {
-                    Notify.success('工作流已停止', '', {timeOut: 2000});
+                    Notify.success('工作流已停止', '', { timeOut: 2000 });
                 }
 
             } catch (e) {
@@ -21536,7 +21990,7 @@
                 if (e.name === 'UserInterruptError') {
                     interrupted = true;
                     UI.updateProgress('⏸️ 用户中断');
-                    Notify.warning('工作流已中断', '', {timeOut: 2000});
+                    Notify.warning('工作流已中断', '', { timeOut: 2000 });
                 } else {
                     agentError = e;
                     let errorMsg = e.message;
@@ -21560,14 +22014,14 @@
                 if (panel) {
                     const footer = panel.querySelector('.nc-panel-footer');
                     const progressContent = document.getElementById('nc-progress-content');
-                    console.log('[Workflow.start] 工作流结束后状态:');
+
                     if (footer) {
                         const footerRect = footer.getBoundingClientRect();
-                        console.log(`  footer: top=${footerRect.top}, bottom=${footerRect.bottom}, height=${footerRect.height}`);
+
                     }
                     if (progressContent) {
                         const progressRect = progressContent.getBoundingClientRect();
-                        console.log(`  progressContent: top=${progressRect.top}, bottom=${progressRect.bottom}, height=${progressRect.height}, scrollHeight=${progressContent.scrollHeight}`);
+
                     }
                 }
             }
@@ -21612,7 +22066,7 @@
                     const catId = match[1];
                     const catName = match[2].trim();
                     const definition = match[3].trim(); // 字段列表部分（不含类别标题行）
-                    categoryMap.set(catId, {catName, definition});
+                    categoryMap.set(catId, { catName, definition });
 
                 }
 
@@ -21623,7 +22077,7 @@
 
                 // 3. 遍历每个类别，查找对应的状态条目
                 const categoriesOutput = [];
-                for (const [catId, {catName, definition}] of categoryMap.entries()) {
+                for (const [catId, { catName, definition }] of categoryMap.entries()) {
                     // 构造状态条目名称格式：状态-书号-类别编号-类别名
                     const expectedStateEntryName = `状态-${bookIndex}-${catId.padStart(2, '0')}-${catName}`;
 
@@ -21638,7 +22092,7 @@
                     }
 
                     // 提取状态条目的属性（排除 content 和 name）
-                    const entryCopy = {...stateEntry};
+                    const entryCopy = { ...stateEntry };
                     delete entryCopy.content;
                     delete entryCopy.name;
                     // 将属性对象转换为扁平化的键值对数组
@@ -21847,7 +22301,7 @@
                     // 这些平台大多兼容 OpenAI 的 chat/completions 格式
                     requestBody = {
                         model: config.model,
-                        messages: [{role: 'user', content: userInput}],
+                        messages: [{ role: 'user', content: userInput }],
                         max_tokens: config.maxTokens,
                         temperature: config.temperature,
                         top_p: config.top_p,
@@ -21931,7 +22385,7 @@
 
 
                     WORKFLOW_STATE.outputs[agentKey] = generatedText;
-                    console.log(`[callAgent][${agentKey}] 已设置 WORKFLOW_STATE.outputs[${agentKey}]，长度: ${generatedText.length}`);
+
 
                     AgentStateManager.setState(agentKey, 'completed');
                     UI.updateAgentStatusButton(agentKey);
@@ -21977,7 +22431,7 @@
                     maxHistory: 0
                 });
 
-                results.push({agent: agentKey, output});
+                results.push({ agent: agentKey, output });
                 currentInput = output; // 将输出作为下一个的输入
             }
 
@@ -22042,9 +22496,9 @@
         // ==================== 修改后的 _executeAgent 函数 ====================
 
         async _executeAgent(agentKey, initialUserInput, isReflow = false, options = {}) {
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
-            console.log(`[Workflow._executeAgent] ===== 进入执行 Agent: ${agentKey}, role=${CONFIG.AGENTS[agentKey]?.role}, isReflow=${isReflow}, isParallel=${isParallel} =====`);
+
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[Workflow._executeAgent] 本章已被标记为废章，终止执行 ${agentKey}`);
@@ -22066,12 +22520,12 @@
                 const interval = agent.executeInterval;
                 const currentChapter = WORKFLOW_STATE.currentChapter;
                 const shouldExecute = (currentChapter % interval) === 0;
-                console.log(`[Workflow._executeAgent] 周期检查: currentChapter=${currentChapter}, interval=${interval}, shouldExecute=${shouldExecute}`);
+
                 if (!shouldExecute) {
                     AgentStateManager.setState(agentKey, 'idle');
                     WORKFLOW_STATE.outputs[agentKey] = '';
                     UI.updateProgress(`⏭️ ${getAgentDisplayName(agentKey)} 被跳过（周期执行）`);
-                    console.log(`[Workflow._executeAgent] 周期跳过，返回`);
+
                     return;
                 }
             }
@@ -22095,14 +22549,14 @@
                 // ========== 特殊处理 interactiveAgent ==========
 
                 if (agent.role === 'interactiveAgent') {
-                    console.log(`[Workflow._executeAgent] 检测到 interactiveAgent，执行特殊处理`);
+
 
                     // 收集所有输入源的内容（不等待用户输入）
                     const inputContents = [];
                     const userIndices = [];
                     for (let i = 0; i < agent.inputs.length; i++) {
                         const src = agent.inputs[i];
-                        console.log(`[Workflow._executeAgent] 处理输入源 ${i}: ${src}`);
+
                         let content = '';
                         if (src === 'user') {
                             userIndices.push(i);
@@ -22112,8 +22566,8 @@
                             // 非 user 源，直接获取现有内容（不触发用户输入）
                             content = await this._collectInputSourceWithoutWait(agentKey, i, isReflow, options);
                         }
-                        inputContents.push({index: i, src, content});
-                        console.log(`[Workflow._executeAgent] 输入源 ${i} 内容长度: ${content.length}`);
+                        inputContents.push({ index: i, src, content });
+
                     }
 
                     if (userIndices.length === 0) {
@@ -22123,7 +22577,7 @@
 
                     // 确定最后一个 user 的索引
                     const lastUserIndex = userIndices[userIndices.length - 1];
-                    console.log(`[Workflow._executeAgent] 最后一个 user 索引: ${lastUserIndex}`);
+
 
                     // 将所有非最后一个 user 的源的内容拼接起来（包括其他 user 和非 user）
                     const partsToMerge = [];
@@ -22134,21 +22588,21 @@
                         }
                     }
                     const mergedHtml = partsToMerge.join('\n\n');
-                    console.log(`[Workflow._executeAgent] 拼接后的 HTML 长度: ${mergedHtml.length}`);
+
 
                     // 渲染交互并等待用户操作
-                    console.log(`[Workflow._executeAgent] 调用 UI.renderAndWaitForInteraction...`);
+
                     const userChoice = await UI.renderAndWaitForInteraction(mergedHtml);
-                    console.log(`[Workflow._executeAgent] 用户操作结果: "${userChoice}"`);
+
 
                     // ===== 新增：用户交互完成提示 =====
                     UI.updateProgress(`✓ 用户交互完成，选择: ${userChoice}`);
-                    Notify.success('交互已响应', '', {timeOut: 2000});
+                    Notify.success('交互已响应', '', { timeOut: 2000 });
 
                     // ===== 新增：唯一性检查 =====
                     if (WORKFLOW_STATE.enforceUniqueBranches && WORKFLOW_STATE.currentParentNum) {
                         const parentNum = WORKFLOW_STATE.currentParentNum;
-                        console.log(`[Workflow._executeAgent] 唯一性检查：parentNum=${parentNum}, userChoice="${userChoice}"`);
+
                         const existingMapping = MappingManager.getMapping(parentNum, userChoice);
                         if (existingMapping) {
                             const targetNum = existingMapping.targetChapterNum;
@@ -22159,14 +22613,14 @@
                             Notify.error(`互动结果“${userChoice}”已用于第${targetNum}章，本次创作已中断。`);
                             throw new ExistingBranchError();
                         } else {
-                            console.log(`[Workflow._executeAgent] 唯一性检查通过，无冲突`);
+
                         }
                     }
                     // ===== 结束新增 =====
 
                     // ===== 新增：存储互动结果用于后续保存 =====
                     WORKFLOW_STATE.currentInteractionResult = userChoice;
-                    console.log(`[Workflow._executeAgent] 已保存当前互动结果: ${userChoice}`);
+
                     // ===== 结束新增 =====
 
                     // 构建最终的输入数组
@@ -22178,14 +22632,14 @@
                             finalInputs[i] = inputContents[i].content;
                         }
                     }
-                    console.log(`[Workflow._executeAgent] 最终输入数组长度: ${finalInputs.length}`);
+
 
                     // 构建提示词（替换占位符）
                     let prompt = agent.inputTemplate;
                     let placeholderIdx = 0;
                     prompt = prompt.replace(/【】/g, () => finalInputs[placeholderIdx++] || '');
-                    console.log(`[Workflow._executeAgent] 最终提示词长度: ${prompt.length}`);
-                    console.log(`[Workflow._executeAgent] 提示词预览 (前200字符): ${prompt.substring(0, 200)}`);
+
+
 
                     // 添加回流反馈（如果有）
                     if (isReflow && WORKFLOW_STATE.reflowMap && WORKFLOW_STATE.reflowMap[agentKey]) {
@@ -22200,7 +22654,7 @@
                         }
                         if (feedbackParts.length > 0) {
                             prompt += '\n\n' + feedbackParts.join('\n\n');
-                            console.log(`[Workflow._executeAgent] 添加回流反馈，长度增加`);
+
                         }
                     }
 
@@ -22208,34 +22662,34 @@
                         const previousOutput = WORKFLOW_STATE.reflowMap[agentKey].previousOutput;
                         if (previousOutput && previousOutput.trim() !== '') {
                             prompt += '\n\n【上次输出】：\n' + previousOutput;
-                            console.log(`[Workflow._executeAgent] 添加上次输出，长度增加`);
+
                         }
                     }
 
                     if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
 
                     // 调用 Agent 生成输出
-                    console.log(`[Workflow._executeAgent] 调用 callAgent for interactiveAgent...`);
+
                     const responseText = await this.callAgent(agentKey, prompt);
                     console.log(`[DEBUG][_executeAgent] 调用 callAgent 后，WORKFLOW_STATE.outputs[${agentKey}] =`,
                         WORKFLOW_STATE.outputs[agentKey] ? `存在，长度 ${WORKFLOW_STATE.outputs[agentKey].length}` : '不存在');
 
                     // ========== 新增：人工审核 ==========
                     if (!WORKFLOW_STATE.shouldStop && agent.review === true) {
-                        console.log(`[Workflow._executeAgent] Agent ${agentKey} 开启审核，准备弹出审核框`);
-                        console.log(`[Workflow._executeAgent] 当前 shouldStop = ${WORKFLOW_STATE.shouldStop}`);
+
+
                         const originalOutput = WORKFLOW_STATE.outputs[agentKey];
-                        console.log(`[Workflow._executeAgent] 原始输出长度: ${originalOutput?.length}`);
+
                         try {
-                            console.log('[Workflow._executeAgent] 即将调用 UI.showReviewModal...');
+
                             const reviewResult = await UI.showReviewModal(agentKey, originalOutput);
-                            console.log('[Workflow._executeAgent] UI.showReviewModal 返回，审核结果:', reviewResult);
+
 
                             if (reviewResult.action === 'continue') {
                                 WORKFLOW_STATE.outputs[agentKey] = reviewResult.content;
-                                console.log(`[Workflow._executeAgent] 用户选择继续，输出已更新，长度: ${reviewResult.content.length}`);
+
                             } else if (reviewResult.action === 'reject') {
-                                console.log(`[Workflow._executeAgent] 用户选择打回，准备触发回流`);
+
                                 if (!WORKFLOW_STATE.reflowMap) WORKFLOW_STATE.reflowMap = {};
                                 WORKFLOW_STATE.reflowMap[agentKey] = {
                                     previousOutput: originalOutput,
@@ -22248,13 +22702,13 @@
                                     modifiedContent: reviewResult.attachType === 'modified' ? WORKFLOW_STATE.outputs[agentKey] : null
                                 };
                                 await this.handleReflow(agentKey, true);
-                                console.log('[Workflow._executeAgent] handleReflow 返回，当前执行路径结束');
+
                                 return;
                             }
                         } catch (err) {
                             console.error('[Workflow._executeAgent] 审核过程中捕获到异常:', err);
                             if (err.name === 'UserInterruptError') {
-                                console.log('[Workflow._executeAgent] 审核过程中用户中断');
+
                                 throw err;
                             } else {
                                 console.error('[Workflow._executeAgent] 审核过程出错，继续执行，使用原始输出', err);
@@ -22262,14 +22716,14 @@
                             }
                         }
                     } else {
-                        console.log(`[Workflow._executeAgent] 未进入审核分支: shouldStop=${WORKFLOW_STATE.shouldStop}, review=${agent.review}`);
+
                     }
 
                     // 保存输出（注意：responseText 已在 callAgent 中赋值，不需要重复赋值）
                     AgentStateManager.setState(agentKey, 'completed');
 
                     if (!isParallel) {
-                        WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                        WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                     }
 
                     // 检查回流条件
@@ -22277,7 +22731,7 @@
                         const triggered = agent.reflowConditions.some(cond => responseText?.includes(cond) === true);
                         if (triggered) {
                             UI.updateProgress(`⚠️ Agent ${getAgentDisplayName(agentKey)} 触发回流`);
-                            console.log(`[Workflow._executeAgent] 触发回流条件，开始处理回流`);
+
                             if (isReflow) {
                                 await this.handleReflow(agentKey, true);
                             } else {
@@ -22294,9 +22748,9 @@
                 }
 
                 // ========== 通用 Agent 执行流程（非 interactiveAgent） ==========
-                console.log(`[Workflow._executeAgent] 通用 Agent 执行流程，开始收集输入`);
+
                 const collected = await this._collectInputs(agentKey, isReflow, options);
-                console.log(`[Workflow._executeAgent] 输入收集完成，个数: ${collected.length}`);
+
 
                 let prompt = agent.inputTemplate;
                 let placeholderIdx = 0;
@@ -22332,20 +22786,20 @@
 
                 // ========== 新增：人工审核 ==========
                 if (!WORKFLOW_STATE.shouldStop && agent.review === true) {
-                    console.log(`[Workflow._executeAgent] Agent ${agentKey} 开启审核，准备弹出审核框`);
-                    console.log(`[Workflow._executeAgent] 当前 shouldStop = ${WORKFLOW_STATE.shouldStop}`);
+
+
                     const originalOutput = WORKFLOW_STATE.outputs[agentKey];
-                    console.log(`[Workflow._executeAgent] 原始输出长度: ${originalOutput?.length}`);
+
                     try {
-                        console.log('[Workflow._executeAgent] 即将调用 UI.showReviewModal...');
+
                         const reviewResult = await UI.showReviewModal(agentKey, originalOutput);
-                        console.log('[Workflow._executeAgent] UI.showReviewModal 返回，审核结果:', reviewResult);
+
 
                         if (reviewResult.action === 'continue') {
                             WORKFLOW_STATE.outputs[agentKey] = reviewResult.content;
-                            console.log(`[Workflow._executeAgent] 用户选择继续，输出已更新，长度: ${reviewResult.content.length}`);
+
                         } else if (reviewResult.action === 'reject') {
-                            console.log(`[Workflow._executeAgent] 用户选择打回，准备触发回流`);
+
                             if (!WORKFLOW_STATE.reflowMap) WORKFLOW_STATE.reflowMap = {};
                             WORKFLOW_STATE.reflowMap[agentKey] = {
                                 previousOutput: originalOutput,
@@ -22357,15 +22811,15 @@
                                 attachType: reviewResult.attachType,
                                 modifiedContent: reviewResult.attachType === 'modified' ? WORKFLOW_STATE.outputs[agentKey] : null
                             };
-                            console.log('[Workflow._executeAgent] 调用 handleReflow');
+
                             await this.handleReflow(agentKey, true);
-                            console.log('[Workflow._executeAgent] handleReflow 返回，当前执行路径结束');
+
                             return; // 当前执行路径结束
                         }
                     } catch (err) {
                         console.error('[Workflow._executeAgent] 审核过程中捕获到异常:', err);
                         if (err.name === 'UserInterruptError') {
-                            console.log('[Workflow._executeAgent] 审核过程中用户中断');
+
                             throw err;
                         } else {
                             console.error('[Workflow._executeAgent] 审核过程出错，继续执行，使用原始输出', err);
@@ -22373,13 +22827,13 @@
                         }
                     }
                 } else {
-                    console.log(`[Workflow._executeAgent] 未进入审核分支: shouldStop=${WORKFLOW_STATE.shouldStop}, review=${agent.review}`);
+
                 }
 
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 if (agent.reflowConditions && agent.reflowConditions.length > 0) {
@@ -22416,7 +22870,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`✗ Agent ${getAgentDisplayName(agentKey)} 执行出错，已保存最佳内容作为废章`, true);
                 }
                 throw enhancedError;
@@ -22431,7 +22885,7 @@
             const agent = CONFIG.AGENTS[agentKey];
             const src = agent.inputs[inputIndex];
             const mode = agent.inputMode[inputIndex] || 'txt';
-            console.log(`[Workflow._collectInputSourceWithoutWait] agent=${agentKey}, idx=${inputIndex}, src=${src}, mode=${mode}`);
+
 
             // 处理 before 源
             if (src === 'before') {
@@ -22504,7 +22958,7 @@
          * @param {boolean} immediate - 是否立即执行
          */
         async handleReflow(sourceKey, immediate = true) {
-            console.log(`[Workflow.handleReflow] ===== 开始处理回流，sourceKey=${sourceKey}, immediate=${immediate} =====`);
+
 
             // ========== 缓存层入栈 ==========
             if (immediate && WORKFLOW_STATE.currentReflowCache) {
@@ -22534,7 +22988,7 @@
 
                     // ===== 新增：跳过历史源（.last），它们不应触发回流 =====
                     if (src.endsWith('.last')) {
-                        console.log(`[handleReflow] 跳过历史源 ${src}，不参与回流`);
+
                         continue;
                     }
                     // ===== 结束新增 =====
@@ -22579,10 +23033,10 @@
 
                 // 修改后
                 let uniqueTargets = [...new Set(targets)];   // 将 const 改为 let
-                console.log(`[handleReflow] 解析出的回流目标: ${uniqueTargets.join(', ')}`);
+
 
                 if (uniqueTargets.length === 0) {
-                    console.log(`[handleReflow] 无其他回流目标，将源 ${sourceKey} 自身作为回流目标`);
+
                     uniqueTargets = [sourceKey];  // 现在可以正常赋值
                 }
 
@@ -22600,13 +23054,13 @@
                 if (!WORKFLOW_STATE.reflowWaiting) WORKFLOW_STATE.reflowWaiting = {};
 
                 WORKFLOW_STATE.reflowWaiting[sourceKey] = uniqueTargets;
-                console.log(`[handleReflow] 设置 reflowWaiting[${sourceKey}] =`, uniqueTargets);
+
 
                 // ========== 保存旧输出 & 连续回流计数 & 处理用户反馈 ==========
                 for (const target of uniqueTargets) {
                     // 初始化 reflowMap[target]
                     if (!WORKFLOW_STATE.reflowMap[target]) {
-                        WORKFLOW_STATE.reflowMap[target] = {sources: [], outputs: {}, previousOutput: undefined};
+                        WORKFLOW_STATE.reflowMap[target] = { sources: [], outputs: {}, previousOutput: undefined };
                     }
 
                     // 保存目标当前的输出（剔除图片）作为“上次输出”
@@ -22625,7 +23079,7 @@
                             feedbackText += `【用户附加的修改后输出】\n${fb.modifiedContent}`;
                         }
                         sourceOutput += '\n\n' + feedbackText;
-                        console.log(`[handleReflow] 为目标 ${target} 添加用户反馈，反馈长度: ${feedbackText.length}`);
+
                     }
                     // ===== 结束新增 =====
 
@@ -22649,7 +23103,7 @@
                     }
                     const currentCount = WORKFLOW_STATE.reflowTargetCount[target];
 
-                    console.log(`[handleReflow] 目标 ${target} 被源 ${sourceKey} 连续触发次数: ${currentCount}`);
+
 
                     if (currentCount >= CONFIG.MAX_CONSECUTIVE_REFLOWS) {
                         WORKFLOW_STATE.discarded = true;
@@ -22657,7 +23111,7 @@
                         if (bestContent) {
                             const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                             const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                            WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                            WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                         }
                         UI.updateProgress(`⚠️ 目标 ${target} 被同一源 ${sourceKey} 连续回流达到 ${CONFIG.MAX_CONSECUTIVE_REFLOWS} 次，本章标记为废章，立即终止`, true);
                         throw new AbortChapterError(`目标 ${target} 被同一源 ${sourceKey} 连续回流达到 ${CONFIG.MAX_CONSECUTIVE_REFLOWS} 次`);
@@ -22666,13 +23120,13 @@
                     // 清除该目标的输出，标记为 reflow_processing
                     AgentStateManager.setState(target, 'reflow_processing');
                     delete WORKFLOW_STATE.outputs[target];
-                    console.log(`[handleReflow] 目标 ${target} 状态已设为 reflow_processing，输出已清除`);
+
                 }
                 // ========== 结束新增 ==========
 
                 // 如果 immediate 为 true，立即启动回流处理
                 if (immediate) {
-                    console.log('[handleReflow] 立即启动回流处理');
+
                     await this.processReflow();
                 }
 
@@ -22707,8 +23161,8 @@
                     k => AgentStateManager.states[k] === 'reflow_processing'
                 );
 
-                console.log(`[processReflow] 当前 processing 列表:`, processing);
-                console.log(`[processReflow] 当前 reflowWaiting:`, WORKFLOW_STATE.reflowWaiting);
+
+
 
                 if (processing.length === 0) break;
 
@@ -22716,12 +23170,12 @@
                     (a, b) => (CONFIG.AGENTS[a]?.order || 999) - (CONFIG.AGENTS[b]?.order || 999)
                 );
                 for (const agentKey of sorted) {
-                    console.log(`[processReflow] 开始执行回流目标: ${agentKey}`);
+
                     await this._executeAgentByRole(agentKey, true, {
                         userInput: WORKFLOW_STATE.currentUserInput,
                         isParallel: false
                     });
-                    console.log(`[processReflow] 回流目标 ${agentKey} 执行完成`);
+
                 }
             }
 
@@ -22741,29 +23195,29 @@
                     AgentStateManager.states[t] === 'completed' && WORKFLOW_STATE.outputs[t] !== undefined
                 );
                 if (allCompleted) {
-                    console.log(`[processReflow] 等待源 ${sourceKey} 的所有目标已完成，将其设为 pending 并重新执行`);
+
                     AgentStateManager.setState(sourceKey, 'pending');
                     delete WORKFLOW_STATE.reflowWaiting[sourceKey];
                     await this._executeAgent(sourceKey, WORKFLOW_STATE.currentUserInput, false);
                 } else {
-                    console.log(`[processReflow] 等待源 ${sourceKey} 的目标未全部完成，当前状态:`, targets.map(t => `${t}=${AgentStateManager.states[t]}`).join(', '));
+
                 }
             }
         },
 
         _isStage(id) {
-            console.log(`[Workflow._isStage] ===== 判断是否为阶段ID ===== id="${id}"`);
-            console.log(`[Workflow._isStage] CONFIG.workflowStages 是否存在:`, !!CONFIG.workflowStages);
+
+
             if (!CONFIG.workflowStages) {
                 console.warn('[Workflow._isStage] CONFIG.workflowStages 不存在，返回 false');
                 return false;
             }
             const found = CONFIG.workflowStages.some(s => {
                 const match = s.id === id;
-                if (match) console.log(`[Workflow._isStage] 找到匹配的阶段:`, s);
+                if (match)
                 return match;
             });
-            console.log(`[Workflow._isStage] 结果: ${found}`);
+
             return found;
         },
 
@@ -22771,10 +23225,10 @@
 
         async executeWorkflow(agents, userInput) {
             console.time('executeWorkflow 总耗时');
-            console.log('[DEBUG][executeWorkflow] ========== 开始执行工作流 ==========');
-            console.log('[DEBUG][executeWorkflow] 启用的 Agent 列表:', agents);
-            console.log('[DEBUG][executeWorkflow] 用户输入:', userInput);
-            console.log('[DEBUG][executeWorkflow] 当前章节号 (nextChapterNum) 将在稍后确定...');
+
+
+
+
 
             await activateAllExistingStateBooks();
 
@@ -22783,7 +23237,7 @@
             const chapters = Storage.loadChapters();
             const nextChapterNum = chapters.length > 0 ? Math.max(...chapters.map(c => c.num)) + 1 : 1;
             WORKFLOW_STATE.currentChapter = nextChapterNum;
-            console.log('[DEBUG][executeWorkflow] 当前章节号设置为:', nextChapterNum);
+
 
             // 计算全局提示词（如果有）
             let globalPrompt = '';
@@ -22813,9 +23267,9 @@
 
             const finalAgentKey = getAgentKeyByRole('finalChapter');
             const interactiveAgentKey = getAgentKeyByRole('interactiveAgent');
-            console.log('[DEBUG][executeWorkflow] 最终章节师键:', finalAgentKey);
-            console.log('[DEBUG][executeWorkflow] 互动师键:', interactiveAgentKey);
-            console.log('[DEBUG][executeWorkflow] 互动师是否在启用列表中:', agents.includes(interactiveAgentKey));
+
+
+
 
             const preSnapshot = await Snapshot.create();
             WORKFLOW_STATE.currentUserInput = userInput;
@@ -22830,7 +23284,7 @@
                     if (stageAgents.length === 0) continue;
 
                     console.time(`阶段 ${stage.stage}: ${stage.name}`);
-                    console.log(`[DEBUG][executeWorkflow] === 开始阶段 ${stage.stage}: ${stage.name} (${stage.mode}) ===`);
+
                     UI.updateProgress(`=== 阶段${stage.stage}: ${stage.name} ${stage.mode === 'parallel' ? '(并行)' : ''} ===`);
 
                     if (stage.mode === 'serial') {
@@ -22875,7 +23329,7 @@
                             k => AgentStateManager.states[k] === 'reflow_processing'
                         );
                         if (processing.length > 0) {
-                            console.log(`[DEBUG][executeWorkflow] 检测到 ${processing.length} 个 Agent 需要重新执行（由于回流）`);
+
                             console.time(`回流处理`);
                             await this.processReflow();
                             console.timeEnd(`回流处理`);
@@ -22906,36 +23360,36 @@
                     .sort((a, b) => (a[1].order || 999) - (b[1].order || 999))
                     .map(([key]) => key);
 
-                console.log(`[DEBUG][executeWorkflow] 发现 ${saverKeys.length} 个启用的 saver Agent: ${saverKeys.join(', ')}`);
+
 
                 // 收集有输出的 saver 的输出
                 const saverOutputs = [];
                 for (const key of saverKeys) {
                     const output = WORKFLOW_STATE.outputs[key];
                     if (output !== undefined && output !== null && output !== '') {
-                        console.log(`[DEBUG][executeWorkflow] saver ${key} 输出存在，长度: ${output.length}`);
+
                         saverOutputs.push(output);
                     } else {
-                        console.log(`[DEBUG][executeWorkflow] saver ${key} 输出为空，跳过拼接`);
+
                     }
                 }
 
                 if (saverOutputs.length > 0) {
                     // 拼接所有 saver 输出（直接连接）
                     contentToSave = saverOutputs.join('\n');
-                    console.log(`[DEBUG][executeWorkflow] 使用 ${saverOutputs.length} 个 saver 拼接，总长度: ${contentToSave.length}`);
+
                 } else {
-                    console.log('[DEBUG][executeWorkflow] 无有效的 saver 输出，回退到原有优先级');
+
                     // 原有回退逻辑
                     const typesetterKey = this._getAgentKeyByRole('typesetter');
                     if (typesetterKey && WORKFLOW_STATE.outputs[typesetterKey]) {
                         contentToSave = WORKFLOW_STATE.outputs[typesetterKey];
-                        console.log(`[DEBUG][executeWorkflow] 使用 typesetter 输出保存章节，长度: ${contentToSave.length}`);
+
                     } else {
                         const finalKey = this._getAgentKeyByRole('finalChapter');
                         if (finalKey && WORKFLOW_STATE.outputs[finalKey]) {
                             contentToSave = WORKFLOW_STATE.outputs[finalKey];
-                            console.log(`[DEBUG][executeWorkflow] 使用 finalChapter 输出保存章节，长度: ${contentToSave.length}`);
+
                         } else {
                             const enabledAgents = WORKFLOW_STATE.enabledAgents || [];
                             let fallbackKey = null;
@@ -22948,7 +23402,7 @@
                             }
                             if (fallbackKey) {
                                 contentToSave = WORKFLOW_STATE.outputs[fallbackKey];
-                                console.log(`[DEBUG][executeWorkflow] 无指定角色，使用最后一个有输出的 Agent ${fallbackKey} 输出保存章节，长度: ${contentToSave.length}`);
+
                             } else {
                                 console.warn('[DEBUG][executeWorkflow] 没有任何 Agent 有输出，无法保存章节');
                             }
@@ -22961,9 +23415,9 @@
                     // ---------- 新增：去除外层代码块标记 ----------
                     const strippedContent = this._stripOuterCodeBlock(contentToSave);
                     if (strippedContent !== contentToSave) {
-                        console.log(`[DEBUG][executeWorkflow] 检测到外层代码块标记，已去除，原始长度: ${contentToSave.length}，处理后长度: ${strippedContent.length}`);
+
                     } else {
-                        console.log(`[DEBUG][executeWorkflow] 未检测到外层代码块标记，内容不变`);
+
                     }
                     // ---------- 结束新增 ----------
 
@@ -22975,14 +23429,14 @@
                         // 移除可能的 "第X章" 前缀（但保留其余部分作为标题）
                         contentPart = contentPart.replace(/^\s*第\d+章\s*/, '').trim();
                         title = contentPart || `第${nextChapterNum}章`;
-                        console.log(`[DEBUG][executeWorkflow] 从内容提取标题: "${title}"`);
+
                     } else {
                         title = `第${nextChapterNum}章`;
-                        console.log(`[DEBUG][executeWorkflow] 未检测到标题行，使用默认标题: "${title}"`);
+
                     }
                     // 内容使用去除代码块后的 strippedContent，不剥离任何其他内容
                     const cleanContent = strippedContent;
-                    console.log(`[DEBUG][executeWorkflow] 保存内容长度: ${cleanContent.length}`);
+
                     // ---------- 结束修改 ----------
 
                     UI.updateProgress('→ 保存章节...');
@@ -22994,29 +23448,29 @@
                     const hasInteractive = agents.includes(interactiveAgentKey);
                     if (hasInteractive) {
                         chapterData.interactive = true;
-                        console.log('[DEBUG][executeWorkflow] 章节标记为 interactive = true');
+
                     }
 
                     // ===== 分支系统：获取父章节号 =====
                     const parentNum = WORKFLOW_STATE.currentParentNum;
-                    console.log(`[executeWorkflow] 保存章节时 parentNum = ${parentNum}`);
+
                     // ===== 结束 =====
 
                     // ===== 获取互动结果 =====
                     const interactionResult = WORKFLOW_STATE.currentInteractionResult;
-                    console.log(`[executeWorkflow] 保存章节时 interactionResult = ${interactionResult}`);
+
                     // ===== 结束 =====
 
                     const saveSuccess = Storage.saveChapter(chapterData, nextChapterNum, snapshot, parentNum, interactionResult);
                     if (saveSuccess) {
                         UI.updateProgress(`📚 第${nextChapterNum}章已保存: ${title}`);
                         UI.updateCurrentChapterNum();
-                        console.log(`[DEBUG][executeWorkflow] 章节保存成功，saveSuccess = ${saveSuccess}`);
+
 
                         // ===== 分支系统：更新当前分支最新章节 =====
                         if (WORKFLOW_STATE.currentBranchLatest !== undefined) {
                             WORKFLOW_STATE.currentBranchLatest = nextChapterNum;
-                            console.log(`[executeWorkflow] 更新 currentBranchLatest = ${nextChapterNum}`);
+
                         }
                         // ===== 结束 =====
                     } else {
@@ -23032,20 +23486,20 @@
                             WORKFLOW_STATE.chapterMemory[role] = output;
                         }
                     }
-                    console.log('[DEBUG][executeWorkflow] 跨章记忆已更新');
+
 
                     // 重置当前互动结果，避免影响下一章
                     WORKFLOW_STATE.currentInteractionResult = null;
                 } else if (WORKFLOW_STATE.discarded) {
                     UI.updateProgress('⏭️ 本章为废章，已跳过保存');
-                    console.log('[DEBUG][executeWorkflow] 本章为废章，跳过保存');
+
                 }
 
                 if (aborted) {
-                    console.log('[DEBUG][executeWorkflow] 因连续回流超限而终止，返回 aborted = true');
+
                     return { success: false, aborted: true };
                 }
-                console.log('[DEBUG][executeWorkflow] 工作流执行成功，返回 success = true');
+
                 console.timeEnd('executeWorkflow 总耗时');
                 return { success: true };
 
@@ -23087,7 +23541,7 @@
                         delete WORKFLOW_STATE.discardReason;
                     }
                 }
-                console.log('[DEBUG][executeWorkflow] ========== 工作流执行结束 ==========');
+
             }
         },
 
@@ -23098,7 +23552,7 @@
             const codeBlockRegex = /^\s*```(?:html|markdown)?\s*\n([\s\S]*?)\n\s*```\s*$/;
             const match = trimmed.match(codeBlockRegex);
             if (match) {
-                console.log(`[Workflow._stripOuterCodeBlock] 检测到代码块标记，已提取内部内容，长度: ${match[1].length}`);
+
                 return match[1];
             }
             return text;
@@ -23127,11 +23581,11 @@
                 }
                 if (fileIds.length > 0) {
                     cleanMessage = message.replace(fileRegex, '').trim();
-                    console.log(`[callAgent][${agentKey}] 检测到文件ID列表: ${fileIds.join(', ')}, 清理后消息: "${cleanMessage}"`);
+
                 }
 
                 const config = CONFIG.apiConfigs[apiConfigId];
-                const {source, apiUrl, key, model, timeout = 60000} = config;
+                const { source, apiUrl, key, model, timeout = 60000 } = config;
                 const url = apiUrl.replace(/\/+$/, '');
 
                 // 构建组合信号
@@ -23142,18 +23596,18 @@
                 signals.push(AbortSignal.timeout(timeout));
                 const combinedSignal = AbortSignal.any(signals);
 
-                console.log(`[callAgent][${agentKey}] 使用自定义API: source=${source}, model=${model}, timeout=${timeout}`);
-                console.log(`[callAgent][${agentKey}] API URL: ${url}`);
+
+
                 // 记录请求体（隐藏密钥）
-                const logHeaders = {'Authorization': `Bearer ${key.substring(0, 5)}...`};
-                console.log(`[callAgent][${agentKey}] 请求头 (简化):`, logHeaders);
+                const logHeaders = { 'Authorization': `Bearer ${key.substring(0, 5)}...` };
+
 
                 try {
                     // ========== OpenAI 兼容平台 (包括 SiliconFlow/Qwen) ==========
                     if (source === 'openai' || source === 'deepseek' || source === 'qwen' || source === 'siliconflow' || source === 'other') {
                         const requestBody = {
                             model: model,
-                            messages: [{role: 'user', content: cleanMessage}],
+                            messages: [{ role: 'user', content: cleanMessage }],
                             max_tokens: config.maxTokens,
                             temperature: config.temperature,
                             top_p: config.top_p,
@@ -23184,7 +23638,7 @@
                             signal: combinedSignal,
                         });
 
-                        console.log(`[callAgent][${agentKey}] 响应状态: ${response.status} ${response.statusText}`);
+
 
                         if (!response.ok) {
                             const errText = await response.text();
@@ -23194,7 +23648,7 @@
                         const data = await response.json();
                         console.log(`[callAgent][${agentKey}] 响应数据 (简化):`, {
                             choices: data.choices ? data.choices.map(c => ({
-                                message: c.message ? {content_length: c.message.content?.length} : {},
+                                message: c.message ? { content_length: c.message.content?.length } : {},
                                 text_length: c.text?.length
                             })) : '无choices'
                         });
@@ -23208,8 +23662,8 @@
 
                         // ===== 关键修复：立即设置输出到全局状态 =====
                         WORKFLOW_STATE.outputs[agentKey] = generatedText;
-                        console.log(`[callAgent][${agentKey}] ✅ 已设置 WORKFLOW_STATE.outputs[${agentKey}]，长度: ${generatedText.length}`);
-                        console.log(`[callAgent][${agentKey}] 生成文本预览: ${generatedText.substring(0, 200)}`);
+
+
 
                         AgentStateManager.setState(agentKey, 'completed');
                         UI.updateAgentStatusButton(agentKey);
@@ -23221,14 +23675,14 @@
                     else if (source === 'claude') {
                         const requestBody = {
                             model: model,
-                            messages: [{role: 'user', content: cleanMessage}],
+                            messages: [{ role: 'user', content: cleanMessage }],
                             max_tokens: config.maxTokens,
                             temperature: config.temperature,
                             top_p: config.top_p,
                             stop_sequences: config.stop ? (Array.isArray(config.stop) ? config.stop : [config.stop]) : undefined,
                         };
                         if (fileIds.length > 0) {
-                            requestBody.files = fileIds.map(id => ({type: 'file', file_id: id}));
+                            requestBody.files = fileIds.map(id => ({ type: 'file', file_id: id }));
                         }
                         Object.keys(requestBody).forEach(k => requestBody[k] === undefined && delete requestBody[k]);
 
@@ -23251,7 +23705,7 @@
                             signal: combinedSignal,
                         });
 
-                        console.log(`[callAgent][${agentKey}] Claude 响应状态: ${response.status}`);
+
 
                         if (!response.ok) {
                             const errText = await response.text();
@@ -23264,8 +23718,8 @@
 
                         // ===== 设置输出 =====
                         WORKFLOW_STATE.outputs[agentKey] = generatedText;
-                        console.log(`[callAgent][${agentKey}] ✅ 已设置 WORKFLOW_STATE.outputs[${agentKey}]，长度: ${generatedText.length}`);
-                        console.log(`[callAgent][${agentKey}] 生成文本预览: ${generatedText.substring(0, 200)}`);
+
+
 
                         AgentStateManager.setState(agentKey, 'completed');
                         UI.updateAgentStatusButton(agentKey);
@@ -23275,13 +23729,13 @@
                     // ========== Gemini ==========
                     else if (source === 'gemini') {
                         const contents = [{
-                            parts: [{text: cleanMessage}]
+                            parts: [{ text: cleanMessage }]
                         }];
                         if (fileIds.length > 0) {
                             for (const fileId of fileIds) {
                                 const fileUri = `https://generativelanguage.googleapis.com/v1beta/files/${fileId}`;
                                 contents[0].parts.push({
-                                    fileData: {fileUri: fileUri, mimeType: 'application/octet-stream'}
+                                    fileData: { fileUri: fileUri, mimeType: 'application/octet-stream' }
                                 });
                             }
                         }
@@ -23298,16 +23752,16 @@
                         };
                         Object.keys(requestBody.generationConfig).forEach(k => requestBody.generationConfig[k] === undefined && delete requestBody.generationConfig[k]);
 
-                        console.log(`[callAgent][${agentKey}] Gemini 请求体:`, requestBody);
+
 
                         const response = await fetch(`${url}/v1beta/models/${model}:generateContent?key=${key}`, {
                             method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
+                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(requestBody),
                             signal: combinedSignal,
                         });
 
-                        console.log(`[callAgent][${agentKey}] Gemini 响应状态: ${response.status}`);
+
 
                         if (!response.ok) {
                             const errText = await response.text();
@@ -23320,8 +23774,8 @@
 
                         // ===== 设置输出 =====
                         WORKFLOW_STATE.outputs[agentKey] = generatedText;
-                        console.log(`[callAgent][${agentKey}] ✅ 已设置 WORKFLOW_STATE.outputs[${agentKey}]，长度: ${generatedText.length}`);
-                        console.log(`[callAgent][${agentKey}] 生成文本预览: ${generatedText.substring(0, 200)}`);
+
+
 
                         AgentStateManager.setState(agentKey, 'completed');
                         UI.updateAgentStatusButton(agentKey);
@@ -23349,7 +23803,7 @@
                         message: msg,
                         stack: error.stack,
                         timestamp: Date.now(),
-                        apiConfig: config ? {source, model, timeout} : null,
+                        apiConfig: config ? { source, model, timeout } : null,
                         prompt: message.substring(0, 500)
                     };
                     // 显示友好错误信息到进度区域
@@ -23415,7 +23869,7 @@
 
                     // ===== 设置输出 =====
                     WORKFLOW_STATE.outputs[agentKey] = response.mes;
-                    console.log(`[callAgent][${agentKey}] ✅ 已设置 WORKFLOW_STATE.outputs[${agentKey}]，长度: ${response.mes.length}`);
+
 
                     AgentStateManager.setState(agentKey, 'completed');
                     UI.updateAgentStatusButton(agentKey);
@@ -23453,7 +23907,7 @@
         },
 
         _getBestOutputForSaving() {
-            console.log('[DEBUG][_getBestOutputForSaving] 开始按优先级选取最佳保存内容');
+
 
             // 1. 获取所有启用的 saver Agent，按 order 排序
             const enabledSet = new Set(WORKFLOW_STATE.enabledAgents || []);
@@ -23462,37 +23916,37 @@
                 .sort((a, b) => (a[1].order || 999) - (b[1].order || 999))
                 .map(([key]) => key);
 
-            console.log(`[DEBUG][_getBestOutputForSaving] 发现 ${saverKeys.length} 个启用的 saver: ${saverKeys.join(', ')}`);
+
 
             // 收集有输出的 saver 输出
             const saverOutputs = [];
             for (const key of saverKeys) {
                 const output = WORKFLOW_STATE.outputs[key];
                 if (output !== undefined && output !== null && output !== '') {
-                    console.log(`[DEBUG][_getBestOutputForSaving] saver ${key} 输出存在，长度: ${output.length}`);
+
                     saverOutputs.push(output);
                 } else {
-                    console.log(`[DEBUG][_getBestOutputForSaving] saver ${key} 输出为空，跳过`);
+
                 }
             }
 
             if (saverOutputs.length > 0) {
                 const result = saverOutputs.join('\n\n');
-                console.log(`[DEBUG][_getBestOutputForSaving] 使用 ${saverOutputs.length} 个 saver 拼接，总长度: ${result.length}`);
+
                 return result;
             }
 
             // 2. 尝试 typesetter
             const typesetterKey = this._getAgentKeyByRole('typesetter');
             if (typesetterKey && WORKFLOW_STATE.outputs[typesetterKey]) {
-                console.log(`[DEBUG][_getBestOutputForSaving] 使用 typesetter (${typesetterKey}) 输出，长度: ${WORKFLOW_STATE.outputs[typesetterKey].length}`);
+
                 return WORKFLOW_STATE.outputs[typesetterKey];
             }
 
             // 3. 尝试 finalChapter
             const finalKey = this._getAgentKeyByRole('finalChapter');
             if (finalKey && WORKFLOW_STATE.outputs[finalKey]) {
-                console.log(`[DEBUG][_getBestOutputForSaving] 使用 finalChapter (${finalKey}) 输出，长度: ${WORKFLOW_STATE.outputs[finalKey].length}`);
+
                 return WORKFLOW_STATE.outputs[finalKey];
             }
 
@@ -23501,7 +23955,7 @@
             for (let i = enabled.length - 1; i >= 0; i--) {
                 const key = enabled[i];
                 if (WORKFLOW_STATE.outputs[key]) {
-                    console.log(`[DEBUG][_getBestOutputForSaving] 使用回退 Agent (${key}) 输出，长度: ${WORKFLOW_STATE.outputs[key].length}`);
+
                     return WORKFLOW_STATE.outputs[key];
                 }
             }
@@ -23517,12 +23971,12 @@
          */
         _getImageConfig: function (mode) {
             const apiConfigs = CONFIG.apiConfigs || {};
-            console.log(`[getImageConfig] 查找 mode=${mode} 的图像配置`);
+
 
             // 优先找 mode 匹配的
             for (const [id, cfg] of Object.entries(apiConfigs)) {
                 if (cfg.type === 'image' && cfg.mode === mode) {
-                    console.log(`[getImageConfig] 找到 mode=${mode} 的配置: ${id}`);
+
                     return cfg;
                 }
             }
@@ -23542,15 +23996,15 @@
         parseProtocol(protocolText) {
             // 匹配协议头部：===续写锁定协议===
             const headerMatch = protocolText.match(/===\s*续写锁定协议\s*===\s*/);
-            console.log(`[parseProtocol] 尝试匹配协议头部，原始文本长度: ${protocolText?.length}`);
+
             if (!headerMatch) {
-                console.log('[parseProtocol] 未找到协议头部 "===续写锁定协议==="');
-                return {success: false, error: '未找到协议头部'};
+
+                return { success: false, error: '未找到协议头部' };
             }
 
             const chapterNum = WORKFLOW_STATE.currentChapter; // 使用当前章节号，不从头部提取
             const content = protocolText.substring(headerMatch[0].length).trim();
-            console.log(`[parseProtocol] 提取到的协议内容长度: ${content.length}`);
+
 
             const data = {};
             // 类别标题正则：允许前后空格，名称捕获直到下一个类别或结尾
@@ -23560,17 +24014,17 @@
                 const catId = catMatch[1];
                 const catName = catMatch[2].trim();
                 const fieldsContent = catMatch[3].trim();
-                console.log(`[parseProtocol] 发现类别: ${catId} - ${catName}, 字段内容长度: ${fieldsContent.length}`);
-                data[catId] = {name: catName, content: fieldsContent};
+
+                data[catId] = { name: catName, content: fieldsContent };
             }
 
             if (Object.keys(data).length === 0) {
-                console.log('[parseProtocol] 协议中未找到任何类别定义');
-                return {success: false, error: '协议中未找到任何类别定义'};
+
+                return { success: false, error: '协议中未找到任何类别定义' };
             }
 
-            console.log(`[parseProtocol] 解析成功，章节号: ${chapterNum}, 类别数: ${Object.keys(data).length}`);
-            return {success: true, chapterNum, data};
+
+            return { success: true, chapterNum, data };
         },
 
         // ==================== 优化师专用执行函数 ====================
@@ -23751,7 +24205,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress('⚠️ 无状态书，本章标记为废章，将回滚状态书...', true);
                 }
                 throw new AbortChapterError('无可用状态书，更新失败');
@@ -23816,11 +24270,11 @@
                 }
 
                 const protocol = response;
-                console.log(`[DEBUG][_executeUpdater] 尝试解析协议，响应长度: ${protocol.length}`);
+
                 const parseResult = this.parseProtocol(protocol);
                 if (parseResult.success) {
                     try {
-                        const {successIds, errorIds} = await updateWorldState(bookName, parseResult.data);
+                        const { successIds, errorIds } = await updateWorldState(bookName, parseResult.data);
                         if (successIds.length) {
                             UI.updateProgress(`    ✅ 更新成功: ${successIds.join(', ')} (共 ${successIds.length} 个类别)`);
                         }
@@ -23846,7 +24300,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress('⚠️ 部分状态更新失败，本章标记为废章，将回滚状态书...', true);
                 }
                 AgentStateManager.setState(agentKey, 'error');
@@ -23860,8 +24314,8 @@
         // ==================== 生图师专用执行函数 ====================
 
         async _executeImageGenerator(agentKey, initialUserInput = '', isReflow = false, options = {}) {
-            console.log(`[IMAGE DEBUG] === 进入 _executeImageGenerator === agentKey=${agentKey}, isReflow=${isReflow}, options=`, options);
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[IMAGE DEBUG] 本章已被标记为废章，终止执行`);
@@ -23882,7 +24336,7 @@
             let imageConfig = null;
             try {
                 imageConfig = this._getImageConfig('txt2img');
-                console.log(`[IMAGE DEBUG] 使用文生图配置: mode=txt2img, source=${imageConfig.source}`);
+
             } catch (e) {
                 console.warn(`[IMAGE DEBUG] 获取图像配置失败:`, e);
             }
@@ -23892,12 +24346,12 @@
                 const interval = agent.executeInterval;
                 const currentChapter = WORKFLOW_STATE.currentChapter;
                 const shouldExecute = (currentChapter % interval) === 0;
-                console.log(`[IMAGE DEBUG] 周期检查: currentChapter=${currentChapter}, interval=${interval}, shouldExecute=${shouldExecute}`);
+
                 if (!shouldExecute) {
                     AgentStateManager.setState(agentKey, 'idle');
                     WORKFLOW_STATE.outputs[agentKey] = '';
                     UI.updateProgress(`⏭️ ${getAgentDisplayName(agentKey)} 被跳过（周期执行）`);
-                    console.log(`[IMAGE DEBUG] 周期跳过，返回`);
+
                     return;
                 }
             }
@@ -23906,14 +24360,14 @@
             if (isReflow) {
                 const oldOutput = WORKFLOW_STATE.outputs[agentKey];
                 if (oldOutput) {
-                    console.log(`[IMAGE DEBUG] 回流，删除旧图片，旧输出:`, oldOutput);
+
                     try {
                         const oldImages = JSON.parse(oldOutput);
                         if (Array.isArray(oldImages)) {
                             for (const img of oldImages) {
                                 if (img.id) {
                                     await ImageStore.delete(img.id);
-                                    console.log(`[IMAGE DEBUG] 已删除旧图片 ${img.id}`);
+
                                 }
                             }
                         }
@@ -23936,18 +24390,18 @@
             }
             if (!WORKFLOW_STATE.beforeDependencies) WORKFLOW_STATE.beforeDependencies = {};
             WORKFLOW_STATE.beforeDependencies[agentKey] = beforeTargetKey;
-            console.log(`[IMAGE DEBUG] beforeTargetKey=${beforeTargetKey}`);
+
 
             try {
                 // 完整输入收集
-                console.log(`[IMAGE DEBUG] 开始收集输入，inputs长度=${agent.inputs.length}`);
+
                 const collected = await this._collectInputs(agentKey, isReflow, options);
 
                 // 构建基础 prompt
                 let prompt = agent.inputTemplate;
                 let placeholderIdx = 0;
                 prompt = prompt.replace(/【】/g, () => collected[placeholderIdx++] || '');
-                console.log(`[IMAGE DEBUG] 替换占位符后的prompt长度: ${prompt.length}, 前200字符: ${prompt.substring(0, 200)}`);
+
 
                 // 添加回流反馈
                 if (isReflow && WORKFLOW_STATE.reflowMap?.[agentKey]) {
@@ -23962,7 +24416,7 @@
                     }
                     if (feedbackParts.length > 0) {
                         prompt += '\n\n' + feedbackParts.join('\n\n');
-                        console.log(`[IMAGE DEBUG] 添加回流反馈，长度增加`);
+
                     }
                 }
 
@@ -23970,7 +24424,7 @@
                     const previousOutput = WORKFLOW_STATE.reflowMap[agentKey].previousOutput;
                     if (previousOutput && previousOutput.trim() !== '') {
                         prompt += '\n\n【上次输出】：\n' + previousOutput;
-                        console.log(`[IMAGE DEBUG] 添加上次输出，长度增加`);
+
                     }
                 }
 
@@ -23983,15 +24437,15 @@
                     prompt += `\n\n【图像模型完整配置】\n${JSON.stringify(imageConfig, null, 2)}`;
                 }
 
-                console.log(`[IMAGE DEBUG] 最终提示词长度: ${prompt.length}, 前200字符: ${prompt.substring(0, 200)}`);
+
 
                 if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
 
                 // 调用生图师 Agent
-                console.log(`[IMAGE DEBUG] 开始调用生图师 Agent...`);
+
                 const responseText = await this.callAgent(agentKey, prompt);
-                console.log(`[IMAGE DEBUG] Agent返回原始输出长度: ${responseText?.length}`);
-                console.log(`[IMAGE DEBUG] Agent原始输出前500字符: ${responseText?.substring(0, 500)}`);
+
+
 
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
@@ -24006,7 +24460,7 @@
                         tasks = [tasks];
                         console.warn(`[IMAGE DEBUG] 解析结果不是数组，已包装为数组`);
                     }
-                    console.log(`[IMAGE DEBUG] 解析出 ${tasks.length} 个图片任务`);
+
                 } catch (e) {
                     console.error(`[IMAGE DEBUG] 解析 JSON 失败，输出可能不是 JSON 格式`, e);
                     // 降级处理：尝试旧格式？这里我们不再支持旧格式，直接报错
@@ -24017,7 +24471,7 @@
                 const imageResults = [];
                 if (tasks.length > 0) {
                     UI.updateProgress(`  生图师输出 ${tasks.length} 个图片任务，开始并发生成（并发数 2）...`);
-                    console.log(`[IMAGE DEBUG] 开始并发生成图片，任务数: ${tasks.length}`);
+
 
                     const concurrency = 2; // 并发数
                     const queue = [...tasks];
@@ -24030,7 +24484,7 @@
                         const currentIndex = tasks.indexOf(task) + 1;
                         const taskId = `task_${currentIndex}`;
                         running.add(taskId);
-                        console.log(`[IMAGE DEBUG] 开始任务 ${currentIndex}/${tasks.length}, 当前并发: ${running.size}`);
+
 
                         try {
                             console.time(`图片生成任务 ${currentIndex}`);
@@ -24072,17 +24526,17 @@
 
                     // 存储结果
                     WORKFLOW_STATE.outputs[agentKey] = JSON.stringify(imageResults);
-                    console.log(`[IMAGE DEBUG] 最终输出JSON:`, WORKFLOW_STATE.outputs[agentKey]);
+
                 }
 
                 // 存储结果
                 WORKFLOW_STATE.outputs[agentKey] = JSON.stringify(imageResults);
-                console.log(`[IMAGE DEBUG] 最终输出JSON:`, WORKFLOW_STATE.outputs[agentKey]);
+
 
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 UI.updateProgress(`✅ 生图师执行完成，生成 ${imageResults.length} 张图片`);
@@ -24090,14 +24544,14 @@
                 // 检查回流条件
                 if (agent.reflowConditions?.length > 0 && agent.reflowConditions.some(cond => responseText.includes(cond))) {
                     UI.updateProgress(`⚠️ 生图师触发回流`);
-                    console.log(`[IMAGE DEBUG] 触发回流条件，开始处理回流`);
+
                     await this.handleReflow(agentKey, true);
                 }
 
             } catch (error) {
                 console.error(`[IMAGE DEBUG] 执行出错:`, error);
                 if (error.name === 'AbortError') {
-                    console.log('[IMAGE DEBUG] 检测到AbortError，转为用户中断');
+
                     throw new UserInterruptError();
                 }
                 if (error.name === 'UserInterruptError') {
@@ -24111,10 +24565,10 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 生图师出错，已保存最佳内容作为废章`, true);
                 }
-                console.log(`[IMAGE DEBUG] 已设置 WORKFLOW_STATE.discarded = true`);
+
                 throw error;
             }
         },
@@ -24122,8 +24576,8 @@
         // ==================== 排版师专用执行函数 ====================
 
         async _executeTypesetter(agentKey, isReflow = false, options = {}) {
-            console.log(`[TYPESETTER DEBUG] === 进入 _executeTypesetter === agentKey=${agentKey}, isReflow=${isReflow}, options=`, options);
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[TYPESETTER DEBUG] 本章已被标记为废章，终止执行`);
@@ -24145,13 +24599,13 @@
                 const interval = agent.executeInterval;
                 const currentChapter = WORKFLOW_STATE.currentChapter;
                 const shouldExecute = (currentChapter % interval) === 0;
-                console.log(`[TYPESETTER DEBUG] 周期检查: currentChapter=${currentChapter}, interval=${interval}, shouldExecute=${shouldExecute}`);
+
 
                 if (!shouldExecute) {
                     AgentStateManager.setState(agentKey, 'idle');
                     WORKFLOW_STATE.outputs[agentKey] = '';
                     UI.updateProgress(`⏭️ ${getAgentDisplayName(agentKey)} 被跳过（周期执行）`);
-                    console.log(`[TYPESETTER DEBUG] 周期跳过，返回`);
+
                     return;
                 }
             }
@@ -24170,17 +24624,17 @@
 
             if (!WORKFLOW_STATE.beforeDependencies) WORKFLOW_STATE.beforeDependencies = {};
             WORKFLOW_STATE.beforeDependencies[agentKey] = beforeTargetKey;
-            console.log(`[TYPESETTER DEBUG] beforeTargetKey=${beforeTargetKey}`);
+
 
             try {
-                console.log(`[TYPESETTER DEBUG] 开始收集输入，inputs长度=${agent.inputs.length}`);
+
                 const collected = await this._collectInputs(agentKey, isReflow, options);
 
                 // 构建基础 prompt：替换所有 【】 占位符
                 let prompt = agent.inputTemplate;
                 let placeholderIdx = 0;
                 prompt = prompt.replace(/【】/g, () => collected[placeholderIdx++] || '');
-                console.log(`[TYPESETTER DEBUG] 替换占位符后的prompt长度: ${prompt.length}, 前200字符: ${prompt.substring(0, 200)}`);
+
 
                 // 添加回流反馈
                 if (isReflow && WORKFLOW_STATE.reflowMap && WORKFLOW_STATE.reflowMap[agentKey]) {
@@ -24195,7 +24649,7 @@
                     }
                     if (feedbackParts.length > 0) {
                         prompt += '\n\n' + feedbackParts.join('\n\n');
-                        console.log(`[TYPESETTER DEBUG] 添加回流反馈，长度增加`);
+
                     }
                 }
 
@@ -24203,7 +24657,7 @@
                     const previousOutput = WORKFLOW_STATE.reflowMap[agentKey].previousOutput;
                     if (previousOutput && previousOutput.trim() !== '') {
                         prompt += '\n\n【上次输出】：\n' + previousOutput;
-                        console.log(`[TYPESETTER DEBUG] 添加上次输出，长度增加`);
+
                     }
                 }
 
@@ -24222,21 +24676,21 @@
                     viewerWidth = Workflow._viewerCache.width;
                     viewerHeight = Workflow._viewerCache.height;
                     viewerBgColor = Workflow._viewerCache.bgColor;
-                    console.log(`[TYPESETTER DEBUG] 使用缓存的 viewer 尺寸: ${viewerWidth}x${viewerHeight}, 背景色: ${viewerBgColor}`);
+
                 } else {
-                    console.log(`[TYPESETTER DEBUG] 开始获取 viewer 尺寸`);
+
                     let viewerElement = document.querySelector('.markdown-body');
                     if (!viewerElement) viewerElement = document.querySelector('.nc-modal-body');
                     if (viewerElement) {
                         const rect = viewerElement.getBoundingClientRect();
                         viewerWidth = Math.round(rect.width);
                         viewerHeight = Math.round(rect.height);
-                        console.log(`[TYPESETTER DEBUG] 获取到 viewerElement 尺寸: ${viewerWidth}x${viewerHeight}`);
+
 
                         const bgColor = window.getComputedStyle(viewerElement).backgroundColor;
                         if (bgColor && bgColor !== 'rgba(0, 0, 0, 0)') {
                             viewerBgColor = bgColor;
-                            console.log(`[TYPESETTER DEBUG] 获取到背景色: ${viewerBgColor}`);
+
                         }
                         Workflow._viewerCache = {
                             width: viewerWidth,
@@ -24244,7 +24698,7 @@
                             bgColor: viewerBgColor,
                             timestamp: Date.now()
                         };
-                        console.log('[TYPESETTER DEBUG] 更新缓存');
+
                     } else {
                         console.warn('[TYPESETTER DEBUG] 未找到任何内容容器，使用默认尺寸 800x600');
                     }
@@ -24259,7 +24713,7 @@
                             const jsonStr = collected[i];
                             if (jsonStr && jsonStr.trim().startsWith('[')) {
                                 imageIdList = JSON.parse(jsonStr);
-                                console.log(`[TYPESETTER DEBUG] 解析到图片 ID 列表，共 ${imageIdList.length} 张`);
+
                             } else {
                                 console.warn(`[TYPESETTER DEBUG] 输入源 ${src} 内容不是有效 JSON 数组:`, jsonStr);
                             }
@@ -24273,7 +24727,7 @@
                 // 3. 获取每张图片的真实尺寸（从 ImageStore）
                 const imageSizes = [];
                 if (imageIdList.length > 0) {
-                    console.log(`[TYPESETTER DEBUG] 开始获取 ${imageIdList.length} 张图片的尺寸`);
+
                     for (const imgInfo of imageIdList) {
                         if (imgInfo.id) {
                             try {
@@ -24290,7 +24744,7 @@
                                                 height: img.naturalHeight,
                                                 type: blob.type
                                             });
-                                            console.log(`[TYPESETTER DEBUG] 图片 ${imgInfo.id} 尺寸: ${img.naturalWidth}x${img.naturalHeight}`);
+
                                             resolve();
                                         };
                                         img.onerror = (err) => {
@@ -24321,7 +24775,7 @@
                     timestamp: Date.now()
                 };
                 const envInfoJson = JSON.stringify(envInfo, null, 2);
-                console.log(`[TYPESETTER DEBUG] 环境信息已构建，viewer尺寸 ${viewerWidth}x${viewerHeight}`);
+
 
                 prompt += `\n\n【环境信息】\n${envInfoJson}\n\n`;
                 prompt += `请根据以上环境信息调整排版样式：\n`;
@@ -24333,10 +24787,10 @@
 
                 if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
 
-                console.log(`[TYPESETTER DEBUG] 最终提示词长度: ${prompt.length}, 前200字符: ${prompt.substring(0, 200)}`);
+
                 const responseText = await this.callAgent(agentKey, prompt);
-                console.log(`[TYPESETTER DEBUG] Agent返回原始输出长度: ${responseText?.length}`);
-                console.log(`[TYPESETTER DEBUG] Agent原始输出前500字符: ${responseText?.substring(0, 500)}`);
+
+
 
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
@@ -24345,7 +24799,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 // 回流条件检查
@@ -24353,7 +24807,7 @@
                     const triggered = agent.reflowConditions.some(cond => responseText?.includes(cond) === true);
                     if (triggered) {
                         UI.updateProgress(`⚠️ 排版师 ${getAgentDisplayName(agentKey)} 触发回流`);
-                        console.log(`[TYPESETTER DEBUG] 触发回流条件，开始处理回流`);
+
 
                         if (isReflow) {
                             await this.handleReflow(agentKey, true);
@@ -24380,10 +24834,10 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 排版师出错，已保存最佳内容作为废章`, true);
                 }
-                console.log(`[TYPESETTER DEBUG] 已设置 WORKFLOW_STATE.discarded = true`);
+
                 throw error;
             }
         },
@@ -24391,8 +24845,8 @@
         // ==================== 融合生图师专用执行函数 ====================
 
         async _executeFusionGenerator(agentKey, initialUserInput = '', isReflow = false, options = {}) {
-            console.log(`[FUSION DEBUG] === 进入 _executeFusionGenerator === agentKey=${agentKey}, isReflow=${isReflow}, options=`, options);
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[FUSION DEBUG] 本章已被标记为废章，终止执行`);
@@ -24413,7 +24867,7 @@
             let imageConfig = null;
             try {
                 imageConfig = this._getImageConfig('fusion');
-                console.log(`[FUSION DEBUG] 使用融合图配置: mode=fusion, source=${imageConfig.source}`);
+
             } catch (e) {
                 console.warn(`[FUSION DEBUG] 获取图像配置失败:`, e);
             }
@@ -24423,12 +24877,12 @@
                 const interval = agent.executeInterval;
                 const currentChapter = WORKFLOW_STATE.currentChapter;
                 const shouldExecute = (currentChapter % interval) === 0;
-                console.log(`[FUSION DEBUG] 周期检查: currentChapter=${currentChapter}, interval=${interval}, shouldExecute=${shouldExecute}`);
+
                 if (!shouldExecute) {
                     AgentStateManager.setState(agentKey, 'idle');
                     WORKFLOW_STATE.outputs[agentKey] = '';
                     UI.updateProgress(`⏭️ ${getAgentDisplayName(agentKey)} 被跳过（周期执行）`);
-                    console.log(`[FUSION DEBUG] 周期跳过，返回`);
+
                     return;
                 }
             }
@@ -24445,18 +24899,18 @@
             }
             if (!WORKFLOW_STATE.beforeDependencies) WORKFLOW_STATE.beforeDependencies = {};
             WORKFLOW_STATE.beforeDependencies[agentKey] = beforeTargetKey;
-            console.log(`[FUSION DEBUG] beforeTargetKey=${beforeTargetKey}`);
+
 
             try {
                 // 收集输入
-                console.log(`[FUSION DEBUG] 开始收集输入，inputs长度=${agent.inputs.length}`);
+
                 const collected = await this._collectInputs(agentKey, isReflow, options);
 
                 // 构建基础提示词
                 let prompt = agent.inputTemplate;
                 let placeholderIdx = 0;
                 prompt = prompt.replace(/【】/g, () => collected[placeholderIdx++] || '');
-                console.log(`[FUSION DEBUG] 替换占位符后的prompt长度: ${prompt.length}`);
+
 
                 // 添加回流反馈
                 if (isReflow && WORKFLOW_STATE.reflowMap?.[agentKey]) {
@@ -24471,7 +24925,7 @@
                     }
                     if (feedbackParts.length > 0) {
                         prompt += '\n\n' + feedbackParts.join('\n\n');
-                        console.log(`[FUSION DEBUG] 添加回流反馈，长度增加`);
+
                     }
                 }
 
@@ -24479,7 +24933,7 @@
                     const previousOutput = WORKFLOW_STATE.reflowMap[agentKey].previousOutput;
                     if (previousOutput && previousOutput.trim() !== '') {
                         prompt += '\n\n【上次输出】：\n' + previousOutput;
-                        console.log(`[FUSION DEBUG] 添加上次输出，长度增加`);
+
                     }
                 }
 
@@ -24491,10 +24945,10 @@
                 if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
 
                 // 调用融合生图师 Agent
-                console.log(`[FUSION DEBUG] 开始调用融合生图师 Agent...`);
+
                 const rawOutput = await this.callAgent(agentKey, prompt);
-                console.log(`[FUSION DEBUG] Agent返回原始输出长度: ${rawOutput?.length}`);
-                console.log(`[FUSION DEBUG] Agent原始输出前500字符: ${rawOutput?.substring(0, 500)}`);
+
+
 
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
@@ -24504,7 +24958,7 @@
                 let parsed;
                 try {
                     parsed = JSON.parse(rawOutput);
-                    console.log(`[FUSION DEBUG] 解析结果:`, parsed);
+
                 } catch (e) {
                     console.error(`[FUSION DEBUG] 解析 JSON 失败`, e);
                     throw new Error(`融合生图师输出不是有效的 JSON 对象: ${rawOutput}`);
@@ -24513,17 +24967,17 @@
                 const preprocessSteps = parsed.preprocessSteps || [];
                 const fusionSteps = parsed.fusionSteps || [];
 
-                console.log(`[FUSION DEBUG] 预处理步骤数: ${preprocessSteps.length}, 融合步骤数: ${fusionSteps.length}`);
+
 
                 let controlMap = {}; // 保存为 -> 实际图片ID
 
                 // 执行预处理（如果存在）
                 if (preprocessSteps.length > 0) {
                     UI.updateProgress(`  执行预处理...`);
-                    console.log(`[FUSION DEBUG] 开始执行预处理步骤`);
+
                     try {
                         controlMap = await this._executePreprocessingStepsFromJSON(preprocessSteps);
-                        console.log(`[FUSION DEBUG] 预处理完成，controlMap:`, controlMap);
+
                     } catch (e) {
                         console.error(`[FUSION DEBUG] 预处理失败:`, e);
                         UI.updateProgress(`  ❌ 预处理失败: ${e.message}`, true);
@@ -24561,7 +25015,7 @@
                         throw new Error('无法确定背景图，融合失败');
                     }
 
-                    console.log(`[FUSION DEBUG] 降级融合：背景 ${backgroundElement.id}，人物 ${characterElements.length} 个`);
+
                     UI.updateProgress(`  → 降级融合：背景 ${backgroundElement.id}，人物 ${characterElements.length} 个`);
 
                     const resultBase64 = await this._simpleFusion(backgroundElement.id, characterElements.map(c => c.id), sceneDescription);
@@ -24570,13 +25024,13 @@
                         imageData = `data:image/png;base64,${resultBase64}`;
                     }
                     const fusionId = await ImageStore.save(imageData, 'png');
-                    WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({fusion_image_id: fusionId});
+                    WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({ fusion_image_id: fusionId });
                     AgentStateManager.setState(agentKey, 'completed');
                     if (!isParallel) {
-                        WORKFLOW_STATE.lastSerialOutput = {agentKey, output: fusionId};
+                        WORKFLOW_STATE.lastSerialOutput = { agentKey, output: fusionId };
                     }
                     UI.updateProgress(`✅ 融合生图师执行完成（降级），生成图片 ID: ${fusionId}`);
-                    console.log(`[FUSION DEBUG] 降级融合完成，fusionId=${fusionId}`);
+
                     return;
                 }
 
@@ -24588,13 +25042,13 @@
                     const bgKey = Object.keys(controlMap).find(k => k.includes('depth') || k.includes('bg'));
                     if (bgKey) {
                         firstStep.sourceRef = controlMap[bgKey];
-                        console.log(`[FUSION DEBUG] 将第一步源图替换为控制图 ${bgKey} -> ${firstStep.sourceRef}`);
+
                     } else {
                         throw new Error('第一步源图无效且无法确定背景图');
                     }
                 } else {
                     if (controlMap[firstStep.sourceRef]) {
-                        console.log(`[FUSION DEBUG] 第一步源图 ${firstStep.sourceRef} 映射为实际ID ${controlMap[firstStep.sourceRef]}`);
+
                         firstStep.sourceRef = controlMap[firstStep.sourceRef];
                     }
                 }
@@ -24606,13 +25060,13 @@
                 for (let i = 0; i < fusionSteps.length; i++) {
                     const step = fusionSteps[i];
                     const stepNum = step.step || i + 1;
-                    console.log(`[FUSION DEBUG] 开始执行步骤${stepNum}: ${JSON.stringify(step)}`);
+
 
                     // 确定底图ID
                     let baseId;
                     if (i === 0) {
                         baseId = step.sourceRef;
-                        console.log(`[FUSION DEBUG] 第一步底图ID: ${baseId}`);
+
                     } else {
                         if (typeof step.sourceRef === 'number') {
                             // 引用上一步的结果
@@ -24620,10 +25074,10 @@
                             if (!baseId) {
                                 throw new Error(`步骤${stepNum}引用的步骤${step.sourceRef}结果不存在`);
                             }
-                            console.log(`[FUSION DEBUG] 步骤${stepNum}引用步骤${step.sourceRef}的结果ID: ${baseId}`);
+
                         } else {
                             baseId = step.sourceRef;
-                            console.log(`[FUSION DEBUG] 步骤${stepNum}使用直接ID: ${baseId}`);
+
                         }
                     }
 
@@ -24631,22 +25085,22 @@
                     let controlActualId = step.controlId;
                     if (controlMap[step.controlId]) {
                         controlActualId = controlMap[step.controlId];
-                        console.log(`[FUSION DEBUG] 控制图ID ${step.controlId} 映射为实际ID ${controlActualId}`);
+
                     }
 
                     // 加载图片
-                    console.log(`[FUSION DEBUG] 加载底图 ${baseId}`);
+
                     const baseBlob = await ImageStore.get(baseId);
                     if (!baseBlob) throw new Error(`底图 ${baseId} 不存在`);
-                    console.log(`[FUSION DEBUG] 加载控制图 ${controlActualId}`);
+
                     const controlBlob = await ImageStore.get(controlActualId);
                     if (!controlBlob) throw new Error(`控制图 ${controlActualId} 不存在`);
 
                     // 调用单步融合，传入 step.params
                     const params = step.params || {};
-                    console.log(`[FUSION DEBUG] 调用单步融合，params:`, JSON.stringify(params, null, 2));
+
                     const resultBase64 = await this._callSingleControlNetAPI(baseBlob, controlBlob, params);
-                    console.log(`[FUSION DEBUG] 单步融合返回Base64长度: ${resultBase64.length}`);
+
 
                     let imageData = resultBase64;
                     if (typeof resultBase64 === 'string' && !resultBase64.startsWith('data:')) {
@@ -24656,24 +25110,24 @@
                     stepResults[stepNum] = newId;
                     currentImageId = newId;
                     UI.updateProgress(`  → 步骤${stepNum}完成，图片ID: ${newId}`);
-                    console.log(`[FUSION DEBUG] 步骤${stepNum}结果保存为ID: ${newId}`);
+
                 }
 
                 const fusionId = currentImageId;
-                WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({fusion_image_id: fusionId});
+                WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({ fusion_image_id: fusionId });
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: fusionId};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: fusionId };
                 }
 
                 UI.updateProgress(`✅ 融合生图师执行完成，生成图片 ID: ${fusionId}`);
-                console.log(`[FUSION DEBUG] 融合生图师执行成功，最终图片ID: ${fusionId}`);
+
 
             } catch (error) {
                 console.error(`[FUSION DEBUG] 执行出错:`, error);
                 if (error.name === 'AbortError') {
-                    console.log('[FUSION DEBUG] 检测到AbortError，转为用户中断');
+
                     throw new UserInterruptError();
                 }
                 if (error.name === 'UserInterruptError') {
@@ -24687,10 +25141,10 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 融合生图师出错，已保存最佳内容作为废章`, true);
                 }
-                console.log(`[FUSION DEBUG] 已设置 WORKFLOW_STATE.discarded = true`);
+
                 throw error;
             }
         },
@@ -24705,10 +25159,10 @@
          * @param {object} options - 选项
          */
         async _executeImageLibrarian(agentKey, isReflow = false, options = {}) {
-            console.log(`[ImageLibrarian] ========== 开始执行图片管理员 ${agentKey} ==========`);
-            console.log(`[ImageLibrarian] 参数: isReflow=${isReflow}, options=`, options);
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+
+
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn('[ImageLibrarian] 本章已被标记为废章，终止执行');
@@ -24730,12 +25184,12 @@
                 const interval = agent.executeInterval;
                 const currentChapter = WORKFLOW_STATE.currentChapter;
                 const shouldExecute = (currentChapter % interval) === 0;
-                console.log(`[ImageLibrarian] 周期检查: currentChapter=${currentChapter}, interval=${interval}, shouldExecute=${shouldExecute}`);
+
                 if (!shouldExecute) {
                     AgentStateManager.setState(agentKey, 'idle');
                     WORKFLOW_STATE.outputs[agentKey] = '';
                     UI.updateProgress(`⏭️ ${getAgentDisplayName(agentKey)} 被跳过（周期执行）`);
-                    console.log('[ImageLibrarian] 周期跳过，返回');
+
                     return;
                 }
             }
@@ -24753,19 +25207,19 @@
             }
             if (!WORKFLOW_STATE.beforeDependencies) WORKFLOW_STATE.beforeDependencies = {};
             WORKFLOW_STATE.beforeDependencies[agentKey] = beforeTargetKey;
-            console.log(`[ImageLibrarian] beforeTargetKey=${beforeTargetKey}`);
+
 
             try {
                 // ========== 通用输入收集 ==========
-                console.log('[ImageLibrarian] 开始收集输入，inputs 列表:', agent.inputs);
+
                 const collected = await this._collectInputs(agentKey, isReflow, options);
 
                 // ========== 构建提示词 ==========
                 let prompt = agent.inputTemplate;
                 let placeholderIdx = 0;
                 prompt = prompt.replace(/【】/g, () => collected[placeholderIdx++] || '');
-                console.log(`[ImageLibrarian] 构建的提示词长度: ${prompt.length}`);
-                console.log(`[ImageLibrarian] 提示词预览 (前200字符): ${prompt.substring(0, 200)}`);
+
+
 
                 // 添加回流反馈
                 if (isReflow && WORKFLOW_STATE.reflowMap?.[agentKey]) {
@@ -24780,7 +25234,7 @@
                     }
                     if (feedbackParts.length > 0) {
                         prompt += '\n\n' + feedbackParts.join('\n\n');
-                        console.log(`[ImageLibrarian] 添加回流反馈，长度增加`);
+
                     }
                 }
 
@@ -24788,41 +25242,41 @@
                     const previousOutput = WORKFLOW_STATE.reflowMap[agentKey].previousOutput;
                     if (previousOutput && previousOutput.trim() !== '') {
                         prompt += '\n\n【上次输出】：\n' + previousOutput;
-                        console.log(`[ImageLibrarian] 添加上次输出，长度增加`);
+
                     }
                 }
 
                 if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
 
                 // ========== 调用 Agent ==========
-                console.log(`[ImageLibrarian] 调用 Agent ${agentKey}...`);
+
                 const responseText = await this.callAgent(agentKey, prompt);
-                console.log(`[ImageLibrarian] Agent 返回原始输出长度: ${responseText?.length}`);
-                console.log(`[ImageLibrarian] Agent 输出预览 (前500字符): ${responseText?.substring(0, 500)}`);
+
+
 
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
                 WORKFLOW_STATE.agentRawOutputs[agentKey] = responseText;
 
                 // ========== 解析输出 ==========
-                console.log('[ImageLibrarian] 开始解析输出...');
+
                 const actions = this._parseImageLibrarianOutput(responseText);
-                console.log(`[ImageLibrarian] 解析出 ${actions.length} 个操作块`);
+
 
                 // ========== 执行更新 ==========
                 if (actions.length > 0) {
-                    console.log('[ImageLibrarian] 开始执行图库更新...');
+
                     await this._updateImageLibraryFromLibrarianOutput(actions);
-                    console.log('[ImageLibrarian] 图库更新完成');
+
                 } else {
-                    console.log('[ImageLibrarian] 没有需要执行的操作');
+
                 }
 
                 AgentStateManager.setState(agentKey, 'completed');
                 WORKFLOW_STATE.outputs[agentKey] = responseText;
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 UI.updateProgress(`✅ 图片管理员执行完成`);
@@ -24832,7 +25286,7 @@
                     const triggered = agent.reflowConditions.some(cond => responseText?.includes(cond) === true);
                     if (triggered) {
                         UI.updateProgress(`⚠️ 图片管理员 ${getAgentDisplayName(agentKey)} 触发回流`);
-                        console.log('[ImageLibrarian] 触发回流条件，开始处理回流');
+
                         if (isReflow) {
                             await this.handleReflow(agentKey, true);
                         } else {
@@ -24858,22 +25312,22 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 图片管理员出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
             } finally {
-                console.log('[ImageLibrarian] ========== 图片管理员执行结束 ==========');
+
             }
         },
 
         // ==================== 变化生图师专用执行函数 ====================
 
         async _executeImageVariator(agentKey, isReflow = false, options = {}) {
-            console.log(`[ImageVariator] ========== 开始执行变化生图师 ${agentKey} ==========`);
-            console.log(`[ImageVariator] 参数: isReflow=${isReflow}, options=`, options);
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+
+
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn('[ImageVariator] 本章已被标记为废章，终止执行');
@@ -24895,12 +25349,12 @@
                 const interval = agent.executeInterval;
                 const currentChapter = WORKFLOW_STATE.currentChapter;
                 const shouldExecute = (currentChapter % interval) === 0;
-                console.log(`[ImageVariator] 周期检查: currentChapter=${currentChapter}, interval=${interval}, shouldExecute=${shouldExecute}`);
+
                 if (!shouldExecute) {
                     AgentStateManager.setState(agentKey, 'idle');
                     WORKFLOW_STATE.outputs[agentKey] = '';
                     UI.updateProgress(`⏭️ ${getAgentDisplayName(agentKey)} 被跳过（周期执行）`);
-                    console.log('[ImageVariator] 周期跳过，返回');
+
                     return;
                 }
             }
@@ -24917,20 +25371,20 @@
             }
             if (!WORKFLOW_STATE.beforeDependencies) WORKFLOW_STATE.beforeDependencies = {};
             WORKFLOW_STATE.beforeDependencies[agentKey] = beforeTargetKey;
-            console.log(`[ImageVariator] beforeTargetKey=${beforeTargetKey}`);
+
 
             try {
                 // 收集输入
-                console.log('[ImageVariator] 开始收集输入，inputs 列表:', agent.inputs);
+
                 const collected = await this._collectInputs(agentKey, isReflow, options);
 
-                console.log(`[ImageVariator] 输入收集完成，共 ${collected.length} 项`);
+
 
                 // 构建提示词，调用 Agent 生成指令
                 let prompt = agent.inputTemplate;
                 let placeholderIdx = 0;
                 prompt = prompt.replace(/【】/g, () => collected[placeholderIdx++] || '');
-                console.log(`[ImageVariator] 构建的 Agent 提示词长度: ${prompt.length}`);
+
 
                 // 添加回流反馈
                 if (isReflow && WORKFLOW_STATE.reflowMap?.[agentKey]) {
@@ -24945,7 +25399,7 @@
                     }
                     if (feedbackParts.length > 0) {
                         prompt += '\n\n' + feedbackParts.join('\n\n');
-                        console.log(`[ImageVariator] 添加回流反馈，长度增加`);
+
                     }
                 }
 
@@ -24953,7 +25407,7 @@
                     const previousOutput = WORKFLOW_STATE.reflowMap[agentKey].previousOutput;
                     if (previousOutput && previousOutput.trim() !== '') {
                         prompt += '\n\n【上次输出】：\n' + previousOutput;
-                        console.log(`[ImageVariator] 添加上次输出，长度增加`);
+
                     }
                 }
 
@@ -24961,7 +25415,7 @@
                 const imageConfigForPrompt = this._getImageConfig('img2img');
                 if (imageConfigForPrompt) {
                     prompt += `\n\n【图像模型完整配置】\n${JSON.stringify(imageConfigForPrompt, null, 2)}`;
-                    console.log(`[ImageVariator] 已附加图像模型配置到提示词`);
+
                 } else {
                     console.warn('[ImageVariator] 未找到 img2img 图像配置，无法提供模型信息');
                 }
@@ -24969,10 +25423,10 @@
                 if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
 
                 // 调用 Agent 生成指令
-                console.log(`[ImageVariator] 调用 Agent ${agentKey} 生成指令...`);
+
                 const responseText = await this.callAgent(agentKey, prompt);
-                console.log(`[ImageVariator] Agent 返回原始输出长度: ${responseText?.length}`);
-                console.log(`[ImageVariator] Agent 原始输出预览 (前500字符): ${responseText?.substring(0, 500)}`);
+
+
 
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
@@ -24986,7 +25440,7 @@
                         instructions = [instructions];
                         console.warn(`[ImageVariator] 解析结果不是数组，已包装为数组`);
                     }
-                    console.log(`[ImageVariator] 解析到 ${instructions.length} 个变体指令`);
+
                 } catch (e) {
                     console.error(`[ImageVariator] 解析 JSON 失败`, e);
                     throw new Error(`变化生图师输出不是有效的 JSON 数组: ${responseText}`);
@@ -24997,7 +25451,7 @@
                     WORKFLOW_STATE.outputs[agentKey] = '[]';
                     AgentStateManager.setState(agentKey, 'completed');
                     if (!isParallel) {
-                        WORKFLOW_STATE.lastSerialOutput = {agentKey, output: '[]'};
+                        WORKFLOW_STATE.lastSerialOutput = { agentKey, output: '[]' };
                     }
                     UI.updateProgress(`✅ 变化生图师完成，无变体生成`);
                     return;
@@ -25005,13 +25459,13 @@
 
                 // 获取图生图专用图像配置
                 const imageConfig = this._getImageConfig('img2img');
-                console.log('[ImageVariator] 使用图生图配置: mode=img2img, source=', imageConfig.source);
+
 
                 // 循环处理每个变体指令
                 const generatedImages = [];
                 for (let i = 0; i < instructions.length; i++) {
                     const inst = instructions[i];
-                    console.log(`[ImageVariator] 处理变体 ${i + 1}/${instructions.length}: sourceId=${inst.sourceId}`);
+
 
                     if (!inst.sourceId) {
                         console.warn(`[ImageVariator] 变体 ${i + 1} 缺少 sourceId，跳过`);
@@ -25026,7 +25480,7 @@
                     }
 
                     // 合并参数：使用 inst.params 覆盖默认配置
-                    const params = {...imageConfig, ...(inst.params || {}), prompt: inst.prompt || inst.params?.prompt};
+                    const params = { ...imageConfig, ...(inst.params || {}), prompt: inst.prompt || inst.params?.prompt };
                     if (!params.prompt) {
                         console.warn(`[ImageVariator] 变体 ${i + 1} 缺少 prompt，跳过`);
                         continue;
@@ -25057,7 +25511,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: outputJson};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: outputJson };
                 }
 
                 UI.updateProgress(`✅ 变化生图师完成，生成 ${generatedImages.length} 张图片`);
@@ -25085,12 +25539,12 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 变化生图师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
             } finally {
-                console.log('[ImageVariator] ========== 变化生图师执行结束 ==========');
+
             }
         },
 
@@ -25101,8 +25555,8 @@
          * 根据输入生成音乐音频，输出音频 ID
          */
         async _executeMusicGenerator(agentKey, isReflow = false, options = {}) {
-            console.log(`[MusicGenerator] ========== 开始执行音乐生成师 ${agentKey} ==========`);
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
             if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
@@ -25159,7 +25613,7 @@
 
                 // 调用 Agent 生成指令
                 const agentResponse = await this.callAgent(agentKey, prompt);
-                console.log(`[MusicGenerator] Agent 返回: ${agentResponse}`);
+
 
                 // 解析输出为任务数组
                 let tasks = [];
@@ -25171,7 +25625,7 @@
                     console.warn('[MusicGenerator] 输出非JSON，使用降级处理');
                     tasks = [{
                         name: '默认音乐',
-                        params: {prompt: agentResponse}
+                        params: { prompt: agentResponse }
                     }];
                 }
 
@@ -25179,7 +25633,7 @@
                 const processedTasks = [];
                 for (const task of tasks) {
                     // 合并参数：任务params + 配置默认值
-                    const params = {...audioConfig, ...task.params};
+                    const params = { ...audioConfig, ...task.params };
                     // 确保有 prompt
                     if (!params.prompt) {
                         console.warn('[MusicGenerator] 任务缺少 prompt，跳过', task);
@@ -25202,7 +25656,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: JSON.stringify(processedTasks)};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: JSON.stringify(processedTasks) };
                 }
 
                 UI.updateProgress(`✅ 音乐生成师完成，生成 ${processedTasks.length} 个音频`);
@@ -25225,12 +25679,12 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 音乐生成师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
             } finally {
-                console.log('[MusicGenerator] ========== 执行结束 ==========');
+
             }
         },
 
@@ -25241,8 +25695,8 @@
          * 任务格式：{ "name": "...", "sample_id": "audio_xxx", "text": "...", "params": { ... } }
          */
         async _executeVoiceCloner(agentKey, isReflow = false, options = {}) {
-            console.log(`[VoiceCloner] ========== 开始执行语音克隆师 ${agentKey} ==========`);
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
             if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
@@ -25297,7 +25751,7 @@
 
                 // 调用 Agent 生成指令
                 const agentResponse = await this.callAgent(agentKey, prompt);
-                console.log(`[VoiceCloner] Agent 返回: ${agentResponse}`);
+
 
                 // 解析输出
                 let tasks = [];
@@ -25322,7 +25776,7 @@
                         continue;
                     }
                     // 合并参数：任务 params + 配置默认值 + 样本 Blob 和文本
-                    const params = {...audioConfig, ...task.params, audioBlob: sampleBlob, text: task.text};
+                    const params = { ...audioConfig, ...task.params, audioBlob: sampleBlob, text: task.text };
                     // 调用 API
                     const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 60000));
                     const audioId = await AudioStore.save(audioBlob);
@@ -25340,7 +25794,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: JSON.stringify(processedTasks)};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: JSON.stringify(processedTasks) };
                 }
 
                 UI.updateProgress(`✅ 语音克隆师完成，生成 ${processedTasks.length} 个语音`);
@@ -25362,7 +25816,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 语音克隆师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25376,8 +25830,8 @@
          * 任务格式：{ "name": "...", "source_id": "audio_xxx", "params": { ... } }
          */
         async _executeAudioEditor(agentKey, isReflow = false, options = {}) {
-            console.log(`[AudioEditor] ========== 开始执行音频编辑师 ${agentKey} ==========`);
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
             if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
@@ -25437,7 +25891,7 @@
                 prompt += `如果只有一个任务，可输出单个对象，但系统会将其包装为数组。`;
 
                 const agentResponse = await this.callAgent(agentKey, prompt);
-                console.log(`[AudioEditor] Agent 返回: ${agentResponse}`);
+
 
                 // 解析输出
                 let tasks = [];
@@ -25448,7 +25902,7 @@
                     // 降级：将整个输出作为 params 中的 prompt
                     tasks = [{
                         name: '编辑结果',
-                        params: {prompt: agentResponse}
+                        params: { prompt: agentResponse }
                     }];
                 }
 
@@ -25456,7 +25910,7 @@
                 const processedTasks = [];
                 for (const task of tasks) {
                     // 合并参数
-                    const params = {...audioConfig, ...task.params, sourceAudioBlob: sourceBlob};
+                    const params = { ...audioConfig, ...task.params, sourceAudioBlob: sourceBlob };
                     // 调用 API
                     const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 60000));
                     const audioId = await AudioStore.save(audioBlob);
@@ -25473,7 +25927,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: JSON.stringify(processedTasks)};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: JSON.stringify(processedTasks) };
                 }
 
                 UI.updateProgress(`✅ 音频编辑师完成，生成 ${processedTasks.length} 个编辑结果`);
@@ -25495,7 +25949,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 音频编辑师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25505,10 +25959,10 @@
         // ==================== 音频管理员专用执行函数 ====================
 
         async _executeAudioLibrarian(agentKey, isReflow = false, options = {}) {
-            console.log(`[AudioLibrarian] ========== 开始执行音频管理员 ${agentKey} ==========`);
-            console.log(`[AudioLibrarian] 参数: isReflow=${isReflow}, options=`, options);
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+
+
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn('[AudioLibrarian] 本章已被标记为废章，终止执行');
@@ -25530,7 +25984,7 @@
                 const interval = agent.executeInterval;
                 const currentChapter = WORKFLOW_STATE.currentChapter;
                 const shouldExecute = (currentChapter % interval) === 0;
-                console.log(`[AudioLibrarian] 周期检查: currentChapter=${currentChapter}, interval=${interval}, shouldExecute=${shouldExecute}`);
+
                 if (!shouldExecute) {
                     AgentStateManager.setState(agentKey, 'idle');
                     WORKFLOW_STATE.outputs[agentKey] = '';
@@ -25554,7 +26008,7 @@
 
             try {
                 // 收集输入
-                console.log('[AudioLibrarian] 开始收集输入，inputs 列表:', agent.inputs);
+
                 const collected = await this._collectInputs(agentKey, isReflow, options);
 
                 // 解析输入
@@ -25563,10 +26017,10 @@
                 const storyOverview = collected[2];         // 故事概览
                 const currentLibraryJson = collected[3];    // 当前音频库全量条目
 
-                console.log(`[AudioLibrarian] 新音频列表长度: ${newAudioListJson?.length}`);
-                console.log(`[AudioLibrarian] 章节正文长度: ${chapterText?.length}`);
-                console.log(`[AudioLibrarian] 故事概览长度: ${storyOverview?.length}`);
-                console.log(`[AudioLibrarian] 当前库条目数: ${currentLibraryJson?.length}`);
+
+
+
+
 
                 // 解析 JSON
                 let newAudios = [];
@@ -25587,7 +26041,7 @@
                 let prompt = agent.inputTemplate;
                 let placeholderIdx = 0;
                 prompt = prompt.replace(/【】/g, () => collected[placeholderIdx++] || '');
-                console.log(`[AudioLibrarian] 构建的提示词长度: ${prompt.length}`);
+
 
                 // 添加回流反馈
                 if (isReflow && WORKFLOW_STATE.reflowMap?.[agentKey]) {
@@ -25608,10 +26062,10 @@
                 if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
 
                 // 调用 Agent 生成指令
-                console.log(`[AudioLibrarian] 调用 Agent ${agentKey} 生成指令...`);
+
                 const responseText = await this.callAgent(agentKey, prompt);
-                console.log(`[AudioLibrarian] Agent 返回原始输出长度: ${responseText?.length}`);
-                console.log(`[AudioLibrarian] Agent 输出预览 (前500字符): ${responseText?.substring(0, 500)}`);
+
+
 
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
@@ -25619,20 +26073,20 @@
 
                 // 解析指令
                 const actions = this._parseAudioLibrarianOutput(responseText);
-                console.log(`[AudioLibrarian] 解析出 ${actions.length} 个操作块`);
+
 
                 // 执行更新
                 if (actions.length > 0) {
-                    console.log('[AudioLibrarian] 开始执行音频库更新...');
+
                     await this._updateAudioLibraryFromLibrarianOutput(actions);
-                    console.log('[AudioLibrarian] 音频库更新完成');
+
                 }
 
                 AgentStateManager.setState(agentKey, 'completed');
                 WORKFLOW_STATE.outputs[agentKey] = responseText;
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 UI.updateProgress(`✅ 音频管理员执行完成`);
@@ -25642,7 +26096,7 @@
                     const triggered = agent.reflowConditions.some(cond => responseText?.includes(cond) === true);
                     if (triggered) {
                         UI.updateProgress(`⚠️ 音频管理员 ${getAgentDisplayName(agentKey)} 触发回流`);
-                        console.log('[AudioLibrarian] 触发回流条件，开始处理回流');
+
                         await this.handleReflow(agentKey, true);
                     }
                 }
@@ -25659,19 +26113,19 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 音频管理员出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
             } finally {
-                console.log('[AudioLibrarian] ========== 音频管理员执行结束 ==========');
+
             }
         },
 
         _parseAudioLibrarianOutput(output) {
-            console.log('[parseAudioLibrarianOutput] ========== 开始解析音频管理员输出（无分隔符版） ==========');
-            console.log('[parseAudioLibrarianOutput] 原始输出长度:', output?.length);
-            console.log('[parseAudioLibrarianOutput] 原始输出预览 (前200字符):', output?.substring(0, 200));
+
+
+
 
             const actions = [];
             const lines = output.split('\n');
@@ -25699,37 +26153,37 @@
                     if (currentAction) {
                         currentAction.fields = this._parseAudioLibrarianFields(fieldLines);
                         actions.push(currentAction);
-                        console.log(`[parseAudioLibrarianOutput] 行 ${lineNumber}: 保存上一个操作块`, currentAction);
+
                     }
                     // 开始新的新增操作
-                    console.log(`[parseAudioLibrarianOutput] 行 ${lineNumber}: 发现新增操作`);
-                    currentAction = {type: 'add', uid: null, book: null};
+
+                    currentAction = { type: 'add', uid: null, book: null };
                     fieldLines = [];
                 } else if (modifyMatch) {
                     if (currentAction) {
                         currentAction.fields = this._parseAudioLibrarianFields(fieldLines);
                         actions.push(currentAction);
-                        console.log(`[parseAudioLibrarianOutput] 行 ${lineNumber}: 保存上一个操作块`, currentAction);
+
                     }
                     const uidStr = modifyMatch[1];
                     const [book, uid] = uidStr.split('-').map(Number);
-                    console.log(`[parseAudioLibrarianOutput] 行 ${lineNumber}: 发现修改操作: 书号=${book}, uid=${uid}`);
-                    currentAction = {type: 'modify', book, uid};
+
+                    currentAction = { type: 'modify', book, uid };
                     fieldLines = [];
                 } else if (deleteMatch) {
                     if (currentAction) {
                         currentAction.fields = this._parseAudioLibrarianFields(fieldLines);
                         actions.push(currentAction);
-                        console.log(`[parseAudioLibrarianOutput] 行 ${lineNumber}: 保存上一个操作块`, currentAction);
+
                     }
                     const uidListStr = deleteMatch[1];
                     const uidPairs = uidListStr.split(/[，,]\s*/);
                     const toDelete = uidPairs.map(pair => {
                         const [b, u] = pair.split('-').map(Number);
-                        return {book: b, uid: u};
+                        return { book: b, uid: u };
                     }).filter(item => !isNaN(item.book) && !isNaN(item.uid));
-                    console.log(`[parseAudioLibrarianOutput] 行 ${lineNumber}: 发现删除操作: 待删除条目数=${toDelete.length}`);
-                    actions.push({type: 'delete', targets: toDelete});
+
+                    actions.push({ type: 'delete', targets: toDelete });
                     // 删除操作没有后续字段行，直接重置 currentAction
                     currentAction = null;
                     fieldLines = [];
@@ -25747,15 +26201,15 @@
             if (currentAction) {
                 currentAction.fields = this._parseAudioLibrarianFields(fieldLines);
                 actions.push(currentAction);
-                console.log(`[parseAudioLibrarianOutput] 已保存最后一个操作块:`, currentAction);
+
             }
 
-            console.log(`[parseAudioLibrarianOutput] 解析完成，共 ${actions.length} 个操作`);
+
             return actions;
         },
 
         _parseAudioGeneratorOutput(output) {
-            console.log('[parseAudioGeneratorOutput] 解析音乐生成器输出');
+
             const params = {};
 
             // 尝试匹配 ===音频生成指令=== 块
@@ -25790,12 +26244,12 @@
                 // 降级：直接使用整个输出作为提示词
                 params.prompt = output;
             }
-            console.log('[parseAudioGeneratorOutput] 提取参数:', params);
+
             return params;
         },
 
         _parseAudioLibrarianFields(fieldLines) {
-            console.log(`[parseAudioLibrarianFields] 开始解析 ${fieldLines.length} 行字段`);
+
             const fields = {};
 
             for (const line of fieldLines) {
@@ -25821,17 +26275,17 @@
                 }
             }
 
-            console.log('[parseAudioLibrarianFields] 解析后的字段:', fields);
+
             return fields;
         },
 
         async _updateAudioLibraryFromLibrarianOutput(actions) {
-            console.log('[updateAudioLibrary] ========== 开始执行音频库更新 ==========');
+
             const libraryBooks = await getAllAudioLibraryBooks();
-            console.log('[updateAudioLibrary] 当前音频库书列表:', libraryBooks);
+
 
             for (const action of actions) {
-                console.log(`[updateAudioLibrary] 处理操作:`, action);
+
 
                 if (action.type === 'add') {
                     const bookIndex = await this._findAvailableAudioBook();
@@ -25841,14 +26295,14 @@
                         continue;
                     }
                     const bookName = `状态书-音频库${bookIndex}`;
-                    console.log(`[updateAudioLibrary] 新增条目将分配到书号 ${bookIndex} (${bookName})`);
+
 
                     const book = await API.getWorldbook(bookName);
                     const entries = Array.isArray(book) ? book : (book.entries || []);
                     const maxUid = entries.reduce((max, e) => Math.max(max, e.uid || 0), 0);
                     const newUid = maxUid + 1;
 
-                    const newEntry = {uid: newUid, enabled: true};
+                    const newEntry = { uid: newUid, enabled: true };
 
                     for (const [key, value] of Object.entries(action.fields)) {
                         setNestedValue(newEntry, key, value);
@@ -25861,14 +26315,14 @@
                     }
 
                     entries.push(newEntry);
-                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                     UI.updateProgress(`  ✅ 音频库新增条目: ${bookName} - uid=${newUid}`);
-                    console.log(`[updateAudioLibrary] 新增条目成功: ${bookName} uid=${newUid}`);
+
 
                 } else if (action.type === 'modify') {
-                    const {book, uid} = action;
+                    const { book, uid } = action;
                     const bookName = `状态书-音频库${book}`;
-                    console.log(`[updateAudioLibrary] 修改条目: ${bookName} uid=${uid}`);
+
 
                     const bookObj = await API.getWorldbook(bookName);
                     const entries = Array.isArray(bookObj) ? bookObj : (bookObj.entries || []);
@@ -25884,14 +26338,14 @@
                     }
 
                     entries[entryIndex] = entry;
-                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                     UI.updateProgress(`  ✅ 音频库修改条目: ${bookName} uid=${uid}`);
 
                 } else if (action.type === 'delete') {
                     for (const target of action.targets) {
-                        const {book, uid} = target;
+                        const { book, uid } = target;
                         const bookName = `状态书-音频库${book}`;
-                        console.log(`[updateAudioLibrary] 删除条目: ${bookName} uid=${uid}`);
+
 
                         const bookObj = await API.getWorldbook(bookName);
                         const entries = Array.isArray(bookObj) ? bookObj : (bookObj.entries || []);
@@ -25899,18 +26353,18 @@
                         if (newEntries.length === entries.length) {
                             console.warn(`[updateAudioLibrary] 未找到条目 ${book}-${uid}，跳过删除`);
                         } else {
-                            await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
+                            await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
                             UI.updateProgress(`  ✅ 音频库删除条目: ${bookName} uid=${uid}`);
                         }
                     }
                 }
             }
 
-            console.log('[updateAudioLibrary] ========== 音频库更新完成 ==========');
+
         },
 
         async _findAvailableAudioBook() {
-            console.log('[findAvailableAudioBook] 开始查找可用音频库书');
+
             const libraryBooks = await getAllAudioLibraryBooks();
             const maxBooks = CONFIG.MAX_STATE_BOOKS;
             const maxAudios = CONFIG.MAX_AUDIOS_PER_BOOK; // 使用新配置
@@ -25922,9 +26376,9 @@
                 const book = await API.getWorldbook(bookName);
                 const entries = Array.isArray(book) ? book : (book.entries || []);
                 const count = entries.length;
-                console.log(`[findAvailableAudioBook] 书 ${bookIndex} 当前条目数: ${count}/${maxAudios}`);
+
                 if (count < maxAudios) {
-                    console.log(`[findAvailableAudioBook] 选择现有书 ${bookIndex}`);
+
                     return bookIndex;
                 }
             }
@@ -25938,7 +26392,7 @@
                 nextIndex++;
             }
             if (nextIndex <= maxBooks) {
-                console.log(`[findAvailableAudioBook] 创建新书 ${nextIndex}`);
+
                 const newBookName = `状态书-音频库${nextIndex}`;
                 try {
                     if (typeof TavernHelper?.createWorldbook === 'function') {
@@ -25964,7 +26418,7 @@
          * 激活音频库书
          */
         async _activateAudioLibraryBook(bookName) {
-            console.log(`[activateAudioLibraryBook] 激活 ${bookName}`);
+
             let currentGlobalBooks = [];
             try {
                 if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
@@ -25998,12 +26452,12 @@
          * @returns {Promise<string>} 生成图片的 Base64 数据（含 data URL 前缀）
          */
         async _callImageVariationAPI(config, sourceBlob, params) {
-            console.log('[ImageVariationAPI] ========== 开始调用图像变化 API ==========');
-            console.log('[ImageVariationAPI] 平台:', config.source);
-            console.log('[ImageVariationAPI] 模型:', config.model);
-            console.log('[ImageVariationAPI] 参数:', JSON.stringify(params, null, 2));
 
-            const {source, apiUrl, key, timeout = 120000} = config;
+
+
+
+
+            const { source, apiUrl, key, timeout = 120000 } = config;
             const url = apiUrl.replace(/\/+$/, '');
 
             // 构建组合信号（用于中断）
@@ -26013,20 +26467,20 @@
             }
             signals.push(AbortSignal.timeout(timeout));
             const combinedSignal = AbortSignal.any(signals);
-            console.log('[ImageVariationAPI] 超时设置:', timeout, 'ms');
+
 
             // 将源图片转为 base64（data URL 格式），同时提取纯 base64
             const sourceDataUrl = await this._blobToBase64(sourceBlob);
             const sourceBase64 = sourceDataUrl.split(',')[1]; // 去掉 data:image/xxx;base64, 前缀
-            console.log('[ImageVariationAPI] 源图片 base64 长度:', sourceBase64?.length);
+
 
             // 从 params 中提取 prompt 和其他参数
             const prompt = params.prompt || '';
-            const mergedParams = {...config, ...params}; // 合并，但注意 config 可能包含不需要的字段
+            const mergedParams = { ...config, ...params }; // 合并，但注意 config 可能包含不需要的字段
 
             // ==================== SD WebUI (AUTOMATIC1111) ====================
             if (source === 'sdwebui') {
-                console.log('[ImageVariationAPI] 使用 SD WebUI img2img API');
+
                 const sdApiUrl = `${url}/sdapi/v1/img2img`;
 
                 // 构建标准 payload
@@ -26066,20 +26520,20 @@
                             }]
                         }
                     };
-                    console.log('[ImageVariationAPI] 启用 ControlNet');
+
                 }
 
-                console.log('[ImageVariationAPI] 发送请求到:', sdApiUrl);
+
                 console.log('[ImageVariationAPI] payload 概览:', JSON.stringify({
                     ...payload,
                     init_images: ['[BASE64]'],
-                    ...(payload.alwayson_scripts && {alwayson_scripts: '[CONTROLNET]'})
+                    ...(payload.alwayson_scripts && { alwayson_scripts: '[CONTROLNET]' })
                 }));
 
                 try {
                     const response = await fetch(sdApiUrl, {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
                         signal: combinedSignal,
                     });
@@ -26091,7 +26545,7 @@
 
                     const data = await response.json();
                     if (data.images && data.images[0]) {
-                        console.log('[ImageVariationAPI] 图片生成成功，长度:', data.images[0].length);
+
                         return `data:image/png;base64,${data.images[0]}`;
                     } else {
                         throw new Error('SD WebUI 响应中没有图片数据');
@@ -26104,7 +26558,7 @@
 
             // ==================== OpenAI (DALL-E 2) ====================
             else if (source === 'openai' && config.model?.includes('dall-e-2')) {
-                console.log('[ImageVariationAPI] 使用 OpenAI DALL-E 2 variations API');
+
 
                 const useEdit = prompt && prompt.trim() !== '';
 
@@ -26115,7 +26569,7 @@
                 formData.append('model', mergedParams.model || 'dall-e-2');
 
                 if (useEdit) {
-                    console.log('[ImageVariationAPI] 使用 edit 模式');
+
                     formData.append('prompt', prompt);
                     if (mergedParams.mask) {
                         const maskBlob = await ImageStore.get(mergedParams.mask).catch(() => null);
@@ -26124,11 +26578,11 @@
                         }
                     }
                 } else {
-                    console.log('[ImageVariationAPI] 使用 variation 模式');
+
                 }
 
                 const endpoint = useEdit ? '/images/edits' : '/images/variations';
-                console.log('[ImageVariationAPI] 请求端点:', endpoint);
+
 
                 try {
                     const response = await fetch(`${url}${endpoint}`, {
@@ -26149,11 +26603,11 @@
 
                     if (data.data && data.data[0]) {
                         if (data.data[0].b64_json) {
-                            console.log('[ImageVariationAPI] 获取到 base64 图片');
+
                             return `data:image/png;base64,${data.data[0].b64_json}`;
                         } else if (data.data[0].url) {
-                            console.log('[ImageVariationAPI] 获取到图片 URL，开始下载');
-                            const imgRes = await fetch(data.data[0].url, {signal: combinedSignal});
+
+                            const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         }
@@ -26167,7 +26621,7 @@
 
             // ==================== Stability AI ====================
             else if (source === 'stability') {
-                console.log('[ImageVariationAPI] 使用 Stability AI API');
+
 
                 const mode = mergedParams.mode || 'image-to-image';
 
@@ -26212,8 +26666,8 @@
                 if (mergedParams.cfg_scale) formData.append('cfg_scale', String(mergedParams.cfg_scale));
                 if (mergedParams.style_preset) formData.append('style_preset', mergedParams.style_preset);
 
-                console.log('[ImageVariationAPI] Stability AI 模式:', mode);
-                console.log('[ImageVariationAPI] 请求端点:', endpoint);
+
+
 
                 try {
                     const response = await fetch(`${url}${endpoint}`, {
@@ -26232,7 +26686,7 @@
                     }
 
                     const blob = await response.blob();
-                    console.log('[ImageVariationAPI] 获取到图片 blob，类型:', blob.type, '大小:', blob.size);
+
                     return await this._blobToBase64(blob);
                 } catch (err) {
                     console.error('[ImageVariationAPI] Stability AI 调用失败:', err);
@@ -26242,7 +26696,7 @@
 
             // ==================== FLUX Redux ====================
             else if (source === 'flux' || (source === 'other' && config.model?.includes('flux'))) {
-                console.log('[ImageVariationAPI] 使用 FLUX Redux variations API');
+
 
                 const formData = new FormData();
                 formData.append('image', sourceBlob, 'image.png');
@@ -26254,7 +26708,7 @@
                     formData.append('prompt', prompt);
                 }
 
-                console.log('[ImageVariationAPI] 请求 DeepInfra 端点:', `${url}/openai/images/variations`);
+
 
                 try {
                     const response = await fetch(`${url}/openai/images/variations`, {
@@ -26277,7 +26731,7 @@
                         if (data.data[0].b64_json) {
                             return `data:image/png;base64,${data.data[0].b64_json}`;
                         } else if (data.data[0].url) {
-                            const imgRes = await fetch(data.data[0].url, {signal: combinedSignal});
+                            const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         }
@@ -26291,7 +26745,7 @@
 
             // ==================== Midjourney ====================
             else if (source === 'midjourney') {
-                console.log('[ImageVariationAPI] 使用 Midjourney API (通过代理)');
+
 
                 const formData = new FormData();
                 formData.append('image', sourceBlob, 'image.png');
@@ -26318,7 +26772,7 @@
                     if (contentType?.includes('application/json')) {
                         const data = await response.json();
                         if (data.image_url) {
-                            const imgRes = await fetch(data.image_url, {signal: combinedSignal});
+                            const imgRes = await fetch(data.image_url, { signal: combinedSignal });
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         } else if (data.image_data) {
@@ -26338,7 +26792,7 @@
 
             // ==================== 通用 OpenAI 兼容接口 ====================
             else if (source === 'other' || source === 'openai') {
-                console.log('[ImageVariationAPI] 使用通用 OpenAI 兼容接口');
+
 
                 const formData = new FormData();
                 formData.append('image', sourceBlob, 'image.png');
@@ -26371,7 +26825,7 @@
                         if (data.data[0].b64_json) {
                             return `data:image/png;base64,${data.data[0].b64_json}`;
                         } else if (data.data[0].url) {
-                            const imgRes = await fetch(data.data[0].url, {signal: combinedSignal});
+                            const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         }
@@ -26397,9 +26851,9 @@
          * @returns {Array<object>} 操作数组
          */
         _parseImageLibrarianOutput(output) {
-            console.log('[parseImageLibrarianOutput] ========== 开始解析图片管理员输出（无分隔符版） ==========');
-            console.log('[parseImageLibrarianOutput] 原始输出长度:', output?.length);
-            console.log('[parseImageLibrarianOutput] 原始输出预览 (前200字符):', output?.substring(0, 200));
+
+
+
 
             const actions = [];
             const lines = output.split('\n');
@@ -26427,37 +26881,37 @@
                     if (currentAction) {
                         currentAction.fields = this._parseImageLibrarianFields(fieldLines);
                         actions.push(currentAction);
-                        console.log(`[parseImageLibrarianOutput] 行 ${lineNumber}: 保存上一个操作块`, currentAction);
+
                     }
                     // 开始新的新增操作
-                    console.log(`[parseImageLibrarianOutput] 行 ${lineNumber}: 发现新增操作`);
-                    currentAction = {type: 'add', uid: null, book: null};
+
+                    currentAction = { type: 'add', uid: null, book: null };
                     fieldLines = [];
                 } else if (modifyMatch) {
                     if (currentAction) {
                         currentAction.fields = this._parseImageLibrarianFields(fieldLines);
                         actions.push(currentAction);
-                        console.log(`[parseImageLibrarianOutput] 行 ${lineNumber}: 保存上一个操作块`, currentAction);
+
                     }
                     const uidStr = modifyMatch[1];
                     const [book, uid] = uidStr.split('-').map(Number);
-                    console.log(`[parseImageLibrarianOutput] 行 ${lineNumber}: 发现修改操作: 书号=${book}, uid=${uid}`);
-                    currentAction = {type: 'modify', book, uid};
+
+                    currentAction = { type: 'modify', book, uid };
                     fieldLines = [];
                 } else if (deleteMatch) {
                     if (currentAction) {
                         currentAction.fields = this._parseImageLibrarianFields(fieldLines);
                         actions.push(currentAction);
-                        console.log(`[parseImageLibrarianOutput] 行 ${lineNumber}: 保存上一个操作块`, currentAction);
+
                     }
                     const uidListStr = deleteMatch[1];
                     const uidPairs = uidListStr.split(/[，,]\s*/);
                     const toDelete = uidPairs.map(pair => {
                         const [b, u] = pair.split('-').map(Number);
-                        return {book: b, uid: u};
+                        return { book: b, uid: u };
                     }).filter(item => !isNaN(item.book) && !isNaN(item.uid));
-                    console.log(`[parseImageLibrarianOutput] 行 ${lineNumber}: 发现删除操作: 待删除条目数=${toDelete.length}`);
-                    actions.push({type: 'delete', targets: toDelete});
+
+                    actions.push({ type: 'delete', targets: toDelete });
                     // 删除操作没有后续字段行，直接重置 currentAction
                     currentAction = null;
                     fieldLines = [];
@@ -26475,10 +26929,10 @@
             if (currentAction) {
                 currentAction.fields = this._parseImageLibrarianFields(fieldLines);
                 actions.push(currentAction);
-                console.log(`[parseImageLibrarianOutput] 已保存最后一个操作块:`, currentAction);
+
             }
 
-            console.log(`[parseImageLibrarianOutput] 解析完成，共 ${actions.length} 个操作`);
+
             return actions;
         },
 
@@ -26488,7 +26942,7 @@
          * @returns {object} 字段键值对
          */
         _parseImageLibrarianFields(fieldLines) {
-            console.log(`[parseImageLibrarianFields] 开始解析 ${fieldLines.length} 行字段`);
+
             const fields = {};
 
             for (const line of fieldLines) {
@@ -26521,7 +26975,7 @@
                 }
             }
 
-            console.log('[parseImageLibrarianFields] 解析后的字段:', fields);
+
             return fields;
         },
 
@@ -26531,10 +26985,10 @@
          * @returns {Promise<Object>} 控制图ID映射
          */
         async _executePreprocessingStepsFromJSON(steps) {
-            console.log('[Preprocessing] ========== 开始执行预处理（JSON版） ==========');
-            console.log('[Preprocessing] 步骤数量:', steps.length);
+
+
             steps.forEach((step, idx) => {
-                console.log(`[Preprocessing] 步骤 ${idx + 1}:`, JSON.stringify(step));
+
             });
 
             const imageConfig = this._getImageConfig();
@@ -26543,8 +26997,8 @@
                 throw new Error('预处理需要 SD WebUI 图像配置（source: sdwebui）');
             }
             const apiUrl = imageConfig.apiUrl.replace(/\/+$/, '');
-            console.log('[Preprocessing] 图像配置:', imageConfig);
-            console.log('[Preprocessing] API 基础 URL:', apiUrl);
+
+
 
             // 预处理器名称映射
             const controlNetModuleMap = {
@@ -26558,7 +27012,7 @@
             const resultMap = {};
             for (let stepIndex = 0; stepIndex < steps.length; stepIndex++) {
                 const step = steps[stepIndex];
-                console.log(`[Preprocessing] 开始处理步骤 ${stepIndex + 1}: 类型=${step.type}, 源图=${step.sourceId}, 保存为=${step.saveAs}`);
+
 
                 if (!step.type || !step.sourceId || !step.saveAs) {
                     console.warn('[Preprocessing] 步骤缺少必要字段，跳过', step);
@@ -26566,18 +27020,18 @@
                 }
 
                 // 从 ImageStore 获取源图 blob
-                console.log(`[Preprocessing] 从 ImageStore 获取源图 ${step.sourceId}`);
+
                 const sourceBlob = await ImageStore.get(step.sourceId);
                 if (!sourceBlob) {
                     console.error(`[Preprocessing] 源图 ${step.sourceId} 不存在`);
                     throw new Error(`源图 ${step.sourceId} 不存在`);
                 }
-                console.log(`[Preprocessing] 源图 blob 类型: ${sourceBlob.type}, 大小: ${sourceBlob.size} 字节`);
+
 
                 // 转换为 data URL
-                console.log('[Preprocessing] 将 blob 转换为 base64...');
+
                 const sourceBase64 = await this._blobToBase64(sourceBlob);
-                console.log(`[Preprocessing] 源图 base64 前缀: ${sourceBase64.substring(0, 60)}...`);
+
 
                 // 提取纯 base64（去掉 data URL 前缀）
                 const pureBase64 = sourceBase64.split(',')[1];
@@ -26585,7 +27039,7 @@
                     console.error(`[Preprocessing] 提取纯 base64 失败，sourceBase64: ${sourceBase64}`);
                     throw new Error('提取纯 base64 失败');
                 }
-                console.log(`[Preprocessing] 纯 base64 长度: ${pureBase64.length}, 前20字符: ${pureBase64.substring(0, 20)}`);
+
 
                 // 构建组合信号
                 const signals = [];
@@ -26594,7 +27048,7 @@
                 }
                 signals.push(AbortSignal.timeout(imageConfig.timeout || 30000));
                 const combinedSignal = AbortSignal.any(signals);
-                console.log('[Preprocessing] 使用组合信号，超时:', imageConfig.timeout || 30000);
+
 
                 // 构建符合官方规范的 payload
                 const payload = {
@@ -26602,19 +27056,19 @@
                     controlnet_input_images: [pureBase64],  // 必须为数组
                     controlnet_processor_res: 512           // 可选，默认 -1
                 };
-                console.log('[Preprocessing] 发送请求 payload:', JSON.stringify(payload, null, 2));
+
 
                 try {
-                    console.log(`[Preprocessing] 正在调用 ${apiUrl}/controlnet/detect ...`);
+
                     const startTime = Date.now();
                     const response = await fetch(`${apiUrl}/controlnet/detect`, {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
                         signal: combinedSignal,  // 使用组合信号
                     });
                     const elapsed = Date.now() - startTime;
-                    console.log(`[Preprocessing] 请求完成，耗时 ${elapsed}ms，状态码: ${response.status}`);
+
 
                     if (!response.ok) {
                         const errText = await response.text();
@@ -26623,40 +27077,40 @@
                     }
 
                     const data = await response.json();
-                    console.log('[Preprocessing] 响应数据完整结构:', data);
+
 
                     // 兼容两种返回格式：旧版 { image: "base64..." } 或新版 { images: ["base64..."], info: "Success" }
                     let resultBase64;
                     if (data.image) {
                         resultBase64 = data.image;
-                        console.log('[Preprocessing] 使用旧版响应格式 data.image');
+
                     } else if (data.images && Array.isArray(data.images) && data.images.length > 0) {
                         resultBase64 = data.images[0];
-                        console.log('[Preprocessing] 使用新版响应格式 data.images[0]');
+
                     } else {
                         console.warn('[Preprocessing] 响应中未找到图片数据，原始数据:', data);
                         throw new Error('响应中未包含图片数据');
                     }
 
-                    console.log(`[Preprocessing] 结果图片 base64 长度: ${resultBase64?.length || 0}`);
+
                     if (!resultBase64) {
                         throw new Error('响应中未包含图片数据');
                     }
 
                     // 使用指定的 saveAs 作为 ID 保存（如果已存在会覆盖）
-                    console.log(`[Preprocessing] 将结果图片保存到 ImageStore，ID: ${step.saveAs}`);
+
                     const savedId = await ImageStore.save(`data:image/png;base64,${resultBase64}`, 'png', step.saveAs);
                     resultMap[step.saveAs] = savedId;
                     UI.updateProgress(`  ✓ 生成控制图 ${step.saveAs}`);
-                    console.log(`[Preprocessing] 控制图保存成功，ID: ${savedId}`);
+
                 } catch (err) {
                     console.error('[Preprocessing] 请求或处理过程中发生异常:', err);
                     throw err;
                 }
             }
 
-            console.log('[Preprocessing] ========== 预处理执行完成 ==========');
-            console.log('[Preprocessing] 最终 controlMap:', resultMap);
+
+
             return resultMap;
         },
 
@@ -26665,12 +27119,12 @@
          * @param {Array<object>} actions - 操作数组，来自 _parseImageLibrarianOutput
          */
         async _updateImageLibraryFromLibrarianOutput(actions) {
-            console.log('[updateImageLibrary] ========== 开始执行图库更新 ==========');
+
             const libraryBooks = await getAllImageLibraryBooks();
-            console.log('[updateImageLibrary] 当前图库书列表:', libraryBooks);
+
 
             for (const action of actions) {
-                console.log(`[updateImageLibrary] 处理操作:`, action);
+
 
                 if (action.type === 'add') {
                     const bookIndex = await this._findAvailableImageBook();
@@ -26680,7 +27134,7 @@
                         continue;
                     }
                     const bookName = `状态书-图库${bookIndex}`;
-                    console.log(`[updateImageLibrary] 新增条目将分配到书号 ${bookIndex} (${bookName})`);
+
 
                     const book = await API.getWorldbook(bookName);
                     const entries = Array.isArray(book) ? book : (book.entries || []);
@@ -26688,7 +27142,7 @@
                     const newUid = maxUid + 1;
 
                     // 创建一个空的条目对象
-                    const newEntry = {uid: newUid, enabled: true};
+                    const newEntry = { uid: newUid, enabled: true };
 
                     // 使用 setNestedValue 设置所有字段（支持点号路径）
                     for (const [key, value] of Object.entries(action.fields)) {
@@ -26702,14 +27156,14 @@
                     }
 
                     entries.push(newEntry);
-                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                     UI.updateProgress(`  ✅ 图库新增条目: ${bookName} - uid=${newUid}`);
-                    console.log(`[updateImageLibrary] 新增条目成功: ${bookName} uid=${newUid}`);
+
 
                 } else if (action.type === 'modify') {
-                    const {book, uid} = action;
+                    const { book, uid } = action;
                     const bookName = `状态书-图库${book}`;
-                    console.log(`[updateImageLibrary] 修改条目: ${bookName} uid=${uid}`);
+
 
                     const bookObj = await API.getWorldbook(bookName);
                     const entries = Array.isArray(bookObj) ? bookObj : (bookObj.entries || []);
@@ -26726,16 +27180,16 @@
                     }
 
                     entries[entryIndex] = entry;
-                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                     UI.updateProgress(`  ✅ 图库修改条目: ${bookName} uid=${uid}`);
-                    console.log(`[updateImageLibrary] 修改条目成功`);
+
 
                 } else if (action.type === 'delete') {
                     // 删除操作不变
                     for (const target of action.targets) {
-                        const {book, uid} = target;
+                        const { book, uid } = target;
                         const bookName = `状态书-图库${book}`;
-                        console.log(`[updateImageLibrary] 删除条目: ${bookName} uid=${uid}`);
+
 
                         const bookObj = await API.getWorldbook(bookName);
                         const entries = Array.isArray(bookObj) ? bookObj : (bookObj.entries || []);
@@ -26743,15 +27197,15 @@
                         if (newEntries.length === entries.length) {
                             console.warn(`[updateImageLibrary] 未找到条目 ${book}-${uid}，跳过删除`);
                         } else {
-                            await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
+                            await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
                             UI.updateProgress(`  ✅ 图库删除条目: ${bookName} uid=${uid}`);
-                            console.log(`[updateImageLibrary] 删除条目成功`);
+
                         }
                     }
                 }
             }
 
-            console.log('[updateImageLibrary] ========== 图库更新完成 ==========');
+
         },
 
         /**
@@ -26759,7 +27213,7 @@
          * @returns {Promise<number|null>} 书号，若无可用则返回 null
          */
         async _findAvailableImageBook() {
-            console.log('[findAvailableImageBook] 开始查找可用图库书');
+
             const libraryBooks = await getAllImageLibraryBooks();
             const maxBooks = CONFIG.MAX_STATE_BOOKS; // 最大状态书数量
             const maxImages = CONFIG.MAX_IMAGES_PER_BOOK;
@@ -26772,9 +27226,9 @@
                 const book = await API.getWorldbook(bookName);
                 const entries = Array.isArray(book) ? book : (book.entries || []);
                 const count = entries.length;
-                console.log(`[findAvailableImageBook] 书 ${bookIndex} 当前条目数: ${count}/${maxImages}`);
+
                 if (count < maxImages) {
-                    console.log(`[findAvailableImageBook] 选择现有书 ${bookIndex}`);
+
                     return bookIndex;
                 }
             }
@@ -26789,7 +27243,7 @@
                 nextIndex++;
             }
             if (nextIndex <= maxBooks) {
-                console.log(`[findAvailableImageBook] 创建新书 ${nextIndex}`);
+
                 // 创建新图库书
                 const newBookName = `状态书-图库${nextIndex}`;
                 try {
@@ -26818,7 +27272,7 @@
          * @param {string} bookName - 图库书名
          */
         async _activateImageLibraryBook(bookName) {
-            console.log(`[activateImageLibraryBook] 激活 ${bookName}`);
+
             let currentGlobalBooks = [];
             try {
                 if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
@@ -26850,8 +27304,8 @@
          * @returns {Promise<Object>} 返回映射表，键为“保存为”字段指定的控制图ID，值为实际保存的图片ID
          */
         async _executePreprocessingSteps(preprocText) {
-            console.log('[Preprocessing] ========== 开始执行预处理 ==========');
-            console.log('[Preprocessing] 原始预处理指令文本:', preprocText);
+
+
 
             const lines = preprocText.split('\n');
             let currentStep = null;
@@ -26860,7 +27314,7 @@
                 const trimmed = line.trim();
                 if (trimmed.startsWith('步骤')) {
                     if (currentStep) steps.push(currentStep);
-                    currentStep = {step: parseInt(trimmed.replace('步骤', ''))};
+                    currentStep = { step: parseInt(trimmed.replace('步骤', '')) };
                 } else if (currentStep) {
                     const colonIdx = trimmed.indexOf(':');
                     if (colonIdx === -1) continue;
@@ -26873,9 +27327,9 @@
             }
             if (currentStep) steps.push(currentStep);
 
-            console.log('[Preprocessing] 解析出的步骤数量:', steps.length);
+
             steps.forEach((step, idx) => {
-                console.log(`[Preprocessing] 步骤 ${idx + 1}:`, JSON.stringify(step));
+
             });
 
             const imageConfig = this._getImageConfig();
@@ -26884,8 +27338,8 @@
                 throw new Error('预处理需要 SD WebUI 图像配置（source: sdwebui）');
             }
             const apiUrl = imageConfig.apiUrl.replace(/\/+$/, '');
-            console.log('[Preprocessing] 图像配置:', imageConfig);
-            console.log('[Preprocessing] API 基础 URL:', apiUrl);
+
+
 
             // 预处理器名称映射（可根据需要扩展）
             const controlNetModuleMap = {
@@ -26898,7 +27352,7 @@
 
             const resultMap = {};
             for (const step of steps) {
-                console.log(`[Preprocessing] 开始处理步骤: 类型=${step.type}, 源图=${step.sourceId}, 保存为=${step.saveAs}`);
+
 
                 if (!step.type || !step.sourceId || !step.saveAs) {
                     console.warn('[Preprocessing] 步骤缺少必要字段，跳过', step);
@@ -26906,18 +27360,18 @@
                 }
 
                 // 从 ImageStore 获取源图 blob
-                console.log(`[Preprocessing] 从 ImageStore 获取源图 ${step.sourceId}`);
+
                 const sourceBlob = await ImageStore.get(step.sourceId);
                 if (!sourceBlob) {
                     console.error(`[Preprocessing] 源图 ${step.sourceId} 不存在`);
                     throw new Error(`源图 ${step.sourceId} 不存在`);
                 }
-                console.log(`[Preprocessing] 源图 blob 类型: ${sourceBlob.type}, 大小: ${sourceBlob.size} 字节`);
+
 
                 // 转换为 data URL
-                console.log('[Preprocessing] 将 blob 转换为 base64...');
+
                 const sourceBase64 = await this._blobToBase64(sourceBlob);
-                console.log(`[Preprocessing] 源图 base64 前缀: ${sourceBase64.substring(0, 60)}...`);
+
 
                 // 提取纯 base64（去掉 data URL 前缀）
                 const pureBase64 = sourceBase64.split(',')[1];
@@ -26925,7 +27379,7 @@
                     console.error(`[Preprocessing] 提取纯 base64 失败，sourceBase64: ${sourceBase64}`);
                     throw new Error('提取纯 base64 失败');
                 }
-                console.log(`[Preprocessing] 纯 base64 长度: ${pureBase64.length}, 前20字符: ${pureBase64.substring(0, 20)}`);
+
 
                 // 构建组合信号
                 const signals = [];
@@ -26934,7 +27388,7 @@
                 }
                 signals.push(AbortSignal.timeout(imageConfig.timeout || 30000));
                 const combinedSignal = AbortSignal.any(signals);
-                console.log('[Preprocessing] 使用组合信号，超时:', imageConfig.timeout || 30000);
+
 
                 // 构建符合官方规范的 payload
                 const payload = {
@@ -26942,19 +27396,19 @@
                     controlnet_input_images: [pureBase64],  // 必须为数组
                     controlnet_processor_res: 512           // 可选，默认 -1
                 };
-                console.log('[Preprocessing] 发送请求 payload:', JSON.stringify(payload, null, 2));
+
 
                 try {
-                    console.log(`[Preprocessing] 正在调用 ${apiUrl}/controlnet/detect ...`);
+
                     const startTime = Date.now();
                     const response = await fetch(`${apiUrl}/controlnet/detect`, {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
                         signal: combinedSignal,  // 使用组合信号
                     });
                     const elapsed = Date.now() - startTime;
-                    console.log(`[Preprocessing] 请求完成，耗时 ${elapsed}ms，状态码: ${response.status}`);
+
 
                     if (!response.ok) {
                         const errText = await response.text();
@@ -26963,40 +27417,40 @@
                     }
 
                     const data = await response.json();
-                    console.log('[Preprocessing] 响应数据完整结构:', data);
+
 
                     // 兼容两种返回格式：旧版 { image: "base64..." } 或新版 { images: ["base64..."], info: "Success" }
                     let resultBase64;
                     if (data.image) {
                         resultBase64 = data.image;
-                        console.log('[Preprocessing] 使用旧版响应格式 data.image');
+
                     } else if (data.images && Array.isArray(data.images) && data.images.length > 0) {
                         resultBase64 = data.images[0];
-                        console.log('[Preprocessing] 使用新版响应格式 data.images[0]');
+
                     } else {
                         console.warn('[Preprocessing] 响应中未找到图片数据，原始数据:', data);
                         throw new Error('响应中未包含图片数据');
                     }
 
-                    console.log(`[Preprocessing] 结果图片 base64 长度: ${resultBase64?.length || 0}`);
+
                     if (!resultBase64) {
                         throw new Error('响应中未包含图片数据');
                     }
 
                     // 使用指定的 saveAs 作为 ID 保存（如果已存在会覆盖）
-                    console.log(`[Preprocessing] 将结果图片保存到 ImageStore，ID: ${step.saveAs}`);
+
                     const savedId = await ImageStore.save(`data:image/png;base64,${resultBase64}`, 'png', step.saveAs);
                     resultMap[step.saveAs] = savedId;
                     UI.updateProgress(`  ✓ 生成控制图 ${step.saveAs}`);
-                    console.log(`[Preprocessing] 控制图保存成功，ID: ${savedId}`);
+
                 } catch (err) {
                     console.error('[Preprocessing] 请求或处理过程中发生异常:', err);
                     throw err;
                 }
             }
 
-            console.log('[Preprocessing] ========== 预处理执行完成 ==========');
-            console.log('[Preprocessing] 最终 controlMap:', resultMap);
+
+
             return resultMap;
         },
 
@@ -27006,28 +27460,28 @@
          * @returns {Object} 包含 preprocText 和 fusionSteps 的对象，若某块缺失则对应字段为 null
          */
         _parseFusionInstruction(rawOutput) {
-            console.log('[parseFusionInstruction] ========== 开始解析融合生图师输出 ==========');
-            console.log('[parseFusionInstruction] 原始输出长度:', rawOutput?.length);
-            console.log('[parseFusionInstruction] 原始输出前500字符:', rawOutput?.substring(0, 500));
 
-            const result = {preprocText: null, fusionSteps: null};
+
+
+
+            const result = { preprocText: null, fusionSteps: null };
 
             // 提取预处理指令块
             const preprocMatch = rawOutput.match(/===预处理指令===([\s\S]*?)(?===融合指令===|$)/);
             if (preprocMatch) {
                 result.preprocText = preprocMatch[1].trim();
-                console.log('[parseFusionInstruction] 提取到预处理指令块，长度:', result.preprocText.length);
-                console.log('[parseFusionInstruction] 预处理指令块内容前200字符:', result.preprocText.substring(0, 200));
+
+
             } else {
-                console.log('[parseFusionInstruction] 未找到预处理指令块');
+
             }
 
             // 提取融合指令块
             const fusionMatch = rawOutput.match(/===融合指令===([\s\S]*)/);
             if (fusionMatch) {
                 const fusionText = fusionMatch[1].trim();
-                console.log('[parseFusionInstruction] 提取到融合指令块，长度:', fusionText.length);
-                console.log('[parseFusionInstruction] 融合指令块内容前200字符:', fusionText.substring(0, 200));
+
+
 
                 const steps = [];
                 const lines = fusionText.split('\n');
@@ -27049,15 +27503,15 @@
 
                     const stepMatch = trimmed.match(/^步骤(\d+)$/);
                     if (stepMatch) {
-                        console.log(`[parseFusionInstruction] 第 ${lineNumber} 行: 检测到新步骤 ${stepMatch[1]}`);
+
                         // 保存上一个步骤
                         if (currentStep) {
                             if (promptLines.length > 0) {
                                 currentStep.prompt = promptLines.join('\n').trim();
-                                console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 的提示词收集完成，长度: ${currentStep.prompt.length}`);
+
                             }
                             steps.push(currentStep);
-                            console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 已保存，当前步骤总数: ${steps.length}`);
+
                         }
                         const stepNum = parseInt(stepMatch[1]);
                         currentStep = {
@@ -27070,12 +27524,12 @@
                         };
                         promptLines = [];
                         collectingPrompt = false;
-                        console.log(`[parseFusionInstruction] 初始化步骤 ${stepNum}`);
+
                         continue;
                     }
 
                     if (!currentStep) {
-                        console.log(`[parseFusionInstruction] 第 ${lineNumber} 行: 尚未进入步骤，跳过:`, trimmed);
+
                         continue;
                     }
 
@@ -27083,45 +27537,45 @@
                     if (colonIdx !== -1) {
                         const field = trimmed.substring(0, colonIdx).trim();
                         const value = trimmed.substring(colonIdx + 1).trim();
-                        console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 第 ${lineNumber} 行: 解析字段 "${field}" = "${value}"`);
+
 
                         if (field === '类型') {
                             currentStep.type = value;
                             collectingPrompt = false;
-                            console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 类型设置为: ${value}`);
+
                         } else if (field === '提示词') {
                             collectingPrompt = true;
                             if (value) {
                                 promptLines.push(value);
-                                console.log(`[parseFusionInstruction] 开始收集提示词，首行: ${value.substring(0, 50)}...`);
+
                             }
                         } else if (field === '源图') {  // 修改此处
                             currentStep.sourceRef = value;
                             collectingPrompt = false;
-                            console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 源图设置为: ${value}`);
+
                         } else if (field === '控制图') {
                             currentStep.controlId = value;
                             collectingPrompt = false;
-                            console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 控制图设置为: ${value}`);
+
                         } else if (field === '重绘幅度') {
                             currentStep.denoise = parseFloat(value);
                             collectingPrompt = false;
-                            console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 重绘幅度设置为: ${value}`);
+
                         } else {
-                            console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 未知字段 "${field}"，值: "${value}"`);
+
                             if (collectingPrompt) {
                                 // 如果正在收集提示词，将整行加入
                                 promptLines.push(trimmed);
-                                console.log(`[parseFusionInstruction] 将未知字段行加入提示词`);
+
                             }
                         }
                     } else {
                         // 没有冒号的行，如果正在收集提示词则加入
                         if (collectingPrompt) {
                             promptLines.push(trimmed);
-                            console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 提示词续行: ${trimmed.substring(0, 50)}...`);
+
                         } else {
-                            console.log(`[parseFusionInstruction] 步骤 ${currentStep.step} 非提示词行且无冒号，忽略:`, trimmed);
+
                         }
                     }
                 }
@@ -27130,26 +27584,26 @@
                 if (currentStep) {
                     if (promptLines.length > 0) {
                         currentStep.prompt = promptLines.join('\n').trim();
-                        console.log(`[parseFusionInstruction] 最后一个步骤 ${currentStep.step} 提示词收集完成，长度: ${currentStep.prompt.length}`);
+
                     }
                     steps.push(currentStep);
-                    console.log(`[parseFusionInstruction] 最后一个步骤 ${currentStep.step} 已保存，最终步骤总数: ${steps.length}`);
+
                 }
 
                 if (steps.length > 0) {
                     result.fusionSteps = steps;
-                    console.log(`[parseFusionInstruction] 共解析出 ${steps.length} 个融合步骤`);
+
                     steps.forEach((step, idx) => {
-                        console.log(`[parseFusionInstruction] 步骤 ${idx + 1} 最终数据:`, JSON.stringify(step));
+
                     });
                 } else {
-                    console.log('[parseFusionInstruction] 融合指令块中未解析到任何有效步骤');
+
                 }
             } else {
-                console.log('[parseFusionInstruction] 未找到融合指令块');
+
             }
 
-            console.log('[parseFusionInstruction] ========== 解析完成 ==========');
+
             return result;
         },
 
@@ -27163,8 +27617,8 @@
          * @returns {Promise<string>} 生成的图片 Base64
          */
         async _callSingleControlNetAPI(initBlob, controlBlob, params) {
-            console.log(`[Workflow._callSingleControlNetAPI] ========== 开始调用单步 ControlNet 融合 ==========`);
-            console.log(`[Workflow._callSingleControlNetAPI] 传入参数:`, JSON.stringify(params, null, 2));
+
+
 
             const config = this._getImageConfig(); // 获取全局图像配置
             if (!config || config.source !== 'sdwebui') {
@@ -27174,8 +27628,8 @@
             const sdApiUrl = `${apiUrl}/sdapi/v1/img2img`;
 
             // 合并参数：params 中的字段优先
-            const mergedParams = {...config, ...params};
-            console.log(`[Workflow._callSingleControlNetAPI] 合并后参数:`, JSON.stringify(mergedParams, null, 2));
+            const mergedParams = { ...config, ...params };
+
 
             // 构建组合信号
             const signals = [];
@@ -27184,7 +27638,7 @@
             }
             signals.push(AbortSignal.timeout(mergedParams.timeout || 120000));
             const combinedSignal = AbortSignal.any(signals);
-            console.log(`[Workflow._callSingleControlNetAPI] 使用组合信号，超时: ${mergedParams.timeout || 120000}ms`);
+
 
             const initBase64 = await this._blobToBase64(initBlob);
             const controlBase64 = await this._blobToBase64(controlBlob);
@@ -27223,12 +27677,12 @@
                 }
             };
 
-            console.log(`[Workflow._callSingleControlNetAPI] 请求 payload:`, JSON.stringify(payload, null, 2));
+
 
             try {
                 const response = await fetch(sdApiUrl, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                     signal: combinedSignal,
                 });
@@ -27239,7 +27693,7 @@
                 }
 
                 const data = await response.json();
-                console.log(`[Workflow._callSingleControlNetAPI] 响应:`, data);
+
 
                 if (data.images && data.images[0]) {
                     return data.images[0]; // 返回 base64
@@ -27250,7 +27704,7 @@
                 console.error('[Workflow._callSingleControlNetAPI] 调用失败:', err);
                 throw err;
             } finally {
-                console.log('[Workflow._callSingleControlNetAPI] ========== 调用结束 ==========');
+
             }
         },
 
@@ -27290,7 +27744,7 @@
             }
             signals.push(AbortSignal.timeout(imageConfig.timeout || 120000));
             const combinedSignal = AbortSignal.any(signals);
-            console.log('[Workflow._simpleFusion] 使用组合信号，超时:', imageConfig.timeout || 120000);
+
 
             const controlNetUnit = {
                 enabled: true,
@@ -27318,14 +27772,14 @@
                 n_iter: 1,
                 seed: -1,
                 alwayson_scripts: {
-                    controlnet: {args: [controlNetUnit]}
+                    controlnet: { args: [controlNetUnit] }
                 }
             };
 
             try {
                 const response = await fetch(sdApiUrl, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                     signal: combinedSignal,  // 使用组合信号
                 });
@@ -27367,7 +27821,7 @@
             }
             signals.push(AbortSignal.timeout(imageConfig.timeout || 120000));
             const combinedSignal = AbortSignal.any(signals);
-            console.log('[Workflow._callFusionAPI] 使用组合信号，超时:', imageConfig.timeout || 120000);
+
 
             // 加载背景图
             const bgBlob = await ImageStore.get(backgroundId);
@@ -27432,7 +27886,7 @@
             try {
                 const response = await fetch(sdApiUrl, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                     signal: combinedSignal,  // 使用组合信号
                 });
@@ -27520,7 +27974,7 @@
                     }
                     const start = parseInt(paraMatch[1]);
                     const end = paraMatch[2] ? parseInt(paraMatch[2]) : start;
-                    currentTask = {start, end, prompt: '', element: null};
+                    currentTask = { start, end, prompt: '', element: null };
                     promptLines = [];
                 }
                 // 2. 尝试匹配元素格式：以冒号结尾且不是段落格式，视为元素名称行
@@ -27532,7 +27986,7 @@
                         tasks.push(currentTask);
                     }
                     // 新任务：元素模式，无段落范围，默认放在章节末尾（-1）
-                    currentTask = {start: -1, end: -1, prompt: '', element: elementName};
+                    currentTask = { start: -1, end: -1, prompt: '', element: elementName };
                     promptLines = [];
                 } else if (currentTask) {
                     // 收集提示词行
@@ -27550,7 +28004,7 @@
 
             // 如果没有任何任务，将整个输出作为提示词，默认放在章节末尾
             if (tasks.length === 0) {
-                tasks.push({start: -1, end: -1, prompt: output.trim(), element: null});
+                tasks.push({ start: -1, end: -1, prompt: output.trim(), element: null });
             }
 
             return tasks;
@@ -27562,17 +28016,17 @@
          * @returns {Promise<string>} 生成的图片 Base64 数据（含 data URL 前缀）
          */
         async _callImageAPI(params) {
-            console.log(`[Workflow._callImageAPI] ========== 开始调用图像 API ==========`);
-            console.log(`[Workflow._callImageAPI] 传入参数:`, JSON.stringify(params, null, 2));
+
+
 
             const config = this._getImageConfig(); // 获取全局唯一图像配置
-            console.log(`[Workflow._callImageAPI] 基础配置:`, JSON.stringify(config, null, 2));
+
 
             // 合并参数：params 中的字段优先于 config
-            const mergedParams = {...config, ...params};
-            console.log(`[Workflow._callImageAPI] 合并后参数:`, JSON.stringify(mergedParams, null, 2));
+            const mergedParams = { ...config, ...params };
 
-            const {source, apiUrl, key, model, timeout = 60000} = mergedParams;
+
+            const { source, apiUrl, key, model, timeout = 60000 } = mergedParams;
             const url = apiUrl.replace(/\/+$/, '');
 
             // 构建组合信号
@@ -27582,7 +28036,7 @@
             }
             signals.push(AbortSignal.timeout(timeout));
             const combinedSignal = AbortSignal.any(signals);
-            console.log(`[Workflow._callImageAPI] 使用组合信号，超时: ${timeout}ms`);
+
 
             // 根据 source 调用对应平台的 API
             try {
@@ -27600,7 +28054,7 @@
                         quality: mergedParams.quality || 'standard',
                         response_format: mergedParams.response_format || 'url',
                     });
-                    console.log(`[Workflow._callImageAPI] OpenAI 请求体:`, body);
+
 
                     const response = await fetch(`${url}/images/generations`, {
                         method: 'POST',
@@ -27615,19 +28069,19 @@
                         throw new Error(`OpenAI 错误 (${response.status}): ${errorText}`);
                     }
                     const data = await response.json();
-                    console.log(`[Workflow._callImageAPI] OpenAI 响应:`, data);
+
 
                     if (data.data && data.data[0] && data.data[0].url) {
                         const imageUrl = data.data[0].url;
-                        console.log(`[Workflow._callImageAPI] 获取到图片 URL: ${imageUrl}`);
-                        const imgRes = await fetch(imageUrl, {signal: combinedSignal});
+
+                        const imgRes = await fetch(imageUrl, { signal: combinedSignal });
                         const blob = await imgRes.blob();
                         const base64 = await this._blobToBase64(blob);
-                        console.log(`[Workflow._callImageAPI] 图片转换为 Base64 成功`);
+
                         return base64;
                     } else if (data.data && data.data[0] && data.data[0].b64_json) {
                         const base64 = `data:image/png;base64,${data.data[0].b64_json}`;
-                        console.log(`[Workflow._callImageAPI] 获取到 Base64 图片`);
+
                         return base64;
                     } else {
                         throw new Error('OpenAI 响应中没有图片数据');
@@ -27655,11 +28109,11 @@
                         send_images: true,
                         save_images: mergedParams.save_images || false
                     };
-                    console.log(`[Workflow._callImageAPI] SD WebUI 请求 payload:`, JSON.stringify(payload, null, 2));
+
 
                     const response = await fetch(sdApiUrl, {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
                         signal: combinedSignal,
                     });
@@ -27669,7 +28123,7 @@
                         throw new Error(`SD WebUI 错误 (${response.status}): ${errorText}`);
                     }
                     const data = await response.json();
-                    console.log(`[Workflow._callImageAPI] SD WebUI 响应:`, data);
+
 
                     if (data.images && data.images[0]) {
                         const base64Image = data.images[0];
@@ -27684,14 +28138,14 @@
                         'Content-Type': 'application/json',
                     };
                     const body = JSON.stringify({
-                        text_prompts: [{text: mergedParams.prompt, weight: 1}],
+                        text_prompts: [{ text: mergedParams.prompt, weight: 1 }],
                         cfg_scale: mergedParams.cfg_scale || 7,
                         height: mergedParams.height || 512,
                         width: mergedParams.width || 512,
                         samples: mergedParams.samples || 1,
                         steps: mergedParams.steps || 30,
                     });
-                    console.log(`[Workflow._callImageAPI] Stability AI 请求体:`, body);
+
 
                     const response = await fetch(`${url}/generation/${mergedParams.model || model}/text-to-image`, {
                         method: 'POST',
@@ -27705,7 +28159,7 @@
                         throw new Error(`Stability AI 错误 (${response.status}): ${errorText}`);
                     }
                     const data = await response.json();
-                    console.log(`[Workflow._callImageAPI] Stability AI 响应:`, data);
+
 
                     if (data.artifacts && data.artifacts[0] && data.artifacts[0].base64) {
                         return `data:image/png;base64,${data.artifacts[0].base64}`;
@@ -27731,15 +28185,15 @@
                         const errorText = await submitRes.text();
                         throw new Error(`Midjourney 提交失败: ${errorText}`);
                     }
-                    const {taskId} = await submitRes.json();
-                    console.log(`[Workflow._callImageAPI] Midjourney 任务ID: ${taskId}`);
+                    const { taskId } = await submitRes.json();
+
 
                     const maxAttempts = 30;
                     const pollInterval = 2000;
                     for (let i = 0; i < maxAttempts; i++) {
                         await this.sleep(pollInterval);
                         const resultRes = await fetch(`${url}/mj/task/${taskId}`, {
-                            headers: {'Authorization': `Bearer ${key}`},
+                            headers: { 'Authorization': `Bearer ${key}` },
                             signal: combinedSignal,
                         });
                         if (!resultRes.ok) {
@@ -27747,7 +28201,7 @@
                             continue;
                         }
                         const data = await resultRes.json();
-                        console.log(`[Workflow._callImageAPI] 轮询结果:`, data);
+
 
                         if (data.status === 'success') {
                             const imageUrl = data.imageUrl;
@@ -27771,7 +28225,7 @@
                         n: 1,
                         response_format: 'b64_json',
                     });
-                    console.log(`[Workflow._callImageAPI] Flux 请求体:`, body);
+
 
                     const response = await fetch(`${url}/images/generations`, {
                         method: 'POST',
@@ -27785,7 +28239,7 @@
                         throw new Error(`Flux 错误 (${response.status}): ${errorText}`);
                     }
                     const data = await response.json();
-                    console.log(`[Workflow._callImageAPI] Flux 响应:`, data);
+
 
                     if (data.data && data.data[0] && data.data[0].b64_json) {
                         return `data:image/png;base64,${data.data[0].b64_json}`;
@@ -27809,7 +28263,7 @@
                         size: mergedParams.size || '1024x1024',
                         response_format: mergedParams.response_format || 'b64_json',
                     });
-                    console.log(`[Workflow._callImageAPI] SiliconFlow 请求体:`, body);
+
 
                     const response = await fetch(`${url}/images/generations`, {
                         method: 'POST',
@@ -27823,7 +28277,7 @@
                         throw new Error(`SiliconFlow 错误 (${response.status}): ${errorText}`);
                     }
                     const data = await response.json();
-                    console.log(`[Workflow._callImageAPI] SiliconFlow 响应:`, data);
+
 
                     if (data.data && data.data[0] && data.data[0].b64_json) {
                         return `data:image/png;base64,${data.data[0].b64_json}`;
@@ -27843,7 +28297,7 @@
                         size: mergedParams.size || '1024x1024',
                         response_format: mergedParams.response_format || 'b64_json',
                     });
-                    console.log(`[Workflow._callImageAPI] other 请求体:`, body);
+
 
                     const response = await fetch(`${url}/images/generations`, {
                         method: 'POST',
@@ -27857,7 +28311,7 @@
                         throw new Error(`Other API 错误 (${response.status}): ${errorText}`);
                     }
                     const data = await response.json();
-                    console.log(`[Workflow._callImageAPI] other 响应:`, data);
+
 
                     if (data.data && data.data[0] && data.data[0].b64_json) {
                         return `data:image/png;base64,${data.data[0].b64_json}`;
@@ -27875,7 +28329,7 @@
                 console.error(`[Workflow._callImageAPI] 调用失败:`, err);
                 throw err;
             } finally {
-                console.log(`[Workflow._callImageAPI] ========== 调用结束 ==========`);
+
             }
         },
 
@@ -27976,10 +28430,10 @@
         // 在 Workflow 对象内
         // 在 Workflow 对象内，替换原有的 _processInputQueueSequential 函数
         async _processInputQueueSequential() {
-            console.log('[Workflow._processInputQueueSequential] ========== 开始处理输入队列 ==========');
-            console.log('[Workflow._processInputQueueSequential] 队列长度:', WORKFLOW_STATE.inputRequestQueue.length);
+
+
             if (WORKFLOW_STATE.isProcessingInput) {
-                console.log('[Workflow._processInputQueueSequential] 已在处理中，直接返回');
+
                 return;
             }
             WORKFLOW_STATE.isProcessingInput = true;
@@ -28001,8 +28455,8 @@
                     const request = WORKFLOW_STATE.inputRequestQueue.shift();
                     if (!request) continue;
 
-                    const {mode, agentKey, inputIndex, src, isReflow} = request;
-                    console.log(`[processInputQueue] 处理请求: agentKey=${agentKey}, src=${src}, mode=${mode}, isReflow=${isReflow}`);
+                    const { mode, agentKey, inputIndex, src, isReflow } = request;
+
 
                     if (WORKFLOW_STATE.shouldStop) {
                         console.warn('[processInputQueue] 检测到停止信号，拒绝所有等待');
@@ -28015,7 +28469,7 @@
 
                     const pending = isReflow ? WORKFLOW_STATE.currentReflowCache?.[src] : WORKFLOW_STATE.pendingInputBySrc[src];
                     if (!pending || pending.resolved) {
-                        console.log('[processInputQueue] 请求已解决，跳过');
+
                         continue;
                     }
 
@@ -28036,7 +28490,7 @@
 
                     if (agent && agent.role === 'interactiveAgent' && mode === 'txt') {
                         // ========== interactiveAgent 特殊处理 ==========
-                        let html = await this._collectInputs(agentKey, isReflow, {isParallel: false});
+                        let html = await this._collectInputs(agentKey, isReflow, { isParallel: false });
                         html = html[0];
                         const userChoice = await UI.renderAndWaitForInteraction(html);
                         pending.resolved = true;
@@ -28052,7 +28506,7 @@
                         await API.sleep(50);
                         continue;
                     } else if (mode.startsWith('read_')) {
-                        console.log('[processInputQueue] 读取文件模式（真实上传）');
+
                         const fileType = mode.substring(5);
                         const agent = CONFIG.AGENTS[agentKey];
                         const apiConfigId = agent?.apiConfigId;
@@ -28061,7 +28515,7 @@
                             throw new Error(`Agent ${agentKey} 未配置 apiConfigId 或配置无效，无法上传文件`);
                         }
                         const apiConfig = CONFIG.apiConfigs[apiConfigId];
-                        console.log(`[processInputQueue] 使用 API 配置: ${apiConfigId}, 平台: ${apiConfig.source}`);
+
 
                         let uploadResult;
                         try {
@@ -28079,11 +28533,11 @@
                     </div>
                     <div class="nc-modal-body" style="text-align:center; padding:20px;">
                         <input type="file" id="nc-file-input" accept="${fileType === 'png' ? 'image/png' :
-                                    fileType === 'txt' ? 'text/plain' :
-                                        fileType === 'html' ? 'text/html' :
-                                            fileType === 'js' ? 'application/javascript' :
-                                                fileType === 'audio' ? 'audio/*' : '*/*'
-                                }" style="margin:10px 0;">
+                                        fileType === 'txt' ? 'text/plain' :
+                                            fileType === 'html' ? 'text/html' :
+                                                fileType === 'js' ? 'application/javascript' :
+                                                    fileType === 'audio' ? 'audio/*' : '*/*'
+                                    }" style="margin:10px 0;">
                     </div>
                     <div class="nc-modal-footer">
                         <button class="nc-modal-close-btn">取消</button>
@@ -28102,10 +28556,10 @@
                                         Notify.warning('请选择一个文件');
                                         return;
                                     }
-                                    console.log(`[processInputQueue] 用户选择了文件: name=${file.name}, type=${file.type}, size=${file.size} 字节`);
+
                                     try {
                                         const result = await Workflow._uploadFile(apiConfig, file);
-                                        console.log(`[processInputQueue] 文件上传成功，ID: ${result.fileId}, 文件名: ${result.fileName}`);
+
                                         ModalStack.closeTop();
                                         resolve(result);
                                     } catch (err) {
@@ -28116,14 +28570,14 @@
 
                                 fileInput.addEventListener('change', handleFile);
                                 closeBtn.addEventListener('click', () => {
-                                    console.log('[processInputQueue] 用户取消文件选择');
+
                                     ModalStack.closeTop();
                                     reject(new UserInterruptError());
                                 });
 
                                 overlay.addEventListener('click', (e) => {
                                     if (e.target === overlay) {
-                                        console.log('[processInputQueue] 点击遮罩层取消文件选择');
+
                                         ModalStack.closeTop();
                                         reject(new UserInterruptError());
                                     }
@@ -28136,7 +28590,7 @@
                         }
 
                         const inputContent = `[file:${uploadResult.fileId}] ${uploadResult.fileName}`;
-                        console.log(`[processInputQueue] 生成的输入内容: "${inputContent}"`);
+
 
                         pending.resolved = true;
                         pending.result = inputContent;
@@ -28146,14 +28600,14 @@
                             if (src.endsWith('.last')) {
                                 const targetKey = src.slice(0, -5);
                                 WORKFLOW_STATE.lastInputCache[targetKey] = inputContent;
-                                console.log(`[processInputQueue] 已缓存到 lastInputCache[${targetKey}]`);
+
                             } else if (src !== 'user' && src !== 'before' && src !== 'auto' && !this._isStage(src)) {
                                 WORKFLOW_STATE.agentInputCache[src] = inputContent;
-                                console.log(`[processInputQueue] 已缓存到 agentInputCache[${src}]`);
+
                             }
                             if (src === 'user') {
                                 WORKFLOW_STATE.currentUserInput = inputContent;
-                                console.log(`[processInputQueue] 已更新 currentUserInput`);
+
                             }
                         }
 
@@ -28165,7 +28619,7 @@
 
                         UI.updateSubmitButtons(null);
                         UI.updateProgress(`✓ 文件上传成功，ID: ${uploadResult.fileId}`);
-                        Notify.success('文件已上传', '', {timeOut: 2000});
+                        Notify.success('文件已上传', '', { timeOut: 2000 });
 
                         AgentStateManager.setState(agentKey, 'running');
                         UI.updateWorkflowAgentStates();
@@ -28174,7 +28628,7 @@
                         continue;
                     } else if (mode.startsWith('save_')) {
                         // ========== 保存文件模式，支持自定义ID、自动生成和冲突处理 ==========
-                        console.log('[processInputQueue] 保存文件模式（支持自定义ID/自动生成）');
+
                         const fileType = mode.substring(5);
                         let fileId;
                         try {
@@ -28206,11 +28660,11 @@
                     <div>
                         <label style="display:block; margin-bottom:5px; color:#aaa;">选择文件</label>
                         <input type="file" id="nc-file-input" accept="${fileType === 'png' ? 'image/png' :
-                                    fileType === 'txt' ? 'text/plain' :
-                                        fileType === 'html' ? 'text/html' :
-                                            fileType === 'js' ? 'application/javascript' :
-                                                fileType === 'audio' ? 'audio/*' : '*/*'
-                                }" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px;">
+                                        fileType === 'txt' ? 'text/plain' :
+                                            fileType === 'html' ? 'text/html' :
+                                                fileType === 'js' ? 'application/javascript' :
+                                                    fileType === 'audio' ? 'audio/*' : '*/*'
+                                    }" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px;">
                     </div>
                 </div>
                 <div class="nc-modal-footer" style="display:flex; gap:10px; justify-content:center;">
@@ -28247,7 +28701,7 @@
                                     let customId = null;
                                     if (!useAuto) {
                                         customId = customIdInput.value.trim();
-                                        console.log(`[processInputQueue] 用户输入ID: "${customId}"`);
+
 
                                         // 如果输入了自定义ID，进行格式校验
                                         if (customId) {
@@ -28262,7 +28716,7 @@
                                             return;
                                         }
                                     } else {
-                                        console.log('[processInputQueue] 用户选择自动生成ID');
+
                                     }
 
                                     // 冲突检测（仅在提供自定义ID时）
@@ -28280,7 +28734,7 @@
 
                                         if (existing) {
                                             const action = await UI._showResourceConflictModal(customId, fileType === 'png' ? '图片' : fileType === 'audio' ? '音频' : '文本');
-                                            console.log(`[processInputQueue] 冲突解决: ${action}`);
+
                                             if (action === 'cancel' || action === 'skip') {
                                                 return; // 不关闭模态框，用户可以重新选择
                                             }
@@ -28293,17 +28747,17 @@
                                         let savedId;
                                         const store = getStore();
                                         if (fileType === 'png') {
-                                            console.log('[processInputQueue] 保存图片到 ImageStore' + (useAuto ? '，自动生成ID' : `，自定义ID: ${customId}`));
+
                                             savedId = await ImageStore.save(file, null, useAuto ? undefined : customId);
                                         } else if (fileType === 'txt' || fileType === 'html' || fileType === 'js') {
-                                            console.log('[processInputQueue] 保存文本到 OtherFileStore' + (useAuto ? '，自动生成ID' : `，自定义ID: ${customId}`));
+
                                             const text = await file.text();
                                             savedId = await OtherFileStore.save(text, fileType, useAuto ? undefined : customId);
                                         } else if (fileType === 'audio') {
-                                            console.log('[processInputQueue] 保存音频到 AudioStore' + (useAuto ? '，自动生成ID' : `，自定义ID: ${customId}`));
+
                                             savedId = await AudioStore.save(file, useAuto ? undefined : customId);
                                         }
-                                        console.log(`[processInputQueue] 文件保存成功，ID: ${savedId}`);
+
                                         ModalStack.closeTop();
                                         resolve(savedId);
                                     } catch (err) {
@@ -28316,14 +28770,14 @@
                                 okBtn.addEventListener('click', () => handleSave(false));
                                 autoBtn.addEventListener('click', () => handleSave(true));
                                 closeBtn.addEventListener('click', () => {
-                                    console.log('[processInputQueue] 用户取消文件保存');
+
                                     ModalStack.closeTop();
                                     reject(new Error('用户取消文件选择'));
                                 });
 
                                 overlay.addEventListener('click', (e) => {
                                     if (e.target === overlay) {
-                                        console.log('[processInputQueue] 点击遮罩层取消文件保存');
+
                                         ModalStack.closeTop();
                                         reject(new Error('用户取消文件选择'));
                                     }
@@ -28352,14 +28806,14 @@
                             if (src.endsWith('.last')) {
                                 const targetKey = src.slice(0, -5);
                                 WORKFLOW_STATE.lastInputCache[targetKey] = fileId;
-                                console.log(`[processInputQueue] 已缓存到 lastInputCache[${targetKey}]`);
+
                             } else if (src !== 'user' && src !== 'before' && src !== 'auto' && !this._isStage(src)) {
                                 WORKFLOW_STATE.agentInputCache[src] = fileId;
-                                console.log(`[processInputQueue] 已缓存到 agentInputCache[${src}]`);
+
                             }
                             if (src === 'user') {
                                 WORKFLOW_STATE.currentUserInput = fileId;
-                                console.log(`[processInputQueue] 已更新 currentUserInput`);
+
                             }
                         }
 
@@ -28371,7 +28825,7 @@
 
                         UI.updateSubmitButtons(null);
                         UI.updateProgress(`✓ 文件保存完成，ID: ${fileId}`);
-                        Notify.success('文件已保存', '', {timeOut: 2000});
+                        Notify.success('文件已保存', '', { timeOut: 2000 });
 
                         const textarea = document.getElementById('nc-user-input');
                         if (textarea) {
@@ -28386,7 +28840,7 @@
                         continue;
                     } else {
                         // ========== 普通等待用户输入（文本框或章节选择）==========
-                        console.log('[processInputQueue] 普通等待用户输入模式');
+
 
                         const userInputPromise = new Promise((resolve, reject) => {
                             WORKFLOW_STATE.inputResolver = resolve;
@@ -28414,7 +28868,7 @@
 
                         // ===== 新增：用户输入完成提示 =====
                         UI.updateProgress(`✓ 用户输入已提交，内容长度: ${userInput.length} 字符`);
-                        Notify.success('用户输入已接收', '', {timeOut: 2000});
+                        Notify.success('用户输入已接收', '', { timeOut: 2000 });
 
                         if (!isReflow) {
                             if (src.endsWith('.last')) {
@@ -28459,7 +28913,7 @@
                 WORKFLOW_STATE.inputResolver = null;
                 WORKFLOW_STATE.inputRejector = null;
                 UI.updateSubmitButtons(null);
-                console.log('[Workflow._processInputQueueSequential] 输入队列处理结束');
+
             }
         },
 
@@ -28471,19 +28925,19 @@
          * @returns {Promise<Array<string>>} 收集到的内容数组，顺序与 agent.inputs 一致
          */
         async _collectInputs(agentKey, isReflow = false, options = {}) {
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
             const agent = CONFIG.AGENTS[agentKey];
             if (!agent) throw new Error(`Agent ${agentKey} 不存在`);
 
             const collected = [];
-            console.log(`[_collectInputs][${agentKey}] 开始收集输入，inputs长度=${agent.inputs.length}`);
+
 
             for (let idx = 0; idx < agent.inputs.length; idx++) {
                 if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
 
                 const src = agent.inputs[idx];
                 const mode = agent.inputMode[idx] || 'txt';
-                console.log(`[_collectInputs][${agentKey}] 输入[${idx}]: src=${src}, mode=${mode}`);
+
 
                 // ---------- 处理 user 源 ----------
                 if (src === 'user') {
@@ -28501,7 +28955,7 @@
                         content = WORKFLOW_STATE.lastSerialOutput?.output || '';
                     }
                     content = this._stripImagePlaceholders(content);
-                    console.log(`[_collectInputs][${agentKey}] before 内容长度: ${content.length}`);
+
                     if (content.trim() === '') {
                         content = await this.waitForUserInput('txt', agentKey, idx, !isReflow, src);
                         content = this._stripImagePlaceholders(content);
@@ -28513,7 +28967,7 @@
                 // ---------- 处理层 ID ----------
                 if (this._isStage(src)) {
                     let content = this._collectStageOutput(src);
-                    console.log(`[_collectInputs][${agentKey}] 阶段 ${src} 输出长度: ${content.length}`);
+
                     if (content.trim() === '') {
                         content = await this.waitForUserInput('txt', agentKey, idx, !isReflow, src);
                         content = this._stripImagePlaceholders(content);
@@ -28526,7 +28980,7 @@
                 if (src === 'auto') {
                     const count = agent.autoConfig[idx];
                     let content = this._collectAutoOutput(count, mode);
-                    console.log(`[_collectInputs][${agentKey}] auto 提取 count=${count}, 内容长度: ${content.length}`);
+
                     if (content.trim() === '') {
                         content = await this.waitForUserInput(mode, agentKey, idx, !isReflow, src);
                         content = this._stripImagePlaceholders(content);
@@ -28538,7 +28992,7 @@
                 // ---------- 处理 read. 文件源 ----------
                 if (src.startsWith('read.')) {
                     const fileType = src.substring(5); // 'png', 'txt', 'html', 'js'
-                    console.log(`[_collectInputs][${agentKey}] 读取文件模式: type=${fileType}`);
+
                     const fileContent = await this.waitForUserInput('read_' + fileType, agentKey, idx, !isReflow, src);
                     collected.push(fileContent);
                     continue;
@@ -28547,7 +29001,7 @@
                 // ---------- 处理 save. 文件源 ----------
                 if (src.startsWith('save.')) {
                     const fileType = src.substring(5);
-                    console.log(`[_collectInputs][${agentKey}] 保存文件模式: type=${fileType}`);
+
                     const fileId = await this.waitForUserInput('save_' + fileType, agentKey, idx, !isReflow, src);
                     collected.push(fileId);
                     continue;
@@ -28556,36 +29010,36 @@
                 // ---------- 处理 id.xxx 源 ----------
                 if (src.startsWith('id.')) {
                     const id = src.substring(3);
-                    console.log(`[_collectInputs][${agentKey}] 处理 id 源: ${src} -> ID=${id}`);
+
 
                     let content;
                     if (id.startsWith('other_')) {
-                        console.log(`[_collectInputs][${agentKey}] 尝试从 OtherFileStore 获取其余文件 ${id}`);
+
                         const item = await OtherFileStore.get(id);
                         if (!item || !item.text) {
                             console.error(`[_collectInputs][${agentKey}] 其余文件 ${id} 不存在`);
                             throw new Error(`其余文件 ${id} 不存在`);
                         }
                         content = item.text;
-                        console.log(`[_collectInputs][${agentKey}] 获取到其余文件内容，长度: ${content.length}`);
+
                     } else if (id.startsWith('img_')) {
-                        console.log(`[_collectInputs][${agentKey}] 检查图片 ${id} 是否存在`);
+
                         const blob = await ImageStore.get(id);
                         if (!blob) {
                             console.error(`[_collectInputs][${agentKey}] 图片 ${id} 不存在`);
                             throw new Error(`图片 ${id} 不存在`);
                         }
                         content = id; // 直接返回 ID 字符串
-                        console.log(`[_collectInputs][${agentKey}] 图片 ${id} 存在，返回 ID`);
+
                     } else if (id.startsWith('audio_')) {
-                        console.log(`[_collectInputs][${agentKey}] 检查音频 ${id} 是否存在`);
+
                         const blob = await AudioStore.get(id);
                         if (!blob) {
                             console.error(`[_collectInputs][${agentKey}] 音频 ${id} 不存在`);
                             throw new Error(`音频 ${id} 不存在`);
                         }
                         content = id;
-                        console.log(`[_collectInputs][${agentKey}] 音频 ${id} 存在，返回 ID`);
+
                     } else {
                         // 默认尝试作为其余文件
                         console.warn(`[_collectInputs][${agentKey}] 未知 ID 前缀 ${id}，尝试作为其余文件处理`);
@@ -28610,7 +29064,7 @@
                 if (targetKey.endsWith('.raw')) {
                     useRaw = true;
                     targetKey = targetKey.slice(0, -4);
-                    console.log(`[_collectInputs][${agentKey}] 检测到 .raw 后缀，目标键: ${targetKey}`);
+
                 }
 
                 // 处理 .last 后缀
@@ -28682,11 +29136,11 @@
                     } else {
                         if (useRaw) {
                             content = WORKFLOW_STATE.agentRawOutputs?.[targetKey] || '';
-                            console.log(`[_collectInputs][${agentKey}] 获取原始输出，长度: ${content.length}`);
+
                         } else {
                             content = WORKFLOW_STATE.outputs[targetKey] || '';
                             content = this._stripImagePlaceholders(content);
-                            console.log(`[_collectInputs][${agentKey}] 获取处理输出，长度: ${content.length}`);
+
                         }
                     }
                 }
@@ -28699,7 +29153,7 @@
 
         // 在 Workflow 对象内添加以下方法
         async _uploadFile(apiConfig, fileBlob, purpose = 'assistants') {
-            const {source, apiUrl, key, timeout = 60000} = apiConfig;
+            const { source, apiUrl, key, timeout = 60000 } = apiConfig;
             const url = apiUrl.replace(/\/+$/, '');
             const signals = [];
             if (WORKFLOW_STATE.abortController) signals.push(WORKFLOW_STATE.abortController.signal);
@@ -28711,9 +29165,9 @@
             formData.append('purpose', purpose);
             formData.append('file', fileBlob, fileBlob.name); // 保留原文件名
 
-            console.log(`[Workflow._uploadFile] ========== 开始上传文件 ==========`);
-            console.log(`[Workflow._uploadFile] 平台: ${source}, 文件名: ${fileBlob.name}, 大小: ${fileBlob.size} 字节, 类型: ${fileBlob.type}`);
-            console.log(`[Workflow._uploadFile] API URL: ${apiUrl}, 超时: ${timeout}ms`);
+
+
+
 
             // 根据 source 选择上传端点
             let uploadUrl;
@@ -28724,25 +29178,25 @@
             if (source === 'openai' || source === 'deepseek' || source === 'siliconflow' || source === 'qwen' || source === 'other') {
                 // OpenAI 兼容格式：使用 /files
                 uploadUrl = `${url}/files`;
-                console.log(`[Workflow._uploadFile] 使用 OpenAI 兼容端点: ${uploadUrl}`);
+
             } else if (source === 'claude') {
                 // Claude 使用 /files
                 uploadUrl = `${url}/files`;
                 // Claude 的认证头可能不同，但多数代理仍用 Bearer
-                console.log(`[Workflow._uploadFile] 使用 Claude 端点: ${uploadUrl}`);
+
             } else if (source === 'gemini') {
                 // Gemini 使用 /upload/v1beta/files
                 uploadUrl = `${url}/upload/v1beta/files`;
                 // Gemini 需要将 API key 放在 URL 参数中
                 uploadUrl += `?key=${key}`;
                 delete headers.Authorization; // 移除 Bearer 头
-                console.log(`[Workflow._uploadFile] 使用 Gemini 端点: ${uploadUrl}`);
+
             } else {
                 throw new Error(`[Workflow._uploadFile] 不支持的平台文件上传: ${source}`);
             }
 
             try {
-                console.log(`[Workflow._uploadFile] 发送上传请求...`);
+
                 const startTime = Date.now();
                 const response = await fetch(uploadUrl, {
                     method: 'POST',
@@ -28751,7 +29205,7 @@
                     signal: combinedSignal,
                 });
                 const elapsed = Date.now() - startTime;
-                console.log(`[Workflow._uploadFile] 请求完成，耗时 ${elapsed}ms，状态码: ${response.status}`);
+
 
                 if (!response.ok) {
                     const errText = await response.text();
@@ -28760,7 +29214,7 @@
                 }
 
                 const data = await response.json();
-                console.log(`[Workflow._uploadFile] 响应数据:`, JSON.stringify(data, null, 2));
+
 
                 // 不同平台返回的文件ID字段可能不同，标准化处理
                 let fileId = data.id || data.file?.id || data.file_id;
@@ -28769,23 +29223,23 @@
                     throw new Error('上传响应中无文件ID');
                 }
 
-                console.log(`[Workflow._uploadFile] 文件上传成功，文件ID: ${fileId}`);
-                return {fileId, fileName: fileBlob.name};
+
+                return { fileId, fileName: fileBlob.name };
             } catch (err) {
                 console.error('[Workflow._uploadFile] 上传过程中发生异常:', err);
                 throw err;
             } finally {
-                console.log('[Workflow._uploadFile] ========== 上传结束 ==========');
+
             }
         },
 
         _getAudioConfig(mode) {
             const apiConfigs = CONFIG.apiConfigs || {};
-            console.log(`[Workflow._getAudioConfig] 查找 mode=${mode} 的音频配置`);
+
 
             for (const [id, cfg] of Object.entries(apiConfigs)) {
                 if (cfg.type === 'audio' && cfg.mode === mode) {
-                    console.log(`[Workflow._getAudioConfig] 找到 mode=${mode} 的配置: ${id}`);
+
                     return cfg;
                 }
             }
@@ -28811,8 +29265,8 @@
         async _callAudioAPI(config, params, signal) {
             const { mode, source, apiUrl, key } = config;
             const url = apiUrl.replace(/\/+$/, '');
-            console.log(`[Workflow._callAudioAPI] ========== 开始调用音频 API ==========`);
-            console.log(`[Workflow._callAudioAPI] mode: ${mode}, source: ${source}, url: ${url}`);
+
+
 
             switch (mode) {
                 case 'music-generation':
@@ -28830,7 +29284,7 @@
          * 音乐生成 API 调用（新版，使用 params 对象）
          */
         async _callMusicGeneration(source, url, key, params, signal) {
-            console.log(`[Workflow._callMusicGeneration] source=${source}, params=`, params);
+
 
             if (source === 'elevenlabs') {
                 // ElevenLabs 音乐生成（假设存在 /music-generations）
@@ -28976,7 +29430,7 @@
          * @returns {Blob}
          */
         _base64ToBlob(base64, mimeType = 'audio/mpeg') {
-            console.log(`[Workflow._base64ToBlob] 转换 Base64 到 Blob, MIME: ${mimeType}`);
+
 
             // 移除 data URL 前缀（如果存在）
             let base64Data = base64;
@@ -29000,7 +29454,7 @@
                     byteArrays.push(byteArray);
                 }
 
-                return new Blob(byteArrays, {type: mimeType});
+                return new Blob(byteArrays, { type: mimeType });
             } catch (err) {
                 console.error('[Workflow._base64ToBlob] 转换失败:', err);
                 throw err;
@@ -29020,7 +29474,7 @@
                 // ===== 调用增强后的 API.stopGeneration =====
                 try {
                     API.stopGeneration();
-                    console.log('[Workflow.stop] 已调用 API.stopGeneration()');
+
                 } catch (e) {
                     console.error('[Workflow.stop] 调用 API.stopGeneration 失败:', e);
                 }
@@ -29028,7 +29482,7 @@
 
                 // 中止所有图像API请求
                 if (WORKFLOW_STATE.abortController) {
-                    console.log('[Workflow.stop] 中止图像API请求');
+
                     WORKFLOW_STATE.abortController.abort();
                     WORKFLOW_STATE.abortController = null;
                 }
@@ -29093,6 +29547,12 @@
         }
     };
 
+
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 24：全局暴露与初始化                                        ║
+    // ║  window.NovelCreator / baseInit / 启动守卫                       ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
     // ==================== 全局暴露 ====================
 
     window.NovelCreator = {
@@ -29141,20 +29601,20 @@
 
         // 加载保存的预选状态（此时可能为空）
         const savedSelection = Storage.loadSelectionState();
-        WORKFLOW_STATE.selectionState = {...WORKFLOW_STATE.selectionState, ...savedSelection};
+        WORKFLOW_STATE.selectionState = { ...WORKFLOW_STATE.selectionState, ...savedSelection };
 
         // 在 baseInit 中，找到 Storage.init 调用之后（约第9800行）
         try {
             await Storage.init();
         } catch (e) {
             console.error('[Storage] 初始化失败，但仍尝试继续', e);
-            HISTORY_CACHE = {chapters: [], lastUpdate: Date.now()};
+            HISTORY_CACHE = { chapters: [], lastUpdate: Date.now() };
         }
 
         // ===== 新增：加载映射表 =====
         try {
             await MappingManager.loadAll();
-            console.log('[baseInit] 映射表加载完成');
+
         } catch (e) {
             console.error('[baseInit] 加载映射表失败', e);
         }
@@ -29184,7 +29644,7 @@
         UI.createFloatButton();
         localStorage.removeItem(CONFIG.SETTINGS_KEY);  // 清除保存的设置
 
-        Notify.success(`${CONFIG.NAME} v${CONFIG.VERSION} 已加载，请先加载配置文件`, '', {timeOut: 2000});
+        Notify.success(`${CONFIG.NAME} v${CONFIG.VERSION} 已加载，请先加载配置文件`, '', { timeOut: 2000 });
     }
 
     if (!window.__novelCreatorInit) {
