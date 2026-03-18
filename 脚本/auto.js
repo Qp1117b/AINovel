@@ -3175,16 +3175,21 @@
      * @returns {Promise<{ok: boolean, error?: string}>}
      */
     async function testAPIConnection(config) {
-        const {type, source, apiUrl, key, model, timeout = 10000} = config;
+        // [DEBUG] 添加调试日志
+        console.debug(`[DEBUG][testAPIConnection] 开始测试: type=${config.type}, source=${config.source}, url=${config.apiUrl}, model=${config.model}`);
+
+        const { type, source, apiUrl, key, model } = config;
         const url = apiUrl.replace(/\/+$/, ''); // 去除末尾多余的斜杠
 
-        console.debug(`[testAPIConnection] 开始测试: type=${type}, source=${source}, url=${url}, model=${model}`);
+        // 连通性测试使用固定10秒超时
+        const testTimeout = 10000;
+        console.debug(`[DEBUG][testAPIConnection] 测试超时: ${testTimeout}ms`);
 
         // 检查密钥是否包含非ASCII字符（中文等）
         if (/[^\x00-\x7F]/.test(key)) {
             const errorMsg = 'API密钥包含非ASCII字符（如中文），请使用有效的密钥';
-            console.error(`[testAPIConnection] ${errorMsg}`);
-            return {ok: false, error: errorMsg};
+            console.error(`[DEBUG][testAPIConnection] ${errorMsg}`);
+            return { ok: false, error: errorMsg };
         }
 
         // ========== 文本平台 ==========
@@ -3197,25 +3202,26 @@
                     const testUrl = url + '/api/gemini';
                     const testBody = {
                         contents: [{
-                            parts: [{text: "test"}]
+                            parts: [{ text: "test" }]
                         }]
                     };
 
                     const options = {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(testBody),
-                        signal: AbortSignal.timeout(timeout),
+                        signal: AbortSignal.timeout(testTimeout),
                     };
                     try {
                         const response = await fetch(testUrl, options);
-                        if (response.ok) return {ok: true};
+                        if (response.ok) return { ok: true };
                         else {
                             const errorText = await response.text();
-                            return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                            return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                         }
                     } catch (err) {
-                        return {ok: false, error: err.message};
+                        console.error(`[DEBUG][testAPIConnection] Gemini代理请求失败:`, err);
+                        return { ok: false, error: err.message };
                     }
                 } else {
                     // 原生模式：使用 GET /v1beta/models 测试
@@ -3224,16 +3230,17 @@
                     try {
                         const response = await fetch(modelsUrl, {
                             method: 'GET',
-                            headers: {'Content-Type': 'application/json'},
-                            signal: AbortSignal.timeout(timeout),
+                            headers: { 'Content-Type': 'application/json' },
+                            signal: AbortSignal.timeout(testTimeout),
                         });
-                        if (response.ok) return {ok: true};
+                        if (response.ok) return { ok: true };
                         else {
                             const errorText = await response.text();
-                            return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                            return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                         }
                     } catch (err) {
-                        return {ok: false, error: err.message};
+                        console.error(`[DEBUG][testAPIConnection] Gemini原生请求失败:`, err);
+                        return { ok: false, error: err.message };
                     }
                 }
             }
@@ -3243,7 +3250,7 @@
                 // 文心一言的测试：直接发送一个最小对话请求
                 const testUrl = url; // 假设 url 已经是完整的 chat/completions 地址
                 const testBody = {
-                    messages: [{role: "user", content: "hi"}],
+                    messages: [{ role: "user", content: "hi" }],
                     max_tokens: 1
                 };
 
@@ -3254,18 +3261,19 @@
                         'Authorization': `Bearer ${key}`
                     },
                     body: JSON.stringify(testBody),
-                    signal: AbortSignal.timeout(timeout),
+                    signal: AbortSignal.timeout(testTimeout),
                 };
                 try {
                     const response = await fetch(testUrl, options);
                     // 只要能收到响应（即使因为 max_tokens 太小而失败，也算连通）
-                    if (response.status < 500) return {ok: true};
+                    if (response.status < 500) return { ok: true };
                     else {
                         const errorText = await response.text();
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                     }
                 } catch (err) {
-                    return {ok: false, error: err.message};
+                    console.error(`[DEBUG][testAPIConnection] 文心一言请求失败:`, err);
+                    return { ok: false, error: err.message };
                 }
             }
 
@@ -3278,20 +3286,20 @@
                     'Authorization': `Bearer ${key}`,
                     'Content-Type': 'application/json',
                 },
-                signal: AbortSignal.timeout(timeout),
+                signal: AbortSignal.timeout(testTimeout),
             };
             try {
                 const response = await fetch(modelsUrl, options);
                 if (response.ok) {
-                    return {ok: true};
+                    return { ok: true };
                 } else {
                     const errorText = await response.text();
-                    console.error(`[testAPIConnection][text] 响应错误文本:`, errorText);
-                    return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                    console.error(`[DEBUG][testAPIConnection][text] 响应错误文本:`, errorText);
+                    return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                 }
             } catch (err) {
-                console.error(`[testAPIConnection][text] 请求异常:`, err);
-                return {ok: false, error: err.message};
+                console.error(`[DEBUG][testAPIConnection][text] 请求异常:`, err);
+                return { ok: false, error: err.message };
             }
         }
 
@@ -3306,144 +3314,151 @@
                         'Authorization': `Bearer ${key}`,
                         'Content-Type': 'application/json',
                     },
-                    signal: AbortSignal.timeout(timeout),
+                    signal: AbortSignal.timeout(testTimeout),
                 };
                 try {
                     const response = await fetch(modelsUrl, options);
-                    if (response.ok) return {ok: true};
+                    if (response.ok) return { ok: true };
                     else {
                         const errorText = await response.text();
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                     }
                 } catch (err) {
-                    return {ok: false, error: err.message};
+                    console.error(`[DEBUG][testAPIConnection] OpenAI图像测试失败:`, err);
+                    return { ok: false, error: err.message };
                 }
             } else if (source === 'stability') {
                 // Stability AI 测试：尝试 GET /user/account
                 const accountUrl = url + '/user/account';
                 const options = {
                     method: 'GET',
-                    headers: {'Authorization': `Bearer ${key}`},
-                    signal: AbortSignal.timeout(timeout),
+                    headers: { 'Authorization': `Bearer ${key}` },
+                    signal: AbortSignal.timeout(testTimeout),
                 };
                 try {
                     const response = await fetch(accountUrl, options);
-                    if (response.ok) return {ok: true};
+                    if (response.ok) return { ok: true };
                     else {
                         const errorText = await response.text();
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                     }
                 } catch (err) {
-                    return {ok: false, error: err.message};
+                    console.error(`[DEBUG][testAPIConnection] Stability测试失败:`, err);
+                    return { ok: false, error: err.message };
                 }
             } else if (source === 'midjourney') {
                 // Midjourney 测试：尝试 GET /mj/ping（假设有此端点）
                 const pingUrl = url + '/mj/ping';
                 const options = {
                     method: 'GET',
-                    headers: {'Authorization': `Bearer ${key}`},
-                    signal: AbortSignal.timeout(timeout),
+                    headers: { 'Authorization': `Bearer ${key}` },
+                    signal: AbortSignal.timeout(testTimeout),
                 };
                 try {
                     const response = await fetch(pingUrl, options);
-                    if (response.ok) return {ok: true};
+                    if (response.ok) return { ok: true };
                     else {
                         const errorText = await response.text();
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                     }
                 } catch (err) {
                     console.warn('[testAPIConnection][midjourney] ping 失败，尝试轻量任务...');
-                    return {ok: false, error: `无法验证 Midjourney 连通性: ${err.message}`};
+                    return { ok: false, error: `无法验证 Midjourney 连通性: ${err.message}` };
                 }
             } else if (source === 'flux') {
                 // Flux 测试：尝试 GET /models（假设兼容 OpenAI）
                 const modelsUrl = url + '/models';
                 const options = {
                     method: 'GET',
-                    headers: {'Authorization': `Bearer ${key}`},
-                    signal: AbortSignal.timeout(timeout),
+                    headers: { 'Authorization': `Bearer ${key}` },
+                    signal: AbortSignal.timeout(testTimeout),
                 };
                 try {
                     const response = await fetch(modelsUrl, options);
-                    if (response.ok) return {ok: true};
+                    if (response.ok) return { ok: true };
                     else {
                         const errorText = await response.text();
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                     }
                 } catch (err) {
-                    return {ok: false, error: err.message};
+                    console.error(`[DEBUG][testAPIConnection] Flux测试失败:`, err);
+                    return { ok: false, error: err.message };
                 }
             } else if (source === 'picsart') {
                 // Picsart 测试：尝试 GET /health（假设）
                 const healthUrl = url + '/health';
                 const options = {
                     method: 'GET',
-                    headers: {'Authorization': `Bearer ${key}`},
-                    signal: AbortSignal.timeout(timeout),
+                    headers: { 'Authorization': `Bearer ${key}` },
+                    signal: AbortSignal.timeout(testTimeout),
                 };
                 try {
                     const response = await fetch(healthUrl, options);
-                    if (response.ok) return {ok: true};
+                    if (response.ok) return { ok: true };
                     else {
                         const errorText = await response.text();
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                     }
                 } catch (err) {
-                    return {ok: false, error: err.message};
+                    console.error(`[DEBUG][testAPIConnection] Picsart测试失败:`, err);
+                    return { ok: false, error: err.message };
                 }
             } else if (source === 'siliconflow') {
                 // SiliconFlow 图像：尝试 GET /models（假设兼容 OpenAI）
                 const modelsUrl = url + '/models';
                 const options = {
                     method: 'GET',
-                    headers: {'Authorization': `Bearer ${key}`},
-                    signal: AbortSignal.timeout(timeout),
+                    headers: { 'Authorization': `Bearer ${key}` },
+                    signal: AbortSignal.timeout(testTimeout),
                 };
                 try {
                     const response = await fetch(modelsUrl, options);
-                    if (response.ok) return {ok: true};
+                    if (response.ok) return { ok: true };
                     else {
                         const errorText = await response.text();
-                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                     }
                 } catch (err) {
-                    return {ok: false, error: err.message};
+                    console.error(`[DEBUG][testAPIConnection] SiliconFlow图像测试失败:`, err);
+                    return { ok: false, error: err.message };
                 }
             } else if (source === 'sdwebui') {
                 // Stable Diffusion WebUI 测试：尝试 GET /sdapi/v1/sd-models
                 const testUrl = url + '/sdapi/v1/sd-models';
                 const options = {
                     method: 'GET',
-                    signal: AbortSignal.timeout(timeout),
+                    signal: AbortSignal.timeout(testTimeout),
                 };
                 try {
                     const response = await fetch(testUrl, options);
-                    if (response.ok) return {ok: true};
+                    if (response.ok) return { ok: true };
                     else {
                         const errorText = await response.text();
-                        return {ok: false, error: `SD WebUI 未正确响应 (${response.status}): ${errorText}`};
+                        return { ok: false, error: `SD WebUI 未正确响应 (${response.status}): ${errorText}` };
                     }
                 } catch (err) {
-                    return {ok: false, error: `无法连接到 SD WebUI: ${err.message}`};
+                    console.error(`[DEBUG][testAPIConnection] SD WebUI测试失败:`, err);
+                    return { ok: false, error: `无法连接到 SD WebUI: ${err.message}` };
                 }
             } else if (source === 'other') {
                 // 其他图像 API：尝试 OPTIONS 请求或简单 GET
                 try {
                     const response = await fetch(url, {
                         method: 'OPTIONS',
-                        signal: AbortSignal.timeout(timeout),
+                        signal: AbortSignal.timeout(testTimeout),
                     });
                     if (response.status < 500) {
-                        return {ok: true, warning: '仅验证了URL可达性，密钥有效性未确认'};
+                        return { ok: true, warning: '仅验证了URL可达性，密钥有效性未确认' };
                     } else {
                         const errorText = await response.text();
-                        return {ok: false, error: `OPTIONS 请求失败 (${response.status})`};
+                        return { ok: false, error: `OPTIONS 请求失败 (${response.status})` };
                     }
                 } catch (err) {
-                    return {ok: false, error: `无法验证图像API连通性，请手动检查URL和密钥。详细错误: ${err.message}`};
+                    console.error(`[DEBUG][testAPIConnection] other图像测试失败:`, err);
+                    return { ok: false, error: `无法验证图像API连通性，请手动检查URL和密钥。详细错误: ${err.message}` };
                 }
             } else {
-                return {ok: false, error: `不支持的图像平台: ${source}`};
+                return { ok: false, error: `不支持的图像平台: ${source}` };
             }
         }
 
@@ -3505,24 +3520,25 @@
             const options = {
                 method: method,
                 headers: headers,
-                signal: AbortSignal.timeout(timeout),
+                signal: AbortSignal.timeout(testTimeout),
             };
 
             try {
                 const startTime = Date.now();
                 const response = await fetch(testUrl, options);
                 if (response.ok) {
-                    return {ok: true};
+                    return { ok: true };
                 } else {
                     const errorText = await response.text();
-                    return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                    return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                 }
             } catch (err) {
-                return {ok: false, error: err.message};
+                console.error(`[DEBUG][testAPIConnection] 音频测试失败:`, err);
+                return { ok: false, error: err.message };
             }
         } else {
             console.error(`[testAPIConnection] 未知的 type: ${type}`);
-            return {ok: false, error: `未知的 type: ${type}`};
+            return { ok: false, error: `未知的 type: ${type}` };
         }
     }
 
@@ -8208,7 +8224,7 @@
                     errorDetail += `\nAPI配置：\n`;
                     errorDetail += `  平台：${error.apiConfig.source}\n`;
                     errorDetail += `  模型：${error.apiConfig.model}\n`;
-                    errorDetail += `  超时：${error.apiConfig.timeout || 60000}ms\n`;
+                    errorDetail += `  超时：${error.apiConfig.timeout || 3600000}ms\n`;
                 }
                 if (error.prompt) {
                     errorDetail += `\n提示词（前500字符）：\n${error.prompt}`;
@@ -9060,7 +9076,7 @@
                 };
 
 
-                // 超时保护：30秒后自动关闭（如果用户未交互）
+                // 超时保护
                 timeoutId = setTimeout(() => {
                     if (!resolved) {
                         console.warn('[UI.renderAndWaitForInteraction] 交互超时，自动关闭');
@@ -13388,7 +13404,7 @@
                     apiUrl: '',
                     key: '',
                     model: '',
-                    timeout: 60000,
+                    timeout: 3600000,
                 };
                 renderResourceLists(editor);
                 editor.selectApiConfig(apiId);
@@ -15236,7 +15252,7 @@
         </div>
         <div class="field-group" style="margin-bottom:16px;">
             <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">超时 (ms)</label>
-            <input type="number" id="api-timeout" class="field-input" value="${api.timeout || 60000}" min="1000" step="1000" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+            <input type="number" id="api-timeout" class="field-input" value="${api.timeout || 3600000}" min="1000" step="1000" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
         </div>
         <div class="field-group" style="margin-bottom:16px;">
             <div style="flex:1;">
@@ -15451,7 +15467,7 @@
             // URL 和密钥输入事件
             basicCard.querySelector('#api-url').addEventListener('input', e => updateField('apiUrl', e.target.value));
             basicCard.querySelector('#api-key').addEventListener('input', e => updateField('key', e.target.value));
-            basicCard.querySelector('#api-timeout')?.addEventListener('input', e => updateField('timeout', parseInt(e.target.value) || 60000));
+            basicCard.querySelector('#api-timeout')?.addEventListener('input', e => updateField('timeout', parseInt(e.target.value) || 3600000));
 
             // ---------- 渲染额外字段 ----------
             const renderExtraFields = () => {
@@ -15749,7 +15765,7 @@
                     apiUrl: basicCard.querySelector('#api-url').value,
                     key: basicCard.querySelector('#api-key').value,
                     model: modelInput.value,
-                    timeout: parseInt(basicCard.querySelector('#api-timeout')?.value) || 60000,
+                    timeout: parseInt(basicCard.querySelector('#api-timeout')?.value) || 3600000,
                 };
 
                 const result = await testAPIConnection(currentConfig);
@@ -22193,7 +22209,7 @@
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${config.key}`,
                 };
-                const timeout = config.timeout || 60000;
+                const timeout = config.timeout || 3600000;
 
                 // 构造请求体
                 let requestBody;
@@ -23475,7 +23491,7 @@
                 }
 
                 const config = CONFIG.apiConfigs[apiConfigId];
-                const {source, apiUrl, key, model, timeout = 60000} = config;
+                const {source, apiUrl, key, model, timeout = 3600000} = config;
                 const url = apiUrl.replace(/\/+$/, '');
 
                 // 构建组合信号（用于中断）
@@ -25568,7 +25584,7 @@
                         continue;
                     }
                     // 调用音频 API
-                    const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 60000));
+                    const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 3600000));
                     // 保存到 AudioStore
                     const audioId = await AudioStore.save(audioBlob);
                     // 保留 name 和 range，添加 id
@@ -25706,7 +25722,7 @@
                     // 合并参数：任务 params + 配置默认值 + 样本 Blob 和文本
                     const params = {...audioConfig, ...task.params, audioBlob: sampleBlob, text: task.text};
                     // 调用 API
-                    const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 60000));
+                    const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 3600000));
                     const audioId = await AudioStore.save(audioBlob);
                     processedTasks.push({
                         name: task.name || `语音-${task.sample_id}`,
@@ -25840,7 +25856,7 @@
                     // 合并参数
                     const params = {...audioConfig, ...task.params, sourceAudioBlob: sourceBlob};
                     // 调用 API
-                    const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 60000));
+                    const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 3600000));
                     const audioId = await AudioStore.save(audioBlob);
                     processedTasks.push({
                         name: task.name || '编辑后音频',
@@ -26374,7 +26390,7 @@
         async _callImageVariationAPI(config, sourceBlob, params) {
 
 
-            const {source, apiUrl, key, timeout = 120000} = config;
+            const {source, apiUrl, key, timeout = 3600000} = config;
             const url = apiUrl.replace(/\/+$/, '');
 
             // 构建组合信号（用于中断）
@@ -26957,7 +26973,7 @@
                 if (WORKFLOW_STATE.abortController) {
                     signals.push(WORKFLOW_STATE.abortController.signal);
                 }
-                signals.push(AbortSignal.timeout(imageConfig.timeout || 30000));
+                signals.push(AbortSignal.timeout(imageConfig.timeout || 3600000));
                 const combinedSignal = AbortSignal.any(signals);
 
 
@@ -27294,7 +27310,7 @@
                 if (WORKFLOW_STATE.abortController) {
                     signals.push(WORKFLOW_STATE.abortController.signal);
                 }
-                signals.push(AbortSignal.timeout(imageConfig.timeout || 30000));
+                signals.push(AbortSignal.timeout(imageConfig.timeout || 3600000));
                 const combinedSignal = AbortSignal.any(signals);
 
 
@@ -27539,7 +27555,7 @@
             if (WORKFLOW_STATE.abortController) {
                 signals.push(WORKFLOW_STATE.abortController.signal);
             }
-            signals.push(AbortSignal.timeout(mergedParams.timeout || 120000));
+            signals.push(AbortSignal.timeout(mergedParams.timeout || 3600000));
             const combinedSignal = AbortSignal.any(signals);
 
 
@@ -27644,7 +27660,7 @@
             if (WORKFLOW_STATE.abortController) {
                 signals.push(WORKFLOW_STATE.abortController.signal);
             }
-            signals.push(AbortSignal.timeout(imageConfig.timeout || 120000));
+            signals.push(AbortSignal.timeout(imageConfig.timeout || 3600000));
             const combinedSignal = AbortSignal.any(signals);
 
 
@@ -27721,7 +27737,7 @@
             if (WORKFLOW_STATE.abortController) {
                 signals.push(WORKFLOW_STATE.abortController.signal);
             }
-            signals.push(AbortSignal.timeout(imageConfig.timeout || 120000));
+            signals.push(AbortSignal.timeout(imageConfig.timeout || 3600000));
             const combinedSignal = AbortSignal.any(signals);
 
 
@@ -27927,7 +27943,7 @@
             const mergedParams = {...config, ...params};
 
 
-            const {source, apiUrl, key, model, timeout = 60000} = mergedParams;
+            const {source, apiUrl, key, model, timeout = 3600000} = mergedParams;
             const url = apiUrl.replace(/\/+$/, '');
 
             // 构建组合信号
@@ -29054,7 +29070,7 @@
 
         // 在 Workflow 对象内添加以下方法
         async _uploadFile(apiConfig, fileBlob, purpose = 'assistants') {
-            const {source, apiUrl, key, timeout = 60000} = apiConfig;
+            const {source, apiUrl, key, timeout = 3600000} = apiConfig;
             const url = apiUrl.replace(/\/+$/, '');
             const signals = [];
             if (WORKFLOW_STATE.abortController) signals.push(WORKFLOW_STATE.abortController.signal);
