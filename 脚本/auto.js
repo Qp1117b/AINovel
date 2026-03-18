@@ -3262,9 +3262,41 @@
         }
 
         if (type === 'text') {
-            // 文本平台统一测试 GET /models （用户已提供版本前缀，如 /v1）
-            const modelsUrl = url + '/models';
+            // ========== Gemini 特殊处理：通过代理 POST 测试 ==========
+            if (source === 'gemini') {
+                const testUrl = url + '/api/gemini'; // 假设代理端点为 /api/gemini
+                const testBody = {
+                    contents: [{
+                        parts: [{ text: "test" }]
+                    }]
+                };
+                console.log(`[testAPIConnection][gemini] 测试代理地址: ${testUrl}`);
 
+                const options = {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(testBody),
+                    signal: AbortSignal.timeout(timeout),
+                };
+
+                try {
+                    const response = await fetch(testUrl, options);
+                    if (response.ok) {
+                        return { ok: true };
+                    } else {
+                        const errorText = await response.text();
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                    }
+                } catch (err) {
+                    return { ok: false, error: err.message };
+                }
+            }
+
+            // 其他文本平台统一测试 GET /models （用户已提供版本前缀，如 /v1）
+            const modelsUrl = url + '/models';
+            console.log(`[testAPIConnection][text] 测试地址: ${modelsUrl}`);
 
             const options = {
                 method: 'GET',
@@ -3275,14 +3307,9 @@
                 signal: AbortSignal.timeout(timeout),
             };
 
-
             try {
-
                 const response = await fetch(modelsUrl, options);
-
-
                 if (response.ok) {
-
                     return { ok: true };
                 } else {
                     const errorText = await response.text();
@@ -3635,6 +3662,227 @@
         else {
             console.error(`[testAPIConnection] 未知的 type: ${type}`);
             return { ok: false, error: `未知的 type: ${type}` };
+        }
+    }
+
+    /**
+     * 根据 API 配置获取模型列表
+     * @param {Object} config - API 配置对象，包含 type, source, apiUrl, key 等
+     * @returns {Promise<Array<{id: string, description: string}>>}
+     */
+    async function fetchModelList(config) {
+        const { type, source, apiUrl, key } = config;
+        if (!apiUrl || !key) {
+            throw new Error('请先填写 API URL 和密钥');
+        }
+        const url = apiUrl.replace(/\/+$/, ''); // 去除末尾多余的斜杠
+
+        console.log(`[fetchModelList] 开始获取模型列表: type=${type}, source=${source}, url=${url}`);
+
+        try {
+            // ---------- 文本平台 ----------
+            if (type === 'text') {
+                // Gemini
+                if (source === 'gemini') {
+                    const response = await fetch(`${url}/v1beta/models?key=${key}`, {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Gemini API 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    // Gemini 返回格式: { models: [{ name: "models/gemini-1.5-flash", description: "...", ... }] }
+                    return data.models.map(m => ({
+                        id: m.name.replace('models/', ''),
+                        description: m.description || m.displayName || ''
+                    }));
+                }
+
+                // OpenAI 兼容平台 (包括 deepseek, siliconflow, qwen, wenxin, glm, mistral, groq, inference, openrouter, 4sapi, other)
+                if (['openai', 'deepseek', 'siliconflow', 'qwen', 'wenxin', 'glm', 'mistral', 'groq', 'inference', 'openrouter', '4sapi', 'other'].includes(source)) {
+                    const response = await fetch(`${url}/models`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${key}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`OpenAI 兼容 API 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    // 常见格式: { data: [{ id: "gpt-4", ... }] }
+                    if (data.data && Array.isArray(data.data)) {
+                        return data.data.map(m => ({ id: m.id, description: m.description || '' }));
+                    } else if (Array.isArray(data)) {
+                        // 某些平台直接返回数组
+                        return data.map(m => ({ id: m.id || m, description: '' }));
+                    } else {
+                        throw new Error('无法解析响应格式');
+                    }
+                }
+
+                // Claude
+                if (source === 'claude') {
+                    const response = await fetch(`${url}/models`, {
+                        method: 'GET',
+                        headers: {
+                            'x-api-key': key,
+                            'anthropic-version': '2023-06-01',
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Claude API 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    // Claude 格式: { data: [{ id: "claude-3-opus-20240229", display_name: ... }] }
+                    return data.data.map(m => ({
+                        id: m.id,
+                        description: m.display_name || ''
+                    }));
+                }
+
+                // 豆包 (特殊处理：不支持自动获取)
+                if (source === 'doubao') {
+                    throw new Error('豆包平台不支持自动获取模型列表，请手动输入接入点ID (Endpoint ID)');
+                }
+
+                // 其他未列出的文本平台
+                throw new Error(`文本平台 ${source} 暂不支持自动获取模型列表`);
+            }
+
+            // ---------- 图像平台 ----------
+            else if (type === 'image') {
+                // OpenAI 兼容图像平台 (openai, siliconflow, flux, other)
+                if (['openai', 'siliconflow', 'flux', 'other'].includes(source)) {
+                    const response = await fetch(`${url}/models`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${key}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`图像 API 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    if (data.data && Array.isArray(data.data)) {
+                        return data.data.map(m => ({ id: m.id, description: '' }));
+                    } else if (Array.isArray(data)) {
+                        return data.map(m => ({ id: m.id || m, description: '' }));
+                    } else {
+                        throw new Error('无法解析响应格式');
+                    }
+                }
+
+                // Stability AI
+                if (source === 'stability') {
+                    // 获取可用引擎：GET /v2beta/engines
+                    const response = await fetch(`${url}/engines`, {
+                        method: 'GET',
+                        headers: { 'Authorization': `Bearer ${key}` }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Stability AI 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    // 返回格式: [{ id: "stable-diffusion-xl-1024-v1-0", description: "..." }]
+                    return data.map(e => ({ id: e.id, description: e.description || '' }));
+                }
+
+                // SD WebUI
+                if (source === 'sdwebui') {
+                    const response = await fetch(`${url}/sdapi/v1/sd-models`, {
+                        method: 'GET',
+                        headers: {}
+                    });
+                    if (!response.ok) {
+                        throw new Error(`SD WebUI 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    // 返回格式: [{ model_name: "v1-5-pruned-emaonly", ... }]
+                    return data.map(m => ({ id: m.model_name || m.title, description: '' }));
+                }
+
+                throw new Error(`图像平台 ${source} 暂不支持自动获取模型列表`);
+            }
+
+            // ---------- 音频平台 ----------
+            else if (type === 'audio') {
+                // ElevenLabs
+                if (source === 'elevenlabs') {
+                    const response = await fetch(`${url}/voices`, {
+                        method: 'GET',
+                        headers: { 'xi-api-key': key }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`ElevenLabs 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    // 返回格式: { voices: [{ voice_id: "...", name: "..." }] }
+                    return data.voices.map(v => ({ id: v.voice_id, description: v.name }));
+                }
+
+                // OpenAI TTS / SiliconFlow (兼容 OpenAI 格式)
+                if (source === 'openai-tts' || source === 'siliconflow') {
+                    const response = await fetch(`${url}/models`, {
+                        method: 'GET',
+                        headers: { 'Authorization': `Bearer ${key}` }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`TTS API 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    if (data.data && Array.isArray(data.data)) {
+                        return data.data.map(m => ({ id: m.id, description: '' }));
+                    } else {
+                        throw new Error('无法解析响应格式');
+                    }
+                }
+
+                // Azure TTS
+                if (source === 'azure-tts') {
+                    const response = await fetch(`${url}/cognitiveservices/voices/list`, {
+                        method: 'GET',
+                        headers: { 'Ocp-Apim-Subscription-Key': key }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Azure TTS 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    // 返回格式: [{ ShortName: "zh-CN-XiaoxiaoNeural", FriendlyName: "..." }]
+                    return data.map(v => ({ id: v.ShortName, description: v.FriendlyName }));
+                }
+
+                // Google TTS
+                if (source === 'google-tts') {
+                    const response = await fetch(`${url}/voices?key=${key}`, {
+                        method: 'GET',
+                        headers: {}
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Google TTS 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    // 返回格式: { voices: [{ name: "en-US-Wavenet-D", ssmlGender: "FEMALE", languageCodes: [...] }] }
+                    return data.voices.map(v => ({
+                        id: v.name,
+                        description: `${v.ssmlGender || ''} - ${v.languageCodes?.join(', ') || ''}`
+                    }));
+                }
+
+                throw new Error(`音频平台 ${source} 暂不支持自动获取模型列表`);
+            }
+
+            // ---------- 未知类型 ----------
+            else {
+                throw new Error(`不支持的类型: ${type}`);
+            }
+        } catch (error) {
+            console.error('[fetchModelList] 获取失败:', error);
+            throw error; // 向上层传递错误
         }
     }
 
@@ -5770,7 +6018,7 @@
     const UI = {
 
         customStyleElement: null,
-        apiCheckInterval: null,
+        // apiCheckInterval: null,
         _showAgentStatusDetailTimeout: null,
         _lastAgentKey: null,
 
@@ -6404,11 +6652,10 @@
             ModalStack._stack = [];  // 直接清空栈
 
             // 清除API监控定时器
-            if (UI.apiCheckInterval) {
-                clearInterval(UI.apiCheckInterval);
-                UI.apiCheckInterval = null;
-
-            }
+            // if (UI.apiCheckInterval) {
+            //     clearInterval(UI.apiCheckInterval);
+            //     UI.apiCheckInterval = null;
+            // }
         },
 
         createFloatButton() {
@@ -6578,62 +6825,62 @@
             });
 
             // ===== 新增：启动API状态定时检查（每30秒） =====
-            if (UI.apiCheckInterval) clearInterval(UI.apiCheckInterval);
-            UI.apiCheckInterval = setInterval(async () => {
+            // if (UI.apiCheckInterval) clearInterval(UI.apiCheckInterval);
+            // UI.apiCheckInterval = setInterval(async () => {
 
-                if (!document.getElementById(CONFIG.UI.panelId)) {
+            //     if (!document.getElementById(CONFIG.UI.panelId)) {
 
-                    return;
-                }
+            //         return;
+            //     }
 
-                const apiConfigs = CONFIG.apiConfigs || {};
-                if (Object.keys(apiConfigs).length === 0) {
+            //     const apiConfigs = CONFIG.apiConfigs || {};
+            //     if (Object.keys(apiConfigs).length === 0) {
 
-                    return;
-                }
+            //         return;
+            //     }
 
-                const newStatus = {};
-                for (const [id, config] of Object.entries(apiConfigs)) {
+            //     const newStatus = {};
+            //     for (const [id, config] of Object.entries(apiConfigs)) {
 
-                    const result = await testAPIConnection(config);
-                    newStatus[id] = {
-                        ok: result.ok,
-                        error: result.error,
-                        lastTest: Date.now(),
-                    };
+            //         const result = await testAPIConnection(config);
+            //         newStatus[id] = {
+            //             ok: result.ok,
+            //             error: result.error,
+            //             lastTest: Date.now(),
+            //         };
 
-                }
-                WORKFLOW_STATE.apiStatus = newStatus;
+            //     }
+            //     WORKFLOW_STATE.apiStatus = newStatus;
 
-                const unavailable = Object.entries(newStatus).filter(([_, s]) => !s.ok).map(([id]) => id);
-                if (unavailable.length > 0) {
-                    console.warn('[API监控] 不可用API:', unavailable);
-                    if (WORKFLOW_STATE.isRunning) {
+            //     const unavailable = Object.entries(newStatus).filter(([_, s]) => !s.ok).map(([id]) => id);
+            //     if (unavailable.length > 0) {
+            //         console.warn('[API监控] 不可用API:', unavailable);
+            //         if (WORKFLOW_STATE.isRunning) {
 
-                        Workflow.stop();
-                        UI.updateProgress(`❌ API连接丢失 (${unavailable.join(', ')})，工作流已中断`, true);
-                        Notify.error(`API连接丢失 (${unavailable.join(', ')})，工作流已中断`);
-                    } else {
-                        const startBtn = document.getElementById('nc-start-btn');
-                        if (startBtn) {
-                            startBtn.disabled = true;
-                            startBtn.title = `API不可用: ${unavailable.join(', ')}`;
-                        }
-                        UI.updateProgress(`⚠️ API连接异常 (${unavailable.join(', ')})，请检查后重试`, true);
-                    }
-                } else {
+            //             Workflow.stop();
+            //             UI.updateProgress(`❌ API连接丢失 (${unavailable.join(', ')})，工作流已中断`, true);
+            //             Notify.error(`API连接丢失 (${unavailable.join(', ')})，工作流已中断`);
+            //         } else {
+            //             const startBtn = document.getElementById('nc-start-btn');
+            //             if (startBtn) {
+            //                 startBtn.disabled = true;
+            //                 startBtn.title = `API不可用: ${unavailable.join(', ')}`;
+            //             }
+            //             UI.updateProgress(`⚠️ API连接异常 (${unavailable.join(', ')})，请检查后重试`, true);
+            //         }
+            //     } else {
 
-                    if (!WORKFLOW_STATE.isRunning) {
-                        const startBtn = document.getElementById('nc-start-btn');
-                        if (startBtn) {
-                            startBtn.disabled = false;
-                            startBtn.title = '';
-                        }
-                    }
-                }
+            //         if (!WORKFLOW_STATE.isRunning) {
+            //             const startBtn = document.getElementById('nc-start-btn');
+            //             if (startBtn) {
+            //                 startBtn.disabled = false;
+            //                 startBtn.title = '';
+            //             }
+            //         }
+            //     }
 
-                UI._renderAPIStatus(panel);
-            }, 300000);
+            //     UI._renderAPIStatus(panel);
+            // }, 300000);
             // ===== 结束新增 =====
 
             // 渲染完成后，检查是否处于等待输入状态，并更新按钮
@@ -15403,14 +15650,13 @@
         }
 
         _renderApiProperties(apiId) {
-
+            console.log(`[ConfigEditor._renderApiProperties] 渲染 API: ${apiId}`);
 
             const api = this.config.apiConfigs[apiId];
             if (!api) {
                 console.error(`[ConfigEditor._renderApiProperties] API ${apiId} 不存在`);
                 return;
             }
-
 
             const panel = this.propertyPanel;
             panel.innerHTML = '';
@@ -15425,7 +15671,9 @@
             basicCard.className = 'property-section';
             basicCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             basicCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🔌 API 配置: ${this._escapeHtml(apiId)}</div>
+        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">
+            🔌 API 配置: ${this._escapeHtml(apiId)}
+        </div>
         <div class="field-group" style="margin-bottom:16px;">
             <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">类型</label>
             <select id="api-type" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
@@ -15447,13 +15695,27 @@
             <input type="password" id="api-key" class="field-input" value="${api.key || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
         </div>
         <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">模型 (model)</label>
-            <input type="text" id="api-model" class="field-input" value="${api.model || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-        </div>
-        <div class="field-group" style="margin-bottom:16px;">
             <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">超时 (ms)</label>
             <input type="number" id="api-timeout" class="field-input" value="${api.timeout || 60000}" min="1000" step="1000" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
         </div>
+        <div class="field-group" style="margin-bottom:16px;">
+            <div style="flex:1;">
+                <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">模型 (model)</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="api-model" class="field-input" value="${api.model || ''}" placeholder="模型名称" style="flex:1; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                    <button id="fetch-models-btn" class="btn-add" style="white-space:nowrap; background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;">🔄 获取模型</button>
+                </div>
+            </div>
+        </div>
+        <div id="model-select-container" style="display:none; margin-bottom:16px;">
+            <select id="model-select" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                <option value="">选择模型</option>
+            </select>
+            <div style="margin-top:4px; text-align:right;">
+                <span id="back-to-manual" style="color:#667eea; font-size:12px; cursor:pointer;">返回手动输入</span>
+            </div>
+        </div>
+        <div id="model-tip" style="font-size:12px; color:#ffaa00; margin-top:4px;"></div>
     `;
             container.appendChild(basicCard);
 
@@ -15476,18 +15738,11 @@
 
             panel.appendChild(container);
 
-            // ---------- 辅助函数：获取当前不可用的 mode 集合 ----------
-            const getUnavailableModes = (type, modeField = 'mode') => {
-                const unavailable = new Set();
-                const currentConfigs = this.config.apiConfigs || {};
-                const entries = Object.entries(currentConfigs);
-                for (const [id, cfg] of entries) {
-                    if (id === apiId) continue;
-                    if (cfg.type === type && cfg[modeField]) {
-                        unavailable.add(cfg[modeField]);
-                    }
-                }
-                return unavailable;
+            // ==================== 辅助函数 ====================
+            const updateField = (field, value) => {
+                console.log(`[API属性] 更新 ${field} =`, value);
+                this.config.apiConfigs[apiId][field] = value;
+                if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
             };
 
             // ---------- 更新 source 下拉选项 ----------
@@ -15501,11 +15756,161 @@
                 };
                 const availableSources = sources[type] || [];
                 sourceSelect.innerHTML = availableSources.map(s => `<option value="${s}" ${api.source === s ? 'selected' : ''}>${s}</option>`).join('');
-
             };
             updateSourceOptions(api.type);
 
-            // ---------- 渲染额外字段（包含所有参数）----------
+            // ---------- 默认 API URL 映射 ----------
+            const defaultApiUrls = {
+                // 文本平台
+                'openai': 'https://api.openai.com/v1',
+                'gemini': 'https://generativelanguage.googleapis.com',
+                'claude': 'https://api.anthropic.com/v1',
+                'deepseek': 'https://api.deepseek.com/v1',
+                'siliconflow': 'https://api.siliconflow.cn/v1',
+                'qwen': 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                'doubao': 'https://ark.cn-beijing.volces.com/api/v3',
+                'wenxin': 'https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions',
+                'glm': 'https://open.bigmodel.cn/api/paas/v4',
+                'mistral': 'https://api.mistral.ai/v1',
+                'huggingface': 'https://api-inference.huggingface.co',
+                'groq': 'https://api.groq.com/openai/v1',
+                'inference': 'https://api.inference.net/v1',
+                'openrouter': 'https://openrouter.ai/api/v1',
+                '4sapi': 'https://api.4sapi.com/v1',
+                'other': '',
+                // 图像平台
+                'stability': 'https://api.stability.ai/v2beta',
+                'midjourney': 'https://api.midjourney.com/v1',
+                'sora': 'https://api.sora.com/v1',
+                'flux': 'https://api.flux.ai/v1',
+                'picsart': 'https://api.picsart.io/v1',
+                'sdwebui': 'http://127.0.0.1:7860',
+                // 音频平台
+                'elevenlabs': 'https://api.elevenlabs.io/v1',
+                'stableaudio': 'https://api.stableaudio.com/v1beta',
+                'openai-tts': 'https://api.openai.com/v1',
+                'azure-tts': 'https://YOUR_REGION.tts.speech.microsoft.com/cognitiveservices',
+                'google-tts': 'https://texttospeech.googleapis.com/v1',
+                'custom': '',
+            };
+
+            // ---------- 获取模型列表按钮逻辑 ----------
+            const fetchBtn = basicCard.querySelector('#fetch-models-btn');
+            const modelInput = basicCard.querySelector('#api-model');
+            const modelSelectContainer = basicCard.querySelector('#model-select-container');
+            const modelSelect = basicCard.querySelector('#model-select');
+            const backToManual = basicCard.querySelector('#back-to-manual');
+            const modelTip = basicCard.querySelector('#model-tip');
+
+            fetchBtn.addEventListener('click', async () => {
+                const currentConfig = {
+                    type: typeSelect.value,
+                    source: sourceSelect.value,
+                    apiUrl: basicCard.querySelector('#api-url').value,
+                    key: basicCard.querySelector('#api-key').value,
+                };
+
+                if (!currentConfig.apiUrl || !currentConfig.key) {
+                    Notify.error('请先填写 API URL 和密钥');
+                    return;
+                }
+
+                fetchBtn.disabled = true;
+                fetchBtn.textContent = '获取中...';
+                modelTip.textContent = '';
+
+                try {
+                    // 调用全局 fetchModelList 函数（需在外部定义）
+                    const models = await fetchModelList(currentConfig);
+                    if (models && models.length > 0) {
+                        modelSelect.innerHTML = '<option value="">选择模型</option>' +
+                            models.map(m => `<option value="${m.id}">${m.id}${m.description ? ' - ' + m.description : ''}</option>`).join('');
+                        modelSelectContainer.style.display = 'block';
+                        modelInput.style.display = 'none';
+
+                        // 如果当前已有模型值，尝试预选
+                        if (modelInput.value) {
+                            const option = Array.from(modelSelect.options).find(opt => opt.value === modelInput.value);
+                            if (option) option.selected = true;
+                        }
+                        Notify.success(`获取到 ${models.length} 个模型`);
+                    } else {
+                        modelTip.textContent = '未获取到模型列表，请手动输入';
+                    }
+                } catch (err) {
+                    console.error('[获取模型] 失败:', err);
+                    modelTip.textContent = `❌ ${err.message}`;
+                } finally {
+                    fetchBtn.disabled = false;
+                    fetchBtn.textContent = '🔄 获取模型';
+                }
+            });
+
+            // 下拉框选择事件
+            modelSelect.addEventListener('change', () => {
+                if (modelSelect.value) {
+                    modelInput.value = modelSelect.value;
+                    updateField('model', modelSelect.value);
+                }
+            });
+
+            // 返回手动输入
+            backToManual.addEventListener('click', () => {
+                modelSelectContainer.style.display = 'none';
+                modelInput.style.display = 'block';
+            });
+
+            // 用户手动修改输入框时，同步更新
+            modelInput.addEventListener('input', () => {
+                updateField('model', modelInput.value);
+            });
+
+            // ---------- 绑定基础字段事件 ----------
+            // 类型改变
+            typeSelect.addEventListener('change', e => {
+                const newType = e.target.value;
+                const oldType = api.type;
+                // 图像配置唯一性检查
+                if (newType === 'image' && oldType !== 'image') {
+                    const hasOtherImage = Object.values(this.config.apiConfigs || {}).some(cfg => cfg.type === 'image' && cfg !== api);
+                    if (hasOtherImage) {
+                        Notify.error('已存在图像配置，无法添加第二个图像配置');
+                        typeSelect.value = oldType;
+                        return;
+                    }
+                }
+                updateField('type', newType);
+                updateSourceOptions(newType);
+                renderExtraFields();
+            });
+
+            // 平台改变 - 【修改点】始终填充默认 apiUrl，无论当前是否有值
+            sourceSelect.addEventListener('change', e => {
+                const newSource = e.target.value;
+                updateField('source', newSource);
+                // 自动填充默认 apiUrl（始终覆盖，确保切换后立即更新）
+                const apiUrlInput = basicCard.querySelector('#api-url');
+                if (apiUrlInput && defaultApiUrls[newSource]) {
+                    apiUrlInput.value = defaultApiUrls[newSource];
+                    updateField('apiUrl', defaultApiUrls[newSource]);
+                }
+                renderExtraFields();
+            });
+
+            // 【关键修复】初始化时根据当前 source 自动填充 apiUrl（如果为空）
+            const initialSource = sourceSelect.value;
+            const apiUrlInput = basicCard.querySelector('#api-url');
+            if (apiUrlInput && defaultApiUrls[initialSource] && !apiUrlInput.value.trim()) {
+                apiUrlInput.value = defaultApiUrls[initialSource];
+                updateField('apiUrl', defaultApiUrls[initialSource]);
+            }
+
+            // URL 和密钥输入事件
+            basicCard.querySelector('#api-url').addEventListener('input', e => updateField('apiUrl', e.target.value));
+            basicCard.querySelector('#api-key').addEventListener('input', e => updateField('key', e.target.value));
+            basicCard.querySelector('#api-timeout')?.addEventListener('input', e => updateField('timeout', parseInt(e.target.value) || 60000));
+
+            // ---------- 渲染额外字段 ----------
             const renderExtraFields = () => {
                 const extraContainer = panel.querySelector('#api-extra-fields');
                 const currentType = typeSelect.value;
@@ -15513,19 +15918,25 @@
                 let extraHTML = '';
 
                 if (currentType === 'image') {
-                    // 计算不可用的 image mode
-                    const unavailableModes = getUnavailableModes('image');
-                    const hasOtherImage = unavailableModes.size > 0;
+                    // 图像平台特有字段
+                    const unavailableModes = (() => {
+                        const set = new Set();
+                        const entries = Object.entries(this.config.apiConfigs || {});
+                        for (const [id, cfg] of entries) {
+                            if (id === apiId) continue;
+                            if (cfg.type === 'image' && cfg.mode) {
+                                set.add(cfg.mode);
+                            }
+                        }
+                        return set;
+                    })();
                     const imageModes = ['txt2img', 'img2img', 'fusion'];
                     const modeOptions = imageModes.map(mode => {
-                        const disabled = (hasOtherImage && mode !== api.mode) ? 'disabled' : '';
-                        const title = hasOtherImage ? (mode !== api.mode ? '已有其他图像配置，不可更改' : '') : '';
+                        const disabled = (unavailableModes.has(mode) && mode !== api.mode) ? 'disabled' : '';
+                        const title = unavailableModes.has(mode) && mode !== api.mode ? '已有其他图像配置，不可更改' : '';
                         return `<option value="${mode}" ${api.mode === mode ? 'selected' : ''} ${disabled} title="${title}">${mode}</option>`;
                     }).join('');
-
-                    // 常见采样器列表（可从 SD WebUI 动态获取，但这里先提供静态）
                     const samplers = ['DPM++ 2M Karras', 'DPM++ SDE Karras', 'DPM++ 2M SDE', 'Euler a', 'Euler', 'LMS', 'Heun', 'DPM2', 'DPM2 a', 'DPM++ 2S a', 'DPM++ 2M SDE Karras', 'DPM++ 2M SDE Exponential', 'DPM++ 3M SDE', 'DPM++ 3M SDE Karras', 'DPM++ 3M SDE Exponential'];
-
                     extraHTML = `
                 <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🖼️ 图像参数</div>
                 <div class="field-group" style="margin-bottom:16px;">
@@ -15533,7 +15944,7 @@
                     <select id="api-image-mode" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
                         ${modeOptions}
                     </select>
-                    ${hasOtherImage ? '<div style="color:#ffaa00; font-size:12px; margin-top:4px;">⚠️ 已存在其他图像配置，无法修改 mode</div>' : ''}
+                    ${unavailableModes.size > 0 ? '<div style="color:#ffaa00; font-size:12px; margin-top:4px;">⚠️ 已存在其他图像配置，无法修改 mode</div>' : ''}
                 </div>
                 <div class="field-group" style="margin-bottom:16px;">
                     <label class="field-label">尺寸 (size)</label>
@@ -15580,15 +15991,24 @@
                 </div>
             `;
                 } else if (currentType === 'audio') {
-                    // 计算不可用的 audio mode
-                    const unavailableModes = getUnavailableModes('audio');
+                    // 音频平台特有字段
+                    const unavailableModes = (() => {
+                        const set = new Set();
+                        const entries = Object.entries(this.config.apiConfigs || {});
+                        for (const [id, cfg] of entries) {
+                            if (id === apiId) continue;
+                            if (cfg.type === 'audio' && cfg.mode) {
+                                set.add(cfg.mode);
+                            }
+                        }
+                        return set;
+                    })();
                     const audioModes = ['music-generation', 'voice-cloning', 'audio-editing'];
                     const modeOptions = audioModes.map(mode => {
                         const disabled = (unavailableModes.has(mode) && mode !== api.mode) ? 'disabled' : '';
                         const title = unavailableModes.has(mode) && mode !== api.mode ? '该模式已存在其他配置' : '';
                         return `<option value="${mode}" ${api.mode === mode ? 'selected' : ''} ${disabled} title="${title}">${mode}</option>`;
                     }).join('');
-
                     extraHTML = `
                 <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🎵 音频参数</div>
                 <div class="field-group" style="margin-bottom:16px;">
@@ -15689,51 +16109,10 @@
                 </div>
             `;
                 }
-
                 extraContainer.innerHTML = extraHTML;
 
-            };
-            renderExtraFields();
-
-            // ---------- 绑定事件 ----------
-            const updateField = (field, value) => {
-
-                this.config.apiConfigs[apiId][field] = value;
-                if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
-            };
-
-            // 类型改变
-            typeSelect.addEventListener('change', e => {
-                const newType = e.target.value;
-                const oldType = api.type;
-                if (newType === 'image' && oldType !== 'image') {
-                    const hasOtherImage = Object.values(this.config.apiConfigs || {}).some(cfg => cfg.type === 'image' && cfg !== api);
-                    if (hasOtherImage) {
-                        Notify.error('已存在图像配置，无法添加第二个图像配置');
-                        typeSelect.value = oldType;
-                        return;
-                    }
-                }
-                updateField('type', newType);
-                updateSourceOptions(newType);
-                renderExtraFields();
-            });
-
-            // source 改变
-            sourceSelect.addEventListener('change', e => {
-                updateField('source', e.target.value);
-                renderExtraFields();
-            });
-
-            // 基础字段
-            basicCard.querySelector('#api-url').addEventListener('input', e => updateField('apiUrl', e.target.value));
-            basicCard.querySelector('#api-key').addEventListener('input', e => updateField('key', e.target.value));
-            basicCard.querySelector('#api-model').addEventListener('input', e => updateField('model', e.target.value));
-            basicCard.querySelector('#api-timeout').addEventListener('input', e => updateField('timeout', parseInt(e.target.value) || 60000));
-
-            // 延迟绑定额外字段的事件，确保 DOM 已更新
-            setTimeout(() => {
-                if (typeSelect.value === 'image') {
+                // 绑定额外字段的事件
+                if (currentType === 'image') {
                     const modeSelect = panel.querySelector('#api-image-mode');
                     if (modeSelect) modeSelect.addEventListener('change', e => updateField('mode', e.target.value));
                     const sizeInput = panel.querySelector('#api-size');
@@ -15756,7 +16135,7 @@
                     if (restoreFacesCheck) restoreFacesCheck.addEventListener('change', e => updateField('restore_faces', e.target.checked));
                     const tilingCheck = panel.querySelector('#api-tiling');
                     if (tilingCheck) tilingCheck.addEventListener('change', e => updateField('tiling', e.target.checked));
-                } else if (typeSelect.value === 'audio') {
+                } else if (currentType === 'audio') {
                     const modeSelect = panel.querySelector('#api-audio-mode');
                     if (modeSelect) modeSelect.addEventListener('change', e => updateField('mode', e.target.value));
                     const voiceIdInput = panel.querySelector('#api-voiceId');
@@ -15773,7 +16152,7 @@
                     if (regionInput) regionInput.addEventListener('input', e => updateField('region', e.target.value));
                     const hfModelInput = panel.querySelector('#api-hf-model');
                     if (hfModelInput) hfModelInput.addEventListener('input', e => updateField('model', e.target.value));
-                } else if (typeSelect.value === 'text') {
+                } else if (currentType === 'text') {
                     const maxTokensInput = panel.querySelector('#api-max-tokens');
                     if (maxTokensInput) maxTokensInput.addEventListener('input', e => updateField('maxTokens', parseInt(e.target.value) || 4000));
                     const tempInput = panel.querySelector('#api-temperature');
@@ -15812,7 +16191,8 @@
                     const nInput = panel.querySelector('#api-n');
                     if (nInput) nInput.addEventListener('input', e => updateField('n', parseInt(e.target.value) || 1));
                 }
-            }, 100);
+            };
+            renderExtraFields();
 
             // ---------- 测试按钮 ----------
             const testBtn = panel.querySelector('#test-api');
@@ -15828,14 +16208,12 @@
                     source: sourceSelect.value,
                     apiUrl: basicCard.querySelector('#api-url').value,
                     key: basicCard.querySelector('#api-key').value,
-                    model: basicCard.querySelector('#api-model').value,
-                    timeout: parseInt(basicCard.querySelector('#api-timeout').value) || 60000,
+                    model: modelInput.value,
+                    timeout: parseInt(basicCard.querySelector('#api-timeout')?.value) || 60000,
                 };
 
-
+                // 调用全局 testAPIConnection 函数
                 const result = await testAPIConnection(currentConfig);
-
-
                 if (result.ok) {
                     testResultDiv.innerHTML = '<span style="color:#28a745;">✅ 连接成功</span>';
                 } else {
@@ -15844,8 +16222,6 @@
                 testBtn.disabled = false;
                 testBtn.textContent = '测试连通性';
             });
-
-
         }
 
         _renderCategoryProperties(catId) {
@@ -23570,6 +23946,8 @@
             const apiConfigId = agent.apiConfigId;
             const useCustomAPI = apiConfigId && apiConfigId.trim() !== '';
 
+            console.log(`[callAgent][${agentKey}] 开始执行, useCustomAPI=${useCustomAPI}`);
+
             if (useCustomAPI) {
                 // 检查输入中是否包含文件标记
                 let cleanMessage = message;
@@ -23581,14 +23959,14 @@
                 }
                 if (fileIds.length > 0) {
                     cleanMessage = message.replace(fileRegex, '').trim();
-
+                    console.log(`[callAgent][${agentKey}] 检测到文件 ID:`, fileIds);
                 }
 
                 const config = CONFIG.apiConfigs[apiConfigId];
                 const { source, apiUrl, key, model, timeout = 60000 } = config;
                 const url = apiUrl.replace(/\/+$/, '');
 
-                // 构建组合信号
+                // 构建组合信号（用于中断）
                 const signals = [];
                 if (WORKFLOW_STATE.abortController) {
                     signals.push(WORKFLOW_STATE.abortController.signal);
@@ -23596,14 +23974,10 @@
                 signals.push(AbortSignal.timeout(timeout));
                 const combinedSignal = AbortSignal.any(signals);
 
-
-
-                // 记录请求体（隐藏密钥）
-                const logHeaders = { 'Authorization': `Bearer ${key.substring(0, 5)}...` };
-
+                console.log(`[callAgent][${agentKey}] 使用自定义API: source=${source}, url=${url}, model=${model}, timeout=${timeout}ms`);
 
                 try {
-                    // ========== OpenAI 兼容平台 (包括 SiliconFlow/Qwen) ==========
+                    // ========== OpenAI 兼容平台 (包括 SiliconFlow/Qwen/DeepSeek 等) ==========
                     if (source === 'openai' || source === 'deepseek' || source === 'qwen' || source === 'siliconflow' || source === 'other') {
                         const requestBody = {
                             model: model,
@@ -23620,7 +23994,7 @@
                         }
                         Object.keys(requestBody).forEach(k => requestBody[k] === undefined && delete requestBody[k]);
 
-                        console.log(`[callAgent][${agentKey}] 请求体 (部分隐藏):`, {
+                        console.log(`[callAgent][${agentKey}] OpenAI 兼容请求体 (部分隐藏):`, {
                             ...requestBody,
                             messages: [{
                                 role: 'user',
@@ -23638,7 +24012,7 @@
                             signal: combinedSignal,
                         });
 
-
+                        console.log(`[callAgent][${agentKey}] 响应状态: ${response.status}`);
 
                         if (!response.ok) {
                             const errText = await response.text();
@@ -23653,18 +24027,13 @@
                             })) : '无choices'
                         });
 
-                        // 提取生成的文本
                         let generatedText = data.choices?.[0]?.message?.content || data.choices?.[0]?.text;
                         if (!generatedText) {
                             console.error(`[callAgent][${agentKey}] 响应中无有效文本`, data);
                             throw new Error('响应中无有效文本');
                         }
 
-                        // ===== 关键修复：立即设置输出到全局状态 =====
                         WORKFLOW_STATE.outputs[agentKey] = generatedText;
-
-
-
                         AgentStateManager.setState(agentKey, 'completed');
                         UI.updateAgentStatusButton(agentKey);
 
@@ -23705,7 +24074,7 @@
                             signal: combinedSignal,
                         });
 
-
+                        console.log(`[callAgent][${agentKey}] Claude 响应状态: ${response.status}`);
 
                         if (!response.ok) {
                             const errText = await response.text();
@@ -23716,69 +24085,60 @@
                         const generatedText = data.content?.[0]?.text;
                         if (!generatedText) throw new Error('Claude 响应中无有效文本');
 
-                        // ===== 设置输出 =====
                         WORKFLOW_STATE.outputs[agentKey] = generatedText;
-
-
-
                         AgentStateManager.setState(agentKey, 'completed');
                         UI.updateAgentStatusButton(agentKey);
                         return generatedText;
                     }
 
-                    // ========== Gemini ==========
+                    // ========== Gemini (通过本地代理) ==========
                     else if (source === 'gemini') {
-                        const contents = [{
-                            parts: [{ text: cleanMessage }]
-                        }];
-                        if (fileIds.length > 0) {
-                            for (const fileId of fileIds) {
-                                const fileUri = `https://generativelanguage.googleapis.com/v1beta/files/${fileId}`;
-                                contents[0].parts.push({
-                                    fileData: { fileUri: fileUri, mimeType: 'application/octet-stream' }
-                                });
-                            }
-                        }
+                        console.log(`[callAgent][${agentKey}] 调用 Gemini 代理, 代理地址: ${url}, 模型: ${model}`);
+                        console.log(`[callAgent][${agentKey}] 请求消息预览: ${cleanMessage.substring(0, 200)}...`);
+
+                        // 构建代理请求 URL（假设代理端点固定为 /api/gemini）
+                        const proxyUrl = url + '/api/gemini';
+                        console.log(`[callAgent][${agentKey}] 完整代理 URL: ${proxyUrl}`);
 
                         const requestBody = {
-                            contents: contents,
-                            generationConfig: {
-                                maxOutputTokens: config.maxTokens,
-                                temperature: config.temperature,
-                                topP: config.top_p,
-                                topK: config.top_k,
-                                stopSequences: config.stop ? (Array.isArray(config.stop) ? config.stop : [config.stop]) : undefined,
-                            }
+                            contents: [{
+                                parts: [{ text: cleanMessage }]
+                            }]
                         };
-                        Object.keys(requestBody.generationConfig).forEach(k => requestBody.generationConfig[k] === undefined && delete requestBody.generationConfig[k]);
+                        console.log(`[callAgent][${agentKey}] 请求体结构:`, JSON.stringify(requestBody).substring(0, 500));
 
-
-
-                        const response = await fetch(`${url}/v1beta/models/${model}:generateContent?key=${key}`, {
+                        const response = await fetch(proxyUrl, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
                             body: JSON.stringify(requestBody),
                             signal: combinedSignal,
                         });
 
-
+                        console.log(`[callAgent][${agentKey}] 代理响应状态: ${response.status} ${response.statusText}`);
 
                         if (!response.ok) {
                             const errText = await response.text();
-                            console.error(`[callAgent][${agentKey}] 错误响应:`, errText);
-                            throw new Error(`Gemini 错误 (${response.status}): ${errText}`);
+                            console.error(`[callAgent][${agentKey}] 代理错误响应:`, errText);
+                            throw new Error(`代理错误 (${response.status}): ${errText}`);
                         }
+
                         const data = await response.json();
+                        console.log(`[callAgent][${agentKey}] 代理响应数据预览:`, JSON.stringify(data).substring(0, 500));
+
                         const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                        if (!generatedText) throw new Error('Gemini 响应中无有效文本');
+                        if (!generatedText) {
+                            console.error(`[callAgent][${agentKey}] 响应中无有效文本`, data);
+                            throw new Error('Gemini 响应中无有效文本');
+                        }
 
-                        // ===== 设置输出 =====
+                        console.log(`[callAgent][${agentKey}] 生成文本长度: ${generatedText.length} 字符`);
+
                         WORKFLOW_STATE.outputs[agentKey] = generatedText;
-
-
-
                         AgentStateManager.setState(agentKey, 'completed');
                         UI.updateAgentStatusButton(agentKey);
+
                         return generatedText;
                     }
 
@@ -23787,7 +24147,6 @@
                         throw new Error(`[callAgent] 不支持的文本平台: ${source}`);
                     }
                 } catch (error) {
-
                     console.error(`[callAgent][${agentKey}] 调用失败:`, error);
 
                     if (WORKFLOW_STATE.shouldStop) {
@@ -23867,21 +24226,15 @@
                     WORKFLOW_STATE.tokenStats.totalOutput += outputTokens;
                     UI.updateTokenDisplay();
 
-                    // ===== 设置输出 =====
                     WORKFLOW_STATE.outputs[agentKey] = response.mes;
-
-
                     AgentStateManager.setState(agentKey, 'completed');
                     UI.updateAgentStatusButton(agentKey);
 
                     return response.mes;
                 } catch (e) {
-                    // ===== 新增：如果是因为用户中断，则抛出 UserInterruptError =====
                     if (WORKFLOW_STATE.shouldStop) {
                         throw new UserInterruptError();
                     }
-                    // ===== 结束新增 =====
-
                     if (e.name === 'UserInterruptError') {
                         throw e;
                     }
