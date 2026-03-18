@@ -19,8 +19,8 @@
 
 
     // ╔══════════════════════════════════════════════════════════════════╗
-    // ║  模块 01：全局常量与配置                                          ║
-    // ║  CONFIG 配置对象与预定义角色列表                                  ║
+    // ║  模块 01：全局常量与配置                                             ║
+    // ║  CONFIG 配置对象与预定义角色列表                                      ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
     // ==================== 配置 ====================
@@ -127,7 +127,7 @@
 
 
     // ╔══════════════════════════════════════════════════════════════════╗
-    // ║  模块 02：错误类                                                 ║
+    // ║  模块 02：错误类                                                   ║
     // ║  UserInterruptError / ExistingBranchError / AbortChapterError    ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
@@ -162,7 +162,7 @@
 
 
     // ╔══════════════════════════════════════════════════════════════════╗
-    // ║  模块 03：全局状态                                                ║
+    // ║  模块 03：全局状态                                                  ║
     // ║  WORKFLOW_STATE / HISTORY_CACHE / stateTemplatesByBook / 全局 keydown 监听║
     // ╚══════════════════════════════════════════════════════════════════╝
 
@@ -179,7 +179,7 @@
         startTime: null,
         currentChapter: 1,
         shouldStop: false,
-        tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
+        tokenStats: {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0},
         discarded: false,
         discardedChapter: null,
         userInputCache: '',
@@ -223,7 +223,7 @@
         currentInteractionResult: null,   // 暂存本章的互动结果
     };
 
-    let HISTORY_CACHE = { chapters: [], lastUpdate: null };
+    let HISTORY_CACHE = {chapters: [], lastUpdate: null};
 
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
@@ -236,7 +236,7 @@
 
 
     // ╔══════════════════════════════════════════════════════════════════╗
-    // ║  模块 04：工具函数                                                ║
+    // ║  模块 04：工具函数                                                  ║
     // ║  deepMerge / getNestedValue / setNestedValue / parseConfigLine / convertArrayValues / countTokens║
     // ╚══════════════════════════════════════════════════════════════════╝
 
@@ -419,14 +419,14 @@
             const catId = match[1];
             const catName = match[2].trim();
 
-            return { catId, catName, definition: content };
+            return {catId, catName, definition: content};
         }
         // 否则，尝试匹配任何 **名称** 格式，使用 uid 作为 catId
         match = firstLine.match(/^\*\*([^*]+)\*\*.*$/);
         if (match && uid !== undefined) {
             const catName = match[1].trim();
 
-            return { catId: String(uid), catName, definition: content };
+            return {catId: String(uid), catName, definition: content};
         }
 
         return null;
@@ -910,7 +910,7 @@
         } else {
 
         }
-        return { valid: errors.length === 0, errors };
+        return {valid: errors.length === 0, errors};
     }
 
 
@@ -1012,7 +1012,7 @@
             CONFIG.categoryGroups = json.categoryGroups;
         }
 
-        WORKFLOW_STATE.currentConfigFile = { name: fileName, size: fileSize };
+        WORKFLOW_STATE.currentConfigFile = {name: fileName, size: fileSize};
 
         // 重置预选状态，使用新配置的 categories 生成全 null 的 selectionState
         const newSelection = {};
@@ -1033,7 +1033,7 @@
             startTime: null,
             currentChapter: 1,
             shouldStop: false,
-            tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
+            tokenStats: {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0},
             discarded: false,
             discardedChapter: null,
             userInputCache: '',
@@ -1083,8 +1083,6 @@
         WORKFLOW_STATE.lastCheckErrorMessage = '';
 
 
-
-
         return true;
     }
 
@@ -1131,7 +1129,7 @@
                 }
                 // 新增：创建 galProjects 存储
                 if (!db.objectStoreNames.contains('galProjects')) {
-                    db.createObjectStore('galProjects', { keyPath: 'id' });
+                    db.createObjectStore('galProjects', {keyPath: 'id'});
 
                 }
             };
@@ -1149,14 +1147,14 @@
             db = await openDB();
         } catch (err) {
             console.error('[loadFromIndexedDB] 打开数据库失败，返回默认空章节', err);
-            return { chapters: [] };
+            return {chapters: []};
         }
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(STORE_NAME, 'readonly');
             const store = transaction.objectStore(STORE_NAME);
             const request = store.get(DB_KEY);
             request.onsuccess = () => {
-                const result = request.result || { chapters: [] };
+                const result = request.result || {chapters: []};
 
                 resolve(result);
             };
@@ -1244,7 +1242,7 @@
 
             } catch (e) {
                 console.error('[Storage] 初始化失败，使用空缓存', e);
-                HISTORY_CACHE = { chapters: [], lastUpdate: Date.now() };
+                HISTORY_CACHE = {chapters: [], lastUpdate: Date.now()};
             }
         },
 
@@ -1262,11 +1260,10 @@
             HISTORY_CACHE.lastUpdate = Date.now();
 
 
-
             // 将写入操作加入队列
             this._writeQueue = this._writeQueue.then(() => {
                 console.time('IndexedDB写入');
-                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
+                return saveToIndexedDB({chapters: HISTORY_CACHE.chapters})
                     .then(() => {
                         console.timeEnd('IndexedDB写入');
 
@@ -1335,7 +1332,6 @@
             const segments = [];
             let currentNum = num;
             let current = chapter;
-
 
 
             while (current.parent !== null && current.parent !== undefined) {
@@ -1451,7 +1447,7 @@
 
             this._writeQueue = this._writeQueue.then(() => {
                 console.time('IndexedDB写入');
-                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
+                return saveToIndexedDB({chapters: HISTORY_CACHE.chapters})
                     .then(() => {
                         console.timeEnd('IndexedDB写入');
 
@@ -1471,38 +1467,6 @@
         },
 
         /**
-         * 删除指定章节之后的所有章节（包括该章）（增强版）
-         */
-        deleteAfter(chapterNum) {
-
-            const chapters = [...(HISTORY_CACHE.chapters || [])];
-            const remaining = chapters.filter(c => c.num < chapterNum);
-            const deletedCount = chapters.length - remaining.length;
-            HISTORY_CACHE.chapters = remaining;
-            HISTORY_CACHE.lastUpdate = Date.now();
-
-
-            this._writeQueue = this._writeQueue.then(() => {
-                console.time('IndexedDB写入');
-                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
-                    .then(() => {
-                        console.timeEnd('IndexedDB写入');
-
-                    })
-                    .catch(err => {
-                        console.timeEnd('IndexedDB写入');
-                        console.error('[Storage.deleteAfter] 写入失败', err);
-                        console.error(`[Storage.deleteAfter] 失败详情: ${err.name} - ${err.message}`);
-                        if (err.stack) console.error(err.stack);
-                        Notify.error('删除章节失败');
-                    });
-            }).catch(err => {
-                console.error('[Storage.deleteAfter] 写入队列处理出错', err);
-            });
-            return { success: true, count: deletedCount };
-        },
-
-        /**
          * 清空所有章节（增强版）
          */
         clear() {
@@ -1513,7 +1477,7 @@
 
             this._writeQueue = this._writeQueue.then(() => {
                 console.time('IndexedDB写入');
-                return saveToIndexedDB({ chapters: [] })
+                return saveToIndexedDB({chapters: []})
                     .then(() => {
                         console.timeEnd('IndexedDB写入');
 
@@ -1536,7 +1500,7 @@
             try {
                 return JSON.parse(localStorage.getItem(CONFIG.SETTINGS_KEY) || '{"profile":"standard"}');
             } catch (_) {
-                return { profile: 'standard' };
+                return {profile: 'standard'};
             }
         },
 
@@ -1631,7 +1595,7 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction('galProjects', 'readwrite');
                 const store = transaction.objectStore('galProjects');
-                const request = store.put({ id, data });
+                const request = store.put({id, data});
                 request.onsuccess = () => resolve();
                 request.onerror = () => reject(request.error);
                 transaction.oncomplete = () => db.close();
@@ -1673,7 +1637,7 @@
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
+                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
                     }
                 };
             });
@@ -1715,7 +1679,7 @@
             const target = this.cache.get(key);
 
             if (target) {
-                return { targetChapterNum: target };
+                return {targetChapterNum: target};
             }
             return null;
         },
@@ -1726,7 +1690,11 @@
         async recordMapping(parentNum, interactionResult, targetChapterNum) {
 
             if (!parentNum || !interactionResult || !targetChapterNum) {
-                console.warn('[MappingManager.recordMapping] 参数不完整，跳过', { parentNum, interactionResult, targetChapterNum });
+                console.warn('[MappingManager.recordMapping] 参数不完整，跳过', {
+                    parentNum,
+                    interactionResult,
+                    targetChapterNum
+                });
                 return;
             }
             const key = this._makeId(parentNum, interactionResult);
@@ -1844,45 +1812,6 @@
             });
         },
 
-        /**
-         * 清空所有映射（增强版）
-         */
-        async clear() {
-
-            let db;
-            try {
-                db = await this._openDB();
-            } catch (err) {
-                console.error('[MappingManager.clear] 打开数据库失败', err);
-                throw err;
-            }
-            return new Promise((resolve, reject) => {
-                const transaction = db.transaction(this.STORE_NAME, 'readwrite');
-                const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.clear();
-                request.onsuccess = () => {
-                    this.cache.clear();
-
-                    resolve();
-                };
-                request.onerror = (event) => {
-                    const error = event.target.error;
-                    console.error('[MappingManager.clear] 清空失败', error);
-                    console.error(`[MappingManager.clear] 错误详情: ${error.name} - ${error.message}`);
-                    reject(error);
-                };
-                transaction.oncomplete = () => {
-                    db.close();
-                    console.debug('[MappingManager.clear] 事务完成，数据库已关闭');
-                };
-                transaction.onerror = (event) => {
-                    const error = event.target.error;
-                    console.error('[MappingManager.clear] 事务错误', error);
-                    reject(error);
-                };
-            });
-        },
-
         // 导出所有映射（用于备份）
         async exportAll() {
             const db = await this._openDB();
@@ -1924,7 +1853,7 @@
                     req.onerror = (e) => {
                         const error = e.target.error;
                         console.error('[MappingManager.importAll] 导入失败', error);
-                        errors.push({ mapping: m, error: error.message });
+                        errors.push({mapping: m, error: error.message});
                     };
                 });
                 transaction.oncomplete = () => {
@@ -2140,11 +2069,11 @@
                             console.warn(`[DEBUG][loadAllStateTemplates] ⚠️ 在 ${bookName} 的模板中检测到重复的类别编号 ${id}，可能模板已损坏`);
                         }
                         seenCatIds.add(id);
-                        categoryMap[id] = { name, definition };
+                        categoryMap[id] = {name, definition};
 
                     }
 
-                    templates.push({ bookIndex, templateContent: content, categoryMap });
+                    templates.push({bookIndex, templateContent: content, categoryMap});
                 } else {
 
                     break;
@@ -2194,8 +2123,8 @@
 
         // 字段映射表
         const fieldMappings = [
-            { flat: 'enabled', path: 'enabled', transform: v => v === undefined ? entry.enabled : v },
-            { flat: 'content', path: 'content', transform: v => v === undefined ? entry.content : v },
+            {flat: 'enabled', path: 'enabled', transform: v => v === undefined ? entry.enabled : v},
+            {flat: 'content', path: 'content', transform: v => v === undefined ? entry.content : v},
 
             // 触发策略
             {
@@ -2220,7 +2149,7 @@
             },
 
             // 概率（0-100 -> 0-1）
-            { flat: 'probability', path: 'probability', transform: v => v !== undefined ? v / 100 : entry.probability },
+            {flat: 'probability', path: 'probability', transform: v => v !== undefined ? v / 100 : entry.probability},
 
             // 位置
             {
@@ -2240,8 +2169,8 @@
                     return map[v] || entry.position.type;
                 }
             },
-            { flat: 'depth', path: 'position.depth', transform: v => v !== undefined ? v : entry.position.depth },
-            { flat: 'order', path: 'position.order', transform: v => v !== undefined ? v : entry.position.order },
+            {flat: 'depth', path: 'position.depth', transform: v => v !== undefined ? v : entry.position.depth},
+            {flat: 'order', path: 'position.order', transform: v => v !== undefined ? v : entry.position.order},
 
             // 递归控制
             {
@@ -2317,7 +2246,7 @@
         if (positionType === 'at_depth') {
             const posFlat = flatConfig.position;
             if (posFlat) {
-                const roleMap = { '6': 'system', '7': 'assistant', '8': 'user' };
+                const roleMap = {'6': 'system', '7': 'assistant', '8': 'user'};
                 const role = roleMap[posFlat] || 'system';
                 setNestedValue(entry, 'position.role', role);
             }
@@ -2325,7 +2254,7 @@
 
         // 处理 characterFilter
         if (flatConfig.characterFilter && typeof flatConfig.characterFilter === 'object') {
-            const currentFilter = getNestedValue(entry, 'characterFilter') || { isExclude: false, names: [], tags: [] };
+            const currentFilter = getNestedValue(entry, 'characterFilter') || {isExclude: false, names: [], tags: []};
             const newFilter = deepMerge(currentFilter, flatConfig.characterFilter);
             setNestedValue(entry, 'characterFilter', newFilter);
         }
@@ -2567,7 +2496,7 @@
             }
 
             if (!actionsByBook[bookName]) {
-                actionsByBook[bookName] = { create: [], update: [], delete: [] };
+                actionsByBook[bookName] = {create: [], update: [], delete: []};
             }
 
             if (action.content.trim() === 'delete') {
@@ -2609,7 +2538,7 @@
                     continue;
                 }
 
-                const { catId, catName, definition } = parsed;
+                const {catId, catName, definition} = parsed;
                 let config = action.convertedConfig || {};
                 delete config.uid;
                 delete config.id;
@@ -2653,14 +2582,14 @@
                             strategy: {
                                 type: 'selective',
                                 keys: [],
-                                keys_secondary: { logic: 'and_any', keys: [] },
+                                keys_secondary: {logic: 'and_any', keys: []},
                                 scan_depth: 0
                             },
-                            position: { type: 'before_character_definition', role: 'system', depth: 0, order: 0 },
+                            position: {type: 'before_character_definition', role: 'system', depth: 0, order: 0},
                             probability: 1.0,
-                            recursion: { prevent_incoming: false, prevent_outgoing: false, delay_until: null },
-                            effect: { sticky: null, cooldown: null, delay: null },
-                            characterFilter: { isExclude: false, names: [], tags: [] },
+                            recursion: {prevent_incoming: false, prevent_outgoing: false, delay_until: null},
+                            effect: {sticky: null, cooldown: null, delay: null},
+                            characterFilter: {isExclude: false, names: [], tags: []},
                             matchPersonaDescription: false,
                             matchCharacterDescription: false,
                             matchCharacterPersonality: false,
@@ -2703,7 +2632,7 @@
             // 如果这本书有任何修改，统一保存
             if (modified) {
 
-                await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
+                await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
                 UI.updateProgress(`  ✓ ${bookName} 已更新`);
             } else {
 
@@ -2745,10 +2674,10 @@
                 }
             }
 
-            return Array.isArray(worldbook) ? entries : { ...worldbook, entries, settings: worldbook.settings || {} };
-        }, { render: 'immediate' });
+            return Array.isArray(worldbook) ? entries : {...worldbook, entries, settings: worldbook.settings || {}};
+        }, {render: 'immediate'});
 
-        return { successIds, errorIds };
+        return {successIds, errorIds};
     }
 
     // ==================== 清空状态书 ====================
@@ -2805,7 +2734,7 @@
             }
 
             // 保存更新后的世界书
-            await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
+            await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
             UI.updateProgress(`  ✓ 已重置 ${bookName} (${stateEntries.length} 个条目)`);
         }
 
@@ -2900,7 +2829,7 @@
             }
 
             // 返回更新后的全局世界书列表，供上层函数使用
-            return { success: true, globalBooks: updatedGlobalBooks };
+            return {success: true, globalBooks: updatedGlobalBooks};
         } catch (e) {
             UI.updateProgress(`  ✗ 激活失败: ${e.message}`, true);
             console.error(`[DEBUG][createAndActivateStateBook] 激活世界书失败: ${e.message}`, e);
@@ -3018,7 +2947,7 @@
         // 按 num 排序子节点
         Object.values(childrenMap).forEach(list => list.sort((a, b) => a.num - b.num));
 
-        return { childrenMap, chapterMap };
+        return {childrenMap, chapterMap};
     }
 
     /**
@@ -3044,7 +2973,6 @@
         const segments = [];  // 从目标节点到根的方向
         let currentNum = num;
         let current = chapter;
-
 
 
         while (current.parent !== null && current.parent !== undefined) {
@@ -3207,7 +3135,7 @@
                 const last = [...(context.chat || [])].reverse().find(m => !m.is_user);
                 if (last) text = last.mes;
             }
-            return { mes: text, name: context.name2 || 'Assistant', is_user: false, extra: result?.extra || {} };
+            return {mes: text, name: context.name2 || 'Assistant', is_user: false, extra: result?.extra || {}};
         },
 
         async getWorldbook(name) {
@@ -3247,56 +3175,102 @@
      * @returns {Promise<{ok: boolean, error?: string}>}
      */
     async function testAPIConnection(config) {
-        const { type, source, apiUrl, key, model, timeout = 10000 } = config;
+        const {type, source, apiUrl, key, model, timeout = 10000} = config;
         const url = apiUrl.replace(/\/+$/, ''); // 去除末尾多余的斜杠
 
-        // ========== 调试日志：函数入口 ==========
-
-
+        console.debug(`[testAPIConnection] 开始测试: type=${type}, source=${source}, url=${url}, model=${model}`);
 
         // 检查密钥是否包含非ASCII字符（中文等）
         if (/[^\x00-\x7F]/.test(key)) {
             const errorMsg = 'API密钥包含非ASCII字符（如中文），请使用有效的密钥';
             console.error(`[testAPIConnection] ${errorMsg}`);
-            return { ok: false, error: errorMsg };
+            return {ok: false, error: errorMsg};
         }
 
+        // ========== 文本平台 ==========
         if (type === 'text') {
-            // ========== Gemini 特殊处理：通过代理 POST 测试 ==========
+            // ----- Gemini 特殊处理：根据 url 判断原生或代理 -----
             if (source === 'gemini') {
-                const testUrl = url + '/api/gemini'; // 假设代理端点为 /api/gemini
+                const isLocalProxy = url.includes('localhost') || url.includes('127.0.0.1');
+                if (isLocalProxy) {
+                    // 代理模式：使用 POST /api/gemini 测试
+                    const testUrl = url + '/api/gemini';
+                    const testBody = {
+                        contents: [{
+                            parts: [{text: "test"}]
+                        }]
+                    };
+
+                    const options = {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(testBody),
+                        signal: AbortSignal.timeout(timeout),
+                    };
+                    try {
+                        const response = await fetch(testUrl, options);
+                        if (response.ok) return {ok: true};
+                        else {
+                            const errorText = await response.text();
+                            return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                        }
+                    } catch (err) {
+                        return {ok: false, error: err.message};
+                    }
+                } else {
+                    // 原生模式：使用 GET /v1beta/models 测试
+                    const modelsUrl = `${url}/v1beta/models?key=${key}`;
+
+                    try {
+                        const response = await fetch(modelsUrl, {
+                            method: 'GET',
+                            headers: {'Content-Type': 'application/json'},
+                            signal: AbortSignal.timeout(timeout),
+                        });
+                        if (response.ok) return {ok: true};
+                        else {
+                            const errorText = await response.text();
+                            return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
+                        }
+                    } catch (err) {
+                        return {ok: false, error: err.message};
+                    }
+                }
+            }
+
+            // ----- 文心一言 (wenxin) 特殊处理 -----
+            if (source === 'wenxin') {
+                // 文心一言的测试：直接发送一个最小对话请求
+                const testUrl = url; // 假设 url 已经是完整的 chat/completions 地址
                 const testBody = {
-                    contents: [{
-                        parts: [{ text: "test" }]
-                    }]
+                    messages: [{role: "user", content: "hi"}],
+                    max_tokens: 1
                 };
-                console.log(`[testAPIConnection][gemini] 测试代理地址: ${testUrl}`);
 
                 const options = {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${key}`
                     },
                     body: JSON.stringify(testBody),
                     signal: AbortSignal.timeout(timeout),
                 };
-
                 try {
                     const response = await fetch(testUrl, options);
-                    if (response.ok) {
-                        return { ok: true };
-                    } else {
+                    // 只要能收到响应（即使因为 max_tokens 太小而失败，也算连通）
+                    if (response.status < 500) return {ok: true};
+                    else {
                         const errorText = await response.text();
-                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
                     }
                 } catch (err) {
-                    return { ok: false, error: err.message };
+                    return {ok: false, error: err.message};
                 }
             }
 
-            // 其他文本平台统一测试 GET /models （用户已提供版本前缀，如 /v1）
+            // 其他文本平台统一测试 GET /models
             const modelsUrl = url + '/models';
-            console.log(`[testAPIConnection][text] 测试地址: ${modelsUrl}`);
 
             const options = {
                 method: 'GET',
@@ -3306,28 +3280,26 @@
                 },
                 signal: AbortSignal.timeout(timeout),
             };
-
             try {
                 const response = await fetch(modelsUrl, options);
                 if (response.ok) {
-                    return { ok: true };
+                    return {ok: true};
                 } else {
                     const errorText = await response.text();
                     console.error(`[testAPIConnection][text] 响应错误文本:`, errorText);
-                    return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                    return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
                 }
             } catch (err) {
                 console.error(`[testAPIConnection][text] 请求异常:`, err);
-                return { ok: false, error: err.message };
+                return {ok: false, error: err.message};
             }
-        } else if (type === 'image') {
+        }
 
-
+        // ========== 图像平台 ==========
+        else if (type === 'image') {
             if (source === 'openai') {
                 // OpenAI 图像 API 测试：尝试 GET /models
                 const modelsUrl = url + '/models';
-
-
                 const options = {
                     method: 'GET',
                     headers: {
@@ -3336,247 +3308,152 @@
                     },
                     signal: AbortSignal.timeout(timeout),
                 };
-
-
                 try {
-
                     const response = await fetch(modelsUrl, options);
-
-
-                    if (response.ok) {
-
-                        return { ok: true };
-                    } else {
+                    if (response.ok) return {ok: true};
+                    else {
                         const errorText = await response.text();
-                        console.error(`[testAPIConnection][openai] 响应错误文本:`, errorText);
-                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
                     }
                 } catch (err) {
-                    console.error(`[testAPIConnection][openai] 请求异常:`, err);
-                    return { ok: false, error: err.message };
+                    return {ok: false, error: err.message};
                 }
             } else if (source === 'stability') {
                 // Stability AI 测试：尝试 GET /user/account
                 const accountUrl = url + '/user/account';
-
-
                 const options = {
                     method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
+                    headers: {'Authorization': `Bearer ${key}`},
                     signal: AbortSignal.timeout(timeout),
                 };
-
-
                 try {
-
                     const response = await fetch(accountUrl, options);
-
-
-                    if (response.ok) {
-
-                        return { ok: true };
-                    } else {
+                    if (response.ok) return {ok: true};
+                    else {
                         const errorText = await response.text();
-                        console.error(`[testAPIConnection][stability] 响应错误文本:`, errorText);
-                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
                     }
                 } catch (err) {
-                    console.error(`[testAPIConnection][stability] 请求异常:`, err);
-                    return { ok: false, error: err.message };
+                    return {ok: false, error: err.message};
                 }
             } else if (source === 'midjourney') {
                 // Midjourney 测试：尝试 GET /mj/ping（假设有此端点）
                 const pingUrl = url + '/mj/ping';
-
-
                 const options = {
                     method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
+                    headers: {'Authorization': `Bearer ${key}`},
                     signal: AbortSignal.timeout(timeout),
                 };
-
-
                 try {
-
                     const response = await fetch(pingUrl, options);
-
-
-                    if (response.ok) {
-
-                        return { ok: true };
-                    } else {
+                    if (response.ok) return {ok: true};
+                    else {
                         const errorText = await response.text();
-                        console.error(`[testAPIConnection][midjourney] 响应错误文本:`, errorText);
-                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
                     }
                 } catch (err) {
                     console.warn('[testAPIConnection][midjourney] ping 失败，尝试轻量任务...');
-                    console.error('[testAPIConnection][midjourney] 异常详情:', err);
-                    return { ok: false, error: `无法验证 Midjourney 连通性: ${err.message}` };
+                    return {ok: false, error: `无法验证 Midjourney 连通性: ${err.message}`};
                 }
             } else if (source === 'flux') {
                 // Flux 测试：尝试 GET /models（假设兼容 OpenAI）
                 const modelsUrl = url + '/models';
-
-
                 const options = {
                     method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
+                    headers: {'Authorization': `Bearer ${key}`},
                     signal: AbortSignal.timeout(timeout),
                 };
-
-
                 try {
-
                     const response = await fetch(modelsUrl, options);
-
-
-                    if (response.ok) {
-
-                        return { ok: true };
-                    } else {
+                    if (response.ok) return {ok: true};
+                    else {
                         const errorText = await response.text();
-                        console.error(`[testAPIConnection][flux] 响应错误文本:`, errorText);
-                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
                     }
                 } catch (err) {
-                    console.error(`[testAPIConnection][flux] 请求异常:`, err);
-                    return { ok: false, error: err.message };
+                    return {ok: false, error: err.message};
                 }
             } else if (source === 'picsart') {
                 // Picsart 测试：尝试 GET /health（假设）
                 const healthUrl = url + '/health';
-
-
                 const options = {
                     method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
+                    headers: {'Authorization': `Bearer ${key}`},
                     signal: AbortSignal.timeout(timeout),
                 };
-
-
                 try {
-
                     const response = await fetch(healthUrl, options);
-
-
-                    if (response.ok) {
-
-                        return { ok: true };
-                    } else {
+                    if (response.ok) return {ok: true};
+                    else {
                         const errorText = await response.text();
-                        console.error(`[testAPIConnection][picsart] 响应错误文本:`, errorText);
-                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
                     }
                 } catch (err) {
-                    console.error(`[testAPIConnection][picsart] 请求异常:`, err);
-                    return { ok: false, error: err.message };
+                    return {ok: false, error: err.message};
                 }
             } else if (source === 'siliconflow') {
                 // SiliconFlow 图像：尝试 GET /models（假设兼容 OpenAI）
                 const modelsUrl = url + '/models';
-
-
                 const options = {
                     method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${key}`,
-                    },
+                    headers: {'Authorization': `Bearer ${key}`},
                     signal: AbortSignal.timeout(timeout),
                 };
-
-
                 try {
-
                     const response = await fetch(modelsUrl, options);
-
-
-                    if (response.ok) {
-
-                        return { ok: true };
-                    } else {
+                    if (response.ok) return {ok: true};
+                    else {
                         const errorText = await response.text();
-                        console.error(`[testAPIConnection][siliconflow] 响应错误文本:`, errorText);
-                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                        return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
                     }
                 } catch (err) {
-                    console.error(`[testAPIConnection][siliconflow] 请求异常:`, err);
-                    return { ok: false, error: err.message };
+                    return {ok: false, error: err.message};
                 }
             } else if (source === 'sdwebui') {
                 // Stable Diffusion WebUI 测试：尝试 GET /sdapi/v1/sd-models
                 const testUrl = url + '/sdapi/v1/sd-models';
-
-
                 const options = {
                     method: 'GET',
                     signal: AbortSignal.timeout(timeout),
                 };
-
-
                 try {
-
                     const response = await fetch(testUrl, options);
-
-
-                    if (response.ok) {
-
-                        return { ok: true };
-                    } else {
+                    if (response.ok) return {ok: true};
+                    else {
                         const errorText = await response.text();
-                        console.error(`[testAPIConnection][sdwebui] 响应错误文本:`, errorText);
-                        return { ok: false, error: `SD WebUI 未正确响应 (${response.status}): ${errorText}` };
+                        return {ok: false, error: `SD WebUI 未正确响应 (${response.status}): ${errorText}`};
                     }
                 } catch (err) {
-                    console.error(`[testAPIConnection][sdwebui] 请求异常:`, err);
-                    return { ok: false, error: `无法连接到 SD WebUI: ${err.message}` };
+                    return {ok: false, error: `无法连接到 SD WebUI: ${err.message}`};
                 }
             } else if (source === 'other') {
                 // 其他图像 API：尝试 OPTIONS 请求或简单 GET
-
                 try {
                     const response = await fetch(url, {
                         method: 'OPTIONS',
                         signal: AbortSignal.timeout(timeout),
                     });
-
-
                     if (response.status < 500) {
-
-                        return { ok: true, warning: '仅验证了URL可达性，密钥有效性未确认' };
+                        return {ok: true, warning: '仅验证了URL可达性，密钥有效性未确认'};
                     } else {
                         const errorText = await response.text();
-                        console.error(`[testAPIConnection][other] 响应错误文本:`, errorText);
-                        return { ok: false, error: `OPTIONS 请求失败 (${response.status})` };
+                        return {ok: false, error: `OPTIONS 请求失败 (${response.status})`};
                     }
                 } catch (err) {
-                    console.error(`[testAPIConnection][other] 请求异常:`, err);
-                    return { ok: false, error: `无法验证图像API连通性，请手动检查URL和密钥。详细错误: ${err.message}` };
+                    return {ok: false, error: `无法验证图像API连通性，请手动检查URL和密钥。详细错误: ${err.message}`};
                 }
             } else {
-                console.error(`[testAPIConnection] 不支持的图像平台: ${source}`);
-                return { ok: false, error: `不支持的图像平台: ${source}` };
+                return {ok: false, error: `不支持的图像平台: ${source}`};
             }
         }
-        // ========== 新增：音频平台测试 ==========
+
+        // ========== 音频平台 ==========
         else if (type === 'audio') {
-
-
-
             // 根据不同的 source 构造不同的测试端点
-            let testUrl = url; // 默认使用根 URL
+            let testUrl = url;
             let method = 'GET';
             let headers = {};
 
-            // 需要认证的平台添加 Authorization 头
             const authSources = ['elevenlabs', 'minimax', 'minimax-music', 'minimax-speech', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'stableaudio', 'riffusion', 'custom'];
             if (authSources.includes(source) && key && key.trim() !== '') {
                 if (source === 'azure-tts') {
@@ -3585,53 +3462,45 @@
                     headers['Authorization'] = `Bearer ${key}`;
                 }
                 headers['Content-Type'] = 'application/json';
-
             }
 
-            // 针对已知平台选择更合适的健康检查端点
             switch (source) {
                 case 'elevenlabs':
-                    testUrl = url + '/voices'; // 获取声音列表，需要认证
+                    testUrl = url + '/voices';
                     break;
                 case 'minimax':
                 case 'minimax-music':
                 case 'minimax-speech':
-                    // MiniMax 可能使用 /voice/list
                     testUrl = url + '/voice/list';
                     break;
                 case 'huggingface':
-                    testUrl = url + '/api/models'; // 获取模型列表
+                    testUrl = url + '/api/models';
                     break;
                 case 'openai-tts':
-                    testUrl = url + '/models'; // 兼容 OpenAI 的模型列表
+                    testUrl = url + '/models';
                     break;
                 case 'azure-tts':
-                    // Azure TTS 的语音列表端点：/cognitiveservices/voices/list
                     testUrl = url + '/cognitiveservices/voices/list';
-                    // 认证头已在上面设置
                     break;
                 case 'google-tts':
-                    // Google TTS 需要将 key 放在 URL 参数中
                     testUrl = url + '/voices?key=' + encodeURIComponent(key);
-                    headers = {}; // 移除 Authorization 头
+                    headers = {};
                     break;
                 case 'stableaudio':
-                    testUrl = url + '/v2beta/audio/health'; // 假设有此端点
+                    testUrl = url + '/v2beta/audio/health';
                     break;
                 case 'riffusion':
-                    testUrl = url; // 直接根路径，可能返回 200 或 404 但可用于连通性
+                    testUrl = url;
                     method = 'HEAD';
                     break;
                 case 'custom':
                 case 'other':
-                    // 对于自定义，尝试 OPTIONS 请求或 GET 根路径
                     method = 'OPTIONS';
                     testUrl = url;
                     break;
                 default:
                     testUrl = url;
             }
-
 
             const options = {
                 method: method,
@@ -3642,26 +3511,18 @@
             try {
                 const startTime = Date.now();
                 const response = await fetch(testUrl, options);
-                const elapsed = Date.now() - startTime;
-
-
                 if (response.ok) {
-
-                    return { ok: true };
+                    return {ok: true};
                 } else {
                     const errorText = await response.text();
-                    console.error(`[testAPIConnection][audio] 错误响应:`, errorText);
-                    return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
+                    return {ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}`};
                 }
             } catch (err) {
-                console.error(`[testAPIConnection][audio] 请求异常:`, err);
-                return { ok: false, error: err.message };
+                return {ok: false, error: err.message};
             }
-        }
-        // ========== 结束音频平台测试 ==========
-        else {
+        } else {
             console.error(`[testAPIConnection] 未知的 type: ${type}`);
-            return { ok: false, error: `未知的 type: ${type}` };
+            return {ok: false, error: `未知的 type: ${type}`};
         }
     }
 
@@ -3671,13 +3532,12 @@
      * @returns {Promise<Array<{id: string, description: string}>>}
      */
     async function fetchModelList(config) {
-        const { type, source, apiUrl, key } = config;
+        const {type, source, apiUrl, key} = config;
         if (!apiUrl || !key) {
             throw new Error('请先填写 API URL 和密钥');
         }
         const url = apiUrl.replace(/\/+$/, ''); // 去除末尾多余的斜杠
 
-        console.log(`[fetchModelList] 开始获取模型列表: type=${type}, source=${source}, url=${url}`);
 
         try {
             // ---------- 文本平台 ----------
@@ -3686,7 +3546,7 @@
                 if (source === 'gemini') {
                     const response = await fetch(`${url}/v1beta/models?key=${key}`, {
                         method: 'GET',
-                        headers: { 'Content-Type': 'application/json' }
+                        headers: {'Content-Type': 'application/json'}
                     });
                     if (!response.ok) {
                         throw new Error(`Gemini API 错误 (${response.status}): ${await response.text()}`);
@@ -3714,10 +3574,10 @@
                     const data = await response.json();
                     // 常见格式: { data: [{ id: "gpt-4", ... }] }
                     if (data.data && Array.isArray(data.data)) {
-                        return data.data.map(m => ({ id: m.id, description: m.description || '' }));
+                        return data.data.map(m => ({id: m.id, description: m.description || ''}));
                     } else if (Array.isArray(data)) {
                         // 某些平台直接返回数组
-                        return data.map(m => ({ id: m.id || m, description: '' }));
+                        return data.map(m => ({id: m.id || m, description: ''}));
                     } else {
                         throw new Error('无法解析响应格式');
                     }
@@ -3769,9 +3629,9 @@
                     }
                     const data = await response.json();
                     if (data.data && Array.isArray(data.data)) {
-                        return data.data.map(m => ({ id: m.id, description: '' }));
+                        return data.data.map(m => ({id: m.id, description: ''}));
                     } else if (Array.isArray(data)) {
-                        return data.map(m => ({ id: m.id || m, description: '' }));
+                        return data.map(m => ({id: m.id || m, description: ''}));
                     } else {
                         throw new Error('无法解析响应格式');
                     }
@@ -3782,14 +3642,14 @@
                     // 获取可用引擎：GET /v2beta/engines
                     const response = await fetch(`${url}/engines`, {
                         method: 'GET',
-                        headers: { 'Authorization': `Bearer ${key}` }
+                        headers: {'Authorization': `Bearer ${key}`}
                     });
                     if (!response.ok) {
                         throw new Error(`Stability AI 错误 (${response.status}): ${await response.text()}`);
                     }
                     const data = await response.json();
                     // 返回格式: [{ id: "stable-diffusion-xl-1024-v1-0", description: "..." }]
-                    return data.map(e => ({ id: e.id, description: e.description || '' }));
+                    return data.map(e => ({id: e.id, description: e.description || ''}));
                 }
 
                 // SD WebUI
@@ -3803,7 +3663,7 @@
                     }
                     const data = await response.json();
                     // 返回格式: [{ model_name: "v1-5-pruned-emaonly", ... }]
-                    return data.map(m => ({ id: m.model_name || m.title, description: '' }));
+                    return data.map(m => ({id: m.model_name || m.title, description: ''}));
                 }
 
                 throw new Error(`图像平台 ${source} 暂不支持自动获取模型列表`);
@@ -3815,28 +3675,28 @@
                 if (source === 'elevenlabs') {
                     const response = await fetch(`${url}/voices`, {
                         method: 'GET',
-                        headers: { 'xi-api-key': key }
+                        headers: {'xi-api-key': key}
                     });
                     if (!response.ok) {
                         throw new Error(`ElevenLabs 错误 (${response.status}): ${await response.text()}`);
                     }
                     const data = await response.json();
                     // 返回格式: { voices: [{ voice_id: "...", name: "..." }] }
-                    return data.voices.map(v => ({ id: v.voice_id, description: v.name }));
+                    return data.voices.map(v => ({id: v.voice_id, description: v.name}));
                 }
 
                 // OpenAI TTS / SiliconFlow (兼容 OpenAI 格式)
                 if (source === 'openai-tts' || source === 'siliconflow') {
                     const response = await fetch(`${url}/models`, {
                         method: 'GET',
-                        headers: { 'Authorization': `Bearer ${key}` }
+                        headers: {'Authorization': `Bearer ${key}`}
                     });
                     if (!response.ok) {
                         throw new Error(`TTS API 错误 (${response.status}): ${await response.text()}`);
                     }
                     const data = await response.json();
                     if (data.data && Array.isArray(data.data)) {
-                        return data.data.map(m => ({ id: m.id, description: '' }));
+                        return data.data.map(m => ({id: m.id, description: ''}));
                     } else {
                         throw new Error('无法解析响应格式');
                     }
@@ -3846,14 +3706,14 @@
                 if (source === 'azure-tts') {
                     const response = await fetch(`${url}/cognitiveservices/voices/list`, {
                         method: 'GET',
-                        headers: { 'Ocp-Apim-Subscription-Key': key }
+                        headers: {'Ocp-Apim-Subscription-Key': key}
                     });
                     if (!response.ok) {
                         throw new Error(`Azure TTS 错误 (${response.status}): ${await response.text()}`);
                     }
                     const data = await response.json();
                     // 返回格式: [{ ShortName: "zh-CN-XiaoxiaoNeural", FriendlyName: "..." }]
-                    return data.map(v => ({ id: v.ShortName, description: v.FriendlyName }));
+                    return data.map(v => ({id: v.ShortName, description: v.FriendlyName}));
                 }
 
                 // Google TTS
@@ -3979,7 +3839,7 @@
                             !hasAnyTemplate ? '所有状态书均缺少模板条目（状态模板-N）' : null
                 };
             } catch (e) {
-                return { exists: false, error: `读取状态书失败: ${e.message}` };
+                return {exists: false, error: `读取状态书失败: ${e.message}`};
             }
         },
 
@@ -3999,7 +3859,7 @@
 
                 // 检查设定书是否在激活列表中
                 if (!globalBooks.includes(CONFIG.SETTING_BOOK_NAME)) {
-                    return { exists: false, error: '设定书未激活' };
+                    return {exists: false, error: '设定书未激活'};
                 }
 
                 // 如果激活，再读取内容
@@ -4012,7 +3872,7 @@
                     error: entries.length === 0 ? '设定书为空' : null
                 };
             } catch (e) {
-                return { exists: false, error: `读取设定书失败: ${e.message}` };
+                return {exists: false, error: `读取设定书失败: ${e.message}`};
             }
         },
 
@@ -4149,7 +4009,7 @@
                     preventDuplicates: true,
                 };
                 const userOptions = opts || {};
-                const options = { ...defaultOptions, ...userOptions };
+                const options = {...defaultOptions, ...userOptions};
                 toastr[type](formattedMsg, safeTitle, options);
             } else {
                 console[type === 'error' ? 'error' : type === 'warning' ? 'warn' : 'log'](`[${type.toUpperCase()}]`, safeTitle, safeMsg);
@@ -4291,7 +4151,7 @@
                         throw new Error('createWorldbook API 不可用');
                     }
                     // 写入条目（snapshot.books[bookName] 已是完整的嵌套结构）
-                    await API.updateWorldbook(bookName, () => snapshot.books[bookName], { render: 'immediate' });
+                    await API.updateWorldbook(bookName, () => snapshot.books[bookName], {render: 'immediate'});
                 } catch (e) {
                     UI.updateProgress(`    ✗ 重建失败: ${e.message}`, true);
                 }
@@ -4339,15 +4199,15 @@
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
+                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
                     }
                 };
             });
         },
 
         /**
-        * 保存图片（接受 Blob/File 或 base64 字符串）（增强版）
-        */
+         * 保存图片（接受 Blob/File 或 base64 字符串）（增强版）
+         */
         async save(imageData, format, providedId) {
 
 
@@ -4386,7 +4246,7 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction(this.STORE_NAME, 'readwrite');
                 const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.put({ id, blob });
+                const request = store.put({id, blob});
                 request.onsuccess = () => {
 
                     resolve(id);
@@ -4547,7 +4407,7 @@
 
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
+                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
                     }
                 };
             });
@@ -4574,7 +4434,7 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction(this.STORE_NAME, 'readwrite');
                 const store = transaction.objectStore(this.STORE_NAME);
-                const entry = { id, text, format, timestamp: Date.now() };
+                const entry = {id, text, format, timestamp: Date.now()};
 
                 const request = store.put(entry);
                 request.onsuccess = () => {
@@ -4703,7 +4563,7 @@
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
+                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
                     }
                 };
             });
@@ -4718,7 +4578,6 @@
         async save(audioBlob, providedId) {
 
 
-
             let id = providedId;
             if (!id) {
                 id = `audio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -4727,7 +4586,7 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction(this.STORE_NAME, 'readwrite');
                 const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.put({ id, blob: audioBlob, timestamp: Date.now() });
+                const request = store.put({id, blob: audioBlob, timestamp: Date.now()});
                 request.onsuccess = () => {
 
                     resolve(id);
@@ -6055,7 +5914,7 @@
                     document.head.appendChild(style);
 
                     this.customStyleElement = style;
-                    Notify.success(`配色样式已加载: ${file.name}`, '', { timeOut: 2000 });
+                    Notify.success(`配色样式已加载: ${file.name}`, '', {timeOut: 2000});
                 } catch (err) {
                     Notify.error('读取CSS文件失败: ' + err.message);
                 } finally {
@@ -6121,220 +5980,6 @@
             });
         },
 
-        /**
-         * 将文本渲染为 HTML，并异步替换其中的图片占位符
-         * @param {string} text - 原始文本（可能包含 Markdown 和图片占位符）
-         * @returns {string} 渲染后的 HTML 字符串（图片占位符会被替换为异步加载的图片）
-         */
-        _renderMarkdown(text) {
-
-
-
-
-            if (!text) {
-
-                return '';
-            }
-
-            // 去除可能的最外层 ```html 或 ```markdown 代码块标记
-            const trimmed = text.trim();
-            const codeBlockRegex = /^\s*```(?:html|markdown)?\s*\n([\s\S]*?)\n\s*```\s*$/;
-            const match = trimmed.match(codeBlockRegex);
-            if (match) {
-                text = match[1];
-
-
-            } else {
-
-            }
-
-            // ===== 判断是否为 HTML（文档或片段） =====
-            const trimmedLower = text.trim().toLowerCase();
-            const isHtmlDoc = trimmedLower.startsWith('<!doctype') ||
-                trimmedLower.startsWith('<html') ||
-                trimmedLower.startsWith('<head') ||
-                trimmedLower.startsWith('<body');
-            const hasHtmlTags = /<\/?[a-z][\s\S]*?>/i.test(text);
-            const treatAsHtml = isHtmlDoc || hasHtmlTags;
-
-
-            // ===== 处理图片占位符 =====
-            const markdownImageRegex = /!\[([^\]]*)\]\(id:([^)]+)\)/g;
-            const htmlImageRegex = /<img[^>]*src="id:([^"]+)"[^>]*>/g;
-
-            let processedText = text;
-            const imagePromises = [];
-            const placeholders = [];
-            const idSet = new Set();
-
-            // 替换 Markdown 图片
-            processedText = processedText.replace(markdownImageRegex, (match, alt, id) => {
-
-                if (!idSet.has(id)) {
-                    idSet.add(id);
-                    const placeholder = `<!--IMG_PLACEHOLDER_${id}-->`;
-                    placeholders.push({ id, placeholder, alt });
-
-                    imagePromises.push(
-                        ImageStore.get(id).then(blob => {
-
-                            if (blob) {
-                                const url = URL.createObjectURL(blob);
-
-                                return {
-                                    id,
-                                    html: `<img src="${url}" alt="${alt}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
-                                };
-                            } else {
-                                console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                                return { id, html: `![${alt}](图片丢失)` };
-                            }
-                        }).catch(err => {
-                            console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                            return { id, html: `![${alt}](图片加载错误)` };
-                        })
-                    );
-                    return placeholder;
-                } else {
-
-                    return match;
-                }
-            });
-
-            // 替换 HTML 图片
-            processedText = processedText.replace(htmlImageRegex, (match, id) => {
-
-                if (!idSet.has(id)) {
-                    idSet.add(id);
-                    const placeholder = `<!--HTML_IMG_PLACEHOLDER_${id}-->`;
-                    placeholders.push({ id, placeholder, isHtml: true });
-
-                    imagePromises.push(
-                        ImageStore.get(id).then(blob => {
-
-                            if (blob) {
-                                const url = URL.createObjectURL(blob);
-                                const altMatch = match.match(/alt="([^"]*)"/);
-                                const alt = altMatch ? altMatch[1] : '';
-                                const classMatch = match.match(/class="([^"]*)"/);
-                                const cls = classMatch ? classMatch[1] : '';
-
-                                return {
-                                    id,
-                                    html: `<img src="${url}" alt="${alt}" class="${cls}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
-                                };
-                            } else {
-                                console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                                return { id, html: `[图片丢失: ${id}]` };
-                            }
-                        }).catch(err => {
-                            console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                            return { id, html: `[图片加载错误: ${id}]` };
-                        })
-                    );
-                    return placeholder;
-                } else {
-
-                    return match;
-                }
-            });
-
-
-
-
-            let html;
-            if (treatAsHtml) {
-                // ===== 关键修改：使用 DOMParser 提取 <body> 内部 HTML 并保留 <head> 样式 =====
-
-                try {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(processedText, 'text/html');
-                    // 提取 <head> 中的所有 <style> 标签
-                    const styleTags = Array.from(doc.head?.querySelectorAll('style') || []);
-                    const styleHTML = styleTags.map(style => style.outerHTML).join('');
-                    // 提取 <body> 内部的 HTML（不包括 <body> 标签本身）
-                    const bodyHTML = doc.body?.innerHTML || '';
-                    html = styleHTML + bodyHTML;
-
-
-                } catch (e) {
-                    console.error('[DEBUG][_renderMarkdown] DOMParser 解析失败，降级返回原始文本:', e);
-                    html = processedText; // 降级
-                }
-            } else {
-                // 否则，用 marked 解析 Markdown
-                if (typeof marked !== 'undefined') {
-                    try {
-                        html = marked.parse(processedText, { gfm: true, breaks: true });
-
-
-                    } catch (e) {
-                        console.error('[DEBUG][_renderMarkdown] marked 解析失败:', e);
-                        html = `<pre style="color:#ff6b6b; background:#1e1e1e; padding:10px; border-radius:5px;">${this._escapeHtml(text)}</pre>`;
-                    }
-                } else {
-                    console.warn('[DEBUG][_renderMarkdown] marked 未定义，使用降级显示');
-                    html = `<pre style="background:#1e1e1e; padding:10px; border-radius:5px;">${this._escapeHtml(text)}</pre>`;
-                }
-            }
-
-            // ===== 异步替换所有图片占位符（保持不变） =====
-            if (imagePromises.length > 0) {
-
-                Promise.all(imagePromises).then(results => {
-                    const replaceMap = {};
-                    results.forEach(r => {
-                        replaceMap[`<!--IMG_PLACEHOLDER_${r.id}-->`] = r.html;
-                        replaceMap[`<!--HTML_IMG_PLACEHOLDER_${r.id}-->`] = r.html;
-
-                    });
-
-                    const attemptReplace = (retryCount = 0) => {
-
-                        const containers = document.querySelectorAll('.markdown-body');
-
-
-                        let replacedAny = false;
-                        containers.forEach((container, idx) => {
-                            let innerHTML = container.innerHTML;
-                            let changed = false;
-                            for (const [placeholder, imgHtml] of Object.entries(replaceMap)) {
-                                if (innerHTML.includes(placeholder)) {
-                                    innerHTML = innerHTML.split(placeholder).join(imgHtml);
-                                    changed = true;
-                                    replacedAny = true;
-
-                                }
-                            }
-                            if (changed) {
-                                container.innerHTML = innerHTML;
-
-                            }
-                        });
-
-                        if (!replacedAny) {
-                            console.warn(`[DEBUG][_renderMarkdown] 第 ${retryCount} 次尝试未找到任何占位符`);
-                            if (retryCount < 5) {
-                                setTimeout(() => attemptReplace(retryCount + 1), 200);
-                            } else {
-                                console.error('[DEBUG][_renderMarkdown] 重试5次后仍无法替换图片占位符，请检查 DOM 结构');
-                            }
-                        } else {
-
-                        }
-                    };
-
-                    attemptReplace();
-                }).catch(err => {
-                    console.error('[DEBUG][_renderMarkdown] Promise.all 执行失败:', err);
-                });
-            } else {
-
-            }
-
-            return html;
-        },
-
         _trimLines(text) {
             return text ? text.replace(/^[ \t]+/gm, '') : '';
         },
@@ -6346,8 +5991,8 @@
         },
 
         _downloadText(content, filename, mimeType = 'text/plain;charset=utf-8') {
-            const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
-            Object.assign(document.createElement('a'), { href: url, download: filename }).click();
+            const url = URL.createObjectURL(new Blob([content], {type: mimeType}));
+            Object.assign(document.createElement('a'), {href: url, download: filename}).click();
             URL.revokeObjectURL(url);
         },
 
@@ -6509,7 +6154,7 @@
                 const textToCopy = content;
                 try {
                     await navigator.clipboard.writeText(textToCopy);
-                    Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
+                    Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
                 } catch (err) {
                     // 降级方案：使用 execCommand
                     try {
@@ -6521,7 +6166,7 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（使用降级方案）', '', { timeOut: 2000 });
+                        Notify.success('内容已复制到剪贴板（使用降级方案）', '', {timeOut: 2000});
                     } catch (err2) {
                         Notify.error('复制失败，请手动选择文本后复制');
                         UI.showMarkdownModal('复制失败，请手动复制以下内容', textToCopy, {
@@ -6538,9 +6183,6 @@
         },
 
         showErrorPanel(errorMessage) {
-
-
-
 
 
             this.closeAll();
@@ -6633,7 +6275,7 @@
                             console.error('[错误面板] loadConfigFromJson 返回失败');
                             return;
                         }
-                        Notify.success('配置文件加载成功...', '', { timeOut: 2000 });
+                        Notify.success('配置文件加载成功...', '', {timeOut: 2000});
                         this.closeAll();
 
                         await openPanelWithCheck();
@@ -6785,7 +6427,7 @@
 
             // 加载保存的预选状态
             const savedSelection = Storage.loadSelectionState();
-            WORKFLOW_STATE.selectionState = { ...WORKFLOW_STATE.selectionState, ...savedSelection };
+            WORKFLOW_STATE.selectionState = {...WORKFLOW_STATE.selectionState, ...savedSelection};
 
             // 不再直接调用 init() 重置所有状态，而是确保所有配置中的 Agent 都有状态
             for (const key of Object.keys(CONFIG.AGENTS)) {
@@ -6947,7 +6589,7 @@
 
             let statusIndicatorHTML = '';
             for (const [state, label] of Object.entries(stateLabels)) {
-                const colors = CONFIG.AGENT_STATUS_COLORS[state] || { border: '#888', text: '#888' };
+                const colors = CONFIG.AGENT_STATUS_COLORS[state] || {border: '#888', text: '#888'};
                 let color;
                 if (state === 'idle' || state === 'reflow_waiting') {
                     color = colors.text;
@@ -7265,7 +6907,7 @@
                         const text = await file.text();
                         const json = JSON.parse(text);
                         loadConfigFromJson(json, file.name, file.size);
-                        Notify.success('配置文件加载成功，重新打开面板...', '', { timeOut: 2000 });
+                        Notify.success('配置文件加载成功，重新打开面板...', '', {timeOut: 2000});
                         UI.closeAll();
                         await openPanelWithCheck();
                     } catch (err) {
@@ -7283,7 +6925,7 @@
             // 一键纯净按钮
             panel.querySelector('#nc-clean-pure-btn').addEventListener('click', async () => {
                 if (WORKFLOW_STATE.isRunning) {
-                    Notify.warning('请先停止当前工作流', '', { timeOut: 2000 });
+                    Notify.warning('请先停止当前工作流', '', {timeOut: 2000});
                     return;
                 }
                 const confirmed = await UI.showConfirmModal('⚠️ 一键纯净将删除所有历史章节、所有状态书、取消激活所有世界书，并重置内存缓存。此操作不可撤销！\n\n确定继续吗？', '确认');
@@ -7348,7 +6990,7 @@
                         startTime: null,
                         currentChapter: 1,
                         shouldStop: false,
-                        tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
+                        tokenStats: {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0},
                         discarded: false,
                         discardedChapter: null,
                         userInputCache: '',
@@ -7389,7 +7031,7 @@
                     UI.updateCurrentChapterNum();
                     UI.clearProgress();
                     UI.updateProgress('✅ 一键纯净完成');
-                    Notify.success('系统已恢复纯净状态', '', { timeOut: 2000 });
+                    Notify.success('系统已恢复纯净状态', '', {timeOut: 2000});
 
                     // 刷新面板
                     UI.closeAll();
@@ -7420,7 +7062,7 @@
                 if (WORKFLOW_STATE.awaitingInput && WORKFLOW_STATE.inputResolver) {
                     const userInput = inputEl.value.trim();
                     if (!userInput) {
-                        Notify.warning('请输入内容后再提交', '', { timeOut: 2000 });
+                        Notify.warning('请输入内容后再提交', '', {timeOut: 2000});
                         return;
                     }
                     submitBtn.disabled = true;
@@ -7512,7 +7154,7 @@
 
                 HistoryUI.showChapterSelectionModal((selectedChapters) => {
                     if (!selectedChapters || selectedChapters.length === 0) {
-                        Notify.warning('请至少选择一个章节', '', { timeOut: 2000 });
+                        Notify.warning('请至少选择一个章节', '', {timeOut: 2000});
                         return;
                     }
 
@@ -7537,7 +7179,7 @@
                     }
 
                     if (!inputText) {
-                        Notify.warning('没有可用的章节内容', '', { timeOut: 2000 });
+                        Notify.warning('没有可用的章节内容', '', {timeOut: 2000});
                         return;
                     }
 
@@ -7560,7 +7202,7 @@
             panel.querySelector('#nc-view-chapter-content').addEventListener('click', () => {
                 const chapters = Storage.loadChapters();
                 const latest = chapters.length > 0 ? Math.max(...chapters.map(c => c.num)) : 0;
-                HistoryUI.viewChapter(latest, { mode: 'edit' }); // 修改此处
+                HistoryUI.viewChapter(latest, {mode: 'edit'}); // 修改此处
             });
 
             panel.querySelector('#nc-view-chapter-status').addEventListener('click', () => {
@@ -7574,7 +7216,7 @@
                 const agentKey = WORKFLOW_STATE.currentWaitingAgent;
                 const inputIndex = WORKFLOW_STATE.currentWaitingInputIndex;
                 if (!agentKey || inputIndex === null || inputIndex === undefined) {
-                    Notify.info('没有正在等待输入的Agent', '', { timeOut: 2000 });
+                    Notify.info('没有正在等待输入的Agent', '', {timeOut: 2000});
                     return;
                 }
                 const agent = CONFIG.AGENTS[agentKey];
@@ -7651,13 +7293,13 @@
                             }
                         }
                         if (!targetCheckbox) {
-                            Notify.info(`${getAgentDisplayName(agentKey)} 在当前配置中不可用`, '', { timeOut: 2000 });
+                            Notify.info(`${getAgentDisplayName(agentKey)} 在当前配置中不可用`, '', {timeOut: 2000});
                             return;
                         }
                     }
 
                     if (targetCheckbox.disabled) {
-                        Notify.info(`${getAgentDisplayName(agentKey)} 为必选Agent，不可取消`, '', { timeOut: 2000 });
+                        Notify.info(`${getAgentDisplayName(agentKey)} 为必选Agent，不可取消`, '', {timeOut: 2000});
                         return;
                     }
 
@@ -7665,7 +7307,7 @@
                     targetCheckbox.checked = !targetCheckbox.checked;
 
 
-                    const changeEvent = new Event('change', { bubbles: true });
+                    const changeEvent = new Event('change', {bubbles: true});
                     targetCheckbox.dispatchEvent(changeEvent);
                 });
             }
@@ -7913,7 +7555,6 @@
             );
 
 
-
             launchContainer.innerHTML = sortedAgents.map(agentKey => {
                 const agent = CONFIG.AGENTS[agentKey];
                 const isRequired = agent?.required || false;
@@ -8117,7 +7758,7 @@
                     parsedChapters: parsedChapters,
                     selectedChapters: Array.from(selectedChapters),
                     currentPage: currentPage,
-                    selectedFile: selectedFile ? { name: selectedFile.name, size: selectedFile.size } : null
+                    selectedFile: selectedFile ? {name: selectedFile.name, size: selectedFile.size} : null
                 };
 
             };
@@ -8146,7 +7787,7 @@
                     selectedChapters.clear();
                     renderList();
                     saveCache();
-                    Notify.success(`成功提取 ${parsed.length} 章`, '', { timeOut: 2000 });
+                    Notify.success(`成功提取 ${parsed.length} 章`, '', {timeOut: 2000});
                 } catch (err) {
                     console.error('[performExtract] 提取失败', err);
                     Notify.error('提取失败：' + err.message);
@@ -8162,7 +7803,7 @@
                     const num = parseInt(match[1], 10);
                     const title = match[2].trim();
                     let content = match[3].trim();
-                    results.push({ num, title, content });
+                    results.push({num, title, content});
                 }
                 return results;
             }
@@ -8187,7 +7828,7 @@
                         }
                         renderList();
                         saveCache();
-                        Notify.info(`已自动补全为连续章节：${allExisting.join(', ')}`, '', { timeOut: 2000 });
+                        Notify.info(`已自动补全为连续章节：${allExisting.join(', ')}`, '', {timeOut: 2000});
                     } else {
 
                     }
@@ -8260,7 +7901,7 @@
                         const targetPage = parseInt(pageInput.value, 10);
                         const totalPages = Math.ceil(parsedChapters.length / pageSize) || 1;
                         if (isNaN(targetPage) || targetPage < 1 || targetPage > totalPages) {
-                            Notify.warning(`请输入1~${totalPages}之间的页码`, '', { timeOut: 2000 });
+                            Notify.warning(`请输入1~${totalPages}之间的页码`, '', {timeOut: 2000});
                             pageInput.value = currentPage;
                             return;
                         }
@@ -8325,7 +7966,7 @@
             startBtn.addEventListener('click', async () => {
                 const selected = Array.from(selectedChapters).sort((a, b) => a - b);
                 if (selected.length === 0) {
-                    Notify.warning('请至少选择一个章节', '', { timeOut: 2000 });
+                    Notify.warning('请至少选择一个章节', '', {timeOut: 2000});
                     return;
                 }
                 const chaptersToProcess = parsedChapters.filter(ch => selectedChapters.has(ch.num));
@@ -8460,7 +8101,7 @@
                             fileObj.format === 'js' ? 'application/javascript' :
                                 fileObj.format === 'css' ? 'text/css' :
                                     'text/plain';
-                        const blob = new Blob([fileObj.text], { type: mime });
+                        const blob = new Blob([fileObj.text], {type: mime});
                         const url = URL.createObjectURL(blob);
                         replacement = `${attrName}="${url}"`;
 
@@ -8522,7 +8163,6 @@
         showAgentStatusDetail: function (agentKey) {
 
 
-
             const output = WORKFLOW_STATE.outputs[agentKey];
             const agentName = getAgentDisplayName(agentKey);
             const agent = CONFIG.AGENTS[agentKey];
@@ -8539,7 +8179,7 @@
                     } else if (agent.role === 'fusionGenerator') {
                         const fusionData = JSON.parse(output);
                         if (fusionData && fusionData.fusion_image_id) {
-                            images = [{ id: fusionData.fusion_image_id }];
+                            images = [{id: fusionData.fusion_image_id}];
 
                         }
                     } else if (agent.role === 'imageVariator') {
@@ -8587,7 +8227,7 @@
             // 普通输出（非生图师/融图师/变图师或无图片）
             if (!output) {
 
-                Notify.info(`暂无 ${agentName} 的输出`, '', { timeOut: 2000 });
+                Notify.info(`暂无 ${agentName} 的输出`, '', {timeOut: 2000});
                 return;
             }
 
@@ -8768,7 +8408,7 @@
                 }
                 try {
                     await navigator.clipboard.writeText(textToCopy);
-                    Notify.success('已复制到剪贴板', '', { timeOut: 2000 });
+                    Notify.success('已复制到剪贴板', '', {timeOut: 2000});
                 } catch (err) {
                     // 降级方案
                     const textarea = document.createElement('textarea');
@@ -8779,7 +8419,7 @@
                     textarea.select();
                     document.execCommand('copy');
                     document.body.removeChild(textarea);
-                    Notify.success('已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
+                    Notify.success('已复制到剪贴板（降级方案）', '', {timeOut: 2000});
                 }
             });
 
@@ -8808,7 +8448,7 @@
         showDiscardedChapter() {
             const d = WORKFLOW_STATE.discardedChapter;
             if (!d) {
-                Notify.info('暂无废章内容', '', { timeOut: 2000 });
+                Notify.info('暂无废章内容', '', {timeOut: 2000});
                 return;
             }
             let title = d.title || '';
@@ -8905,13 +8545,13 @@
 
             const line = document.createElement('div');
             line.style.cssText = `margin-bottom:3px;${isError ? 'color:#ff6b6b;' : ''}`;
-            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+            const time = new Date().toLocaleTimeString('zh-CN', {hour12: false});
             line.textContent = `[${time}] ${text}`;
 
             content.appendChild(line);
             content.scrollTop = content.scrollHeight;
 
-            WORKFLOW_STATE.progressLog.push({ text, isError, time });
+            WORKFLOW_STATE.progressLog.push({text, isError, time});
             if (WORKFLOW_STATE.progressLog.length > CONFIG.MAX_PROGRESS_LINES) {
                 WORKFLOW_STATE.progressLog.shift();
             }
@@ -8928,16 +8568,16 @@
             const lastEl = document.getElementById('nc-token-last');
             if (totalEl) totalEl.textContent = WORKFLOW_STATE.tokenStats.totalInput + WORKFLOW_STATE.tokenStats.totalOutput;
             if (lastEl) {
-                const { lastInput, lastOutput } = WORKFLOW_STATE.tokenStats;
+                const {lastInput, lastOutput} = WORKFLOW_STATE.tokenStats;
                 lastEl.textContent = lastInput || lastOutput ? `本次: +${lastInput + lastOutput}` : '本次: -';
             }
         },
 
         resetTokenStats() {
-            WORKFLOW_STATE.tokenStats = { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 };
+            WORKFLOW_STATE.tokenStats = {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0};
             Storage.saveTokenStats(WORKFLOW_STATE.tokenStats);
             this.updateTokenDisplay();
-            Notify.success('Token统计已重置', '', { timeOut: 2000 });
+            Notify.success('Token统计已重置', '', {timeOut: 2000});
         },
 
         setLoading(isLoading) {
@@ -9002,7 +8642,7 @@
                     version: CONFIG.VERSION,
                     exportTime: new Date().toISOString(),
                     totalChapters: chapters.length,
-                    data: { chapters }
+                    data: {chapters}
                 };
                 zip.file('chapters.json', JSON.stringify(chapterBackup, null, 2));
                 UI.updateProgress(`  ✓ 章节数据已打包 (共 ${chapters.length} 章)`);
@@ -9128,13 +8768,13 @@
                         const imageFolder = zip.folder('images');
                         for (let i = 0; i < allImages.length; i++) {
                             const img = allImages[i];
-                            const { id, blob } = img;
+                            const {id, blob} = img;
                             let ext = 'png';
                             if (blob.type.includes('jpeg') || blob.type.includes('jpg')) ext = 'jpg';
                             else if (blob.type.includes('gif')) ext = 'gif';
                             else if (blob.type.includes('webp')) ext = 'webp';
                             const fileName = `${id}.${ext}`;
-                            imageFolder.file(fileName, blob, { binary: true });
+                            imageFolder.file(fileName, blob, {binary: true});
                         }
                         UI.updateProgress(`  ✓ 已导出 ${allImages.length} 张图片`);
                     } else {
@@ -9152,13 +8792,13 @@
                     if (allTexts.length > 0) {
                         const textFolder = zip.folder('texts');
                         for (const item of allTexts) {
-                            const { id, text, format } = item;
+                            const {id, text, format} = item;
                             let ext;
                             if (format === 'html') ext = 'html';
                             else if (format === 'js') ext = 'js';
                             else ext = 'txt'; // 默认 txt
                             const fileName = `${id}.${ext}`;
-                            textFolder.file(fileName, text, { binary: false });
+                            textFolder.file(fileName, text, {binary: false});
                         }
                         UI.updateProgress(`  ✓ 已导出 ${allTexts.length} 个文本文件`);
                     } else {
@@ -9176,14 +8816,14 @@
                     if (allAudios.length > 0) {
                         const audioFolder = zip.folder('audios');
                         for (const audio of allAudios) {
-                            const { id, blob } = audio;
+                            const {id, blob} = audio;
                             let ext = 'mp3';
                             if (blob.type.includes('wav')) ext = 'wav';
                             else if (blob.type.includes('ogg')) ext = 'ogg';
                             else if (blob.type.includes('m4a')) ext = 'm4a';
                             else if (blob.type.includes('flac')) ext = 'flac';
                             const fileName = `${id}.${ext}`;
-                            audioFolder.file(fileName, blob, { binary: true });
+                            audioFolder.file(fileName, blob, {binary: true});
                         }
                         UI.updateProgress(`  ✓ 已导出 ${allAudios.length} 个音频文件`);
                     } else {
@@ -9195,7 +8835,7 @@
                 }
 
                 // ========== 生成并下载 ZIP ==========
-                const blob = await zip.generateAsync({ type: 'blob' });
+                const blob = await zip.generateAsync({type: 'blob'});
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -9213,8 +8853,6 @@
         },
 
         async renderAndWaitForInteraction(html) {
-
-
 
 
             // 去除外层 ```html 代码块标记
@@ -9301,7 +8939,7 @@
                     const textToCopy = content.innerText || content.textContent;
                     try {
                         await navigator.clipboard.writeText(textToCopy);
-                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
+                        Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
 
                     } catch (err) {
                         console.warn('[UI.renderAndWaitForInteraction] 剪贴板API失败，使用降级方案:', err);
@@ -9313,7 +8951,7 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
+                        Notify.success('内容已复制到剪贴板（降级方案）', '', {timeOut: 2000});
 
                     }
                 });
@@ -9459,8 +9097,6 @@
         _showHtmlPreviewModal: function (agentName, content, agentKey) {
 
 
-
-
             // 去除外层代码块
             const trimmed = content.trim();
             const codeBlockRegex = /^```(?:html)?\n([\s\S]*?)\n```$/;
@@ -9529,7 +9165,6 @@
                 const scrollWidth = container.scrollWidth;
                 const clientWidth = container.clientWidth;
                 const computedStyle = window.getComputedStyle(container);
-
 
 
                 // 同时检查内部的 <pre>
@@ -9725,12 +9360,12 @@
             const setActiveTab = (tabId) => {
 
                 const tabs = [
-                    { btn: imagesTab, id: 'images' },
-                    { btn: libraryTab, id: 'library' },
-                    { btn: audiosTab, id: 'audios' },
-                    { btn: otherFilesTab, id: 'other' },
-                    { btn: audiobookTab, id: 'audiobook' },
-                    { btn: galgamesTab, id: 'galgames' }
+                    {btn: imagesTab, id: 'images'},
+                    {btn: libraryTab, id: 'library'},
+                    {btn: audiosTab, id: 'audios'},
+                    {btn: otherFilesTab, id: 'other'},
+                    {btn: audiobookTab, id: 'audiobook'},
+                    {btn: galgamesTab, id: 'galgames'}
                 ];
                 tabs.forEach(item => {
                     if (item.btn) {
@@ -9776,7 +9411,7 @@
 
                     let html = '<div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">';
                     for (const img of allImages) {
-                        const { id, blob } = img;
+                        const {id, blob} = img;
                         const url = URL.createObjectURL(blob);
                         html += `
                     <div style="width: 150px; text-align: center; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
@@ -9853,7 +9488,7 @@
                         if (!imageId) continue;
                         const blob = await ImageStore.get(imageId);
                         if (!blob) continue;
-                        items.push({ entry, imageId, blob });
+                        items.push({entry, imageId, blob});
                     }
 
 
@@ -9864,7 +9499,7 @@
 
                     let html = '<div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">';
                     for (const item of items) {
-                        const { entry, imageId, blob } = item;
+                        const {entry, imageId, blob} = item;
                         const url = URL.createObjectURL(blob);
                         const bookIndex = entry.book;
                         html += `
@@ -9923,7 +9558,7 @@
                                 let entries = Array.isArray(book) ? book : (book.entries || []);
                                 const newEntries = entries.filter(e => e.uid !== uid);
                                 if (newEntries.length !== entries.length) {
-                                    await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
+                                    await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
                                 }
                                 Notify.success(`图库条目已删除`);
                                 loadLibraryImages();
@@ -9957,7 +9592,7 @@
 
                     let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
                     for (const audio of allAudios) {
-                        const { id, blob } = audio;
+                        const {id, blob} = audio;
                         const url = URL.createObjectURL(blob);
                         html += `
                     <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
@@ -10038,7 +9673,7 @@
                         if (!audioId) continue;
                         const blob = await AudioStore.get(audioId);
                         if (!blob) continue;
-                        items.push({ entry, audioId, blob });
+                        items.push({entry, audioId, blob});
                     }
 
 
@@ -10049,7 +9684,7 @@
 
                     let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
                     for (const item of items) {
-                        const { entry, audioId, blob } = item;
+                        const {entry, audioId, blob} = item;
                         const url = URL.createObjectURL(blob);
                         const bookIndex = entry.book;
                         html += `
@@ -10111,7 +9746,7 @@
                                 let entries = Array.isArray(book) ? book : (book.entries || []);
                                 const newEntries = entries.filter(e => e.uid !== uid);
                                 if (newEntries.length !== entries.length) {
-                                    await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
+                                    await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
                                 }
                                 Notify.success(`音频书条目已删除`);
                                 loadAudioBook();
@@ -10145,7 +9780,7 @@
 
                     let html = '';
                     for (const item of allTexts) {
-                        const { id, text, format } = item;
+                        const {id, text, format} = item;
                         const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
                         html += `
                     <div style="margin-bottom: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
@@ -10189,7 +9824,7 @@
                             const item = await OtherFileStore.get(id);
                             if (item) {
                                 const ext = format === 'html' ? 'html' : format === 'js' ? 'js' : 'txt';
-                                const blob = new Blob([item.text], { type: 'text/plain' });
+                                const blob = new Blob([item.text], {type: 'text/plain'});
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
@@ -10334,7 +9969,6 @@
                         fileInput.remove();
                         return;
                     }
-
 
 
                     // 确定文件类型和存储
@@ -10928,8 +10562,6 @@
         _renderGalgameProperties: function (node, container, editor) {
 
 
-
-
             // 如果 editor 未定义，尝试从 container 的祖先模态框中获取 editor
             let _editor = editor;
             if (!_editor) {
@@ -11072,7 +10704,7 @@
             // 节点属性变化保存（使用 blur 事件避免频繁更新）
             titleInput.addEventListener('blur', () => {
                 node.title = titleInput.value;
-                _editor.updateNode(node.id, { title: node.title });
+                _editor.updateNode(node.id, {title: node.title});
 
             });
 
@@ -11080,26 +10712,26 @@
                 const val = parseInt(chapterInput.value);
                 if (!isNaN(val)) {
                     node.chapterNum = val;
-                    _editor.updateNode(node.id, { chapterNum: node.chapterNum });
+                    _editor.updateNode(node.id, {chapterNum: node.chapterNum});
 
                 }
             });
 
             scriptInput.addEventListener('blur', () => {
                 node.script = scriptInput.value;
-                _editor.updateNode(node.id, { script: node.script });
+                _editor.updateNode(node.id, {script: node.script});
 
             });
 
             defaultTargetInput.addEventListener('blur', () => {
                 node.defaultTarget = defaultTargetInput.value;
-                _editor.updateNode(node.id, { defaultTarget: node.defaultTarget });
+                _editor.updateNode(node.id, {defaultTarget: node.defaultTarget});
 
             });
 
             onEnterScriptInput.addEventListener('blur', () => {
                 node.onEnterScript = onEnterScriptInput.value;
-                _editor.updateNode(node.id, { onEnterScript: node.onEnterScript });
+                _editor.updateNode(node.id, {onEnterScript: node.onEnterScript});
 
             });
 
@@ -11111,7 +10743,7 @@
                         const ch = selected[0];
                         node.chapterNum = ch.num;
                         chapterInput.value = ch.num;
-                        _editor.updateNode(node.id, { chapterNum: ch.num });
+                        _editor.updateNode(node.id, {chapterNum: ch.num});
 
                         Notify.success(`已关联章节 #${ch.num}`);
                         // 重新渲染属性面板以显示快照导入区域
@@ -11142,14 +10774,14 @@
                         const varMatches = line.match(/vars\.([a-zA-Z_$][a-zA-Z0-9_$]*)/g) || [];
                         varMatches.forEach(m => {
                             const name = m.split('.')[1];
-                            if (!varUsage[name]) varUsage[name] = { ref: true, assign: false, values: [] };
+                            if (!varUsage[name]) varUsage[name] = {ref: true, assign: false, values: []};
                         });
                         // 匹配赋值：vars.xxx = ... 或 vars.xxx += ... 等
                         const assignMatch = line.match(/vars\.([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(.+?);/);
                         if (assignMatch) {
                             const name = assignMatch[1];
                             const right = assignMatch[2].trim();
-                            if (!varUsage[name]) varUsage[name] = { ref: true, assign: true, values: [] };
+                            if (!varUsage[name]) varUsage[name] = {ref: true, assign: true, values: []};
                             varUsage[name].assign = true;
                             try {
                                 const val = eval('(' + right + ')');
@@ -11162,7 +10794,7 @@
                         if (plusMatch) {
                             const name = plusMatch[1];
                             const right = plusMatch[2].trim();
-                            if (!varUsage[name]) varUsage[name] = { ref: true, assign: true, values: [] };
+                            if (!varUsage[name]) varUsage[name] = {ref: true, assign: true, values: []};
                             varUsage[name].assign = true;
                             varUsage[name].values.push(`原值 + ${right}`);
                         }
@@ -11170,7 +10802,7 @@
                         if (minusMatch) {
                             const name = minusMatch[1];
                             const right = minusMatch[2].trim();
-                            if (!varUsage[name]) varUsage[name] = { ref: true, assign: true, values: [] };
+                            if (!varUsage[name]) varUsage[name] = {ref: true, assign: true, values: []};
                             varUsage[name].assign = true;
                             varUsage[name].values.push(`原值 - ${right}`);
                         }
@@ -11215,7 +10847,7 @@
                         const entry = snapshotEntries[index];
                         // 存储条目内容到项目变量
                         if (!WORKFLOW_STATE.galProject) {
-                            WORKFLOW_STATE.galProject = { variables: {} };
+                            WORKFLOW_STATE.galProject = {variables: {}};
                         }
                         if (!WORKFLOW_STATE.galProject.variables) {
                             WORKFLOW_STATE.galProject.variables = {};
@@ -11293,9 +10925,6 @@
         },
 
         _bindGalgameToolbar: function (overlay, editor, projects) {
-
-
-
 
 
             // 获取所有按钮（包括硬编码的自动布局按钮）
@@ -11628,7 +11257,6 @@
         _packageGalgameProject: async function (nodes) {
 
 
-
             // 1. 收集所有引用的章节号
             const chapterNums = new Set();
             nodes.forEach(node => {
@@ -11668,9 +11296,6 @@
                     extractOtherFileIds(node.content).forEach(id => otherFileIds.add(id));
                 }
             });
-
-
-
 
 
             // 5. 加载资源并转换为 base64
@@ -12006,7 +11631,7 @@
                 </html>`;
 
             // 9. 创建并下载 HTML 文件
-            const blob = new Blob([htmlTemplate], { type: 'text/html' });
+            const blob = new Blob([htmlTemplate], {type: 'text/html'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -12030,7 +11655,7 @@
                 version: CONFIG.VERSION,
                 exportTime: new Date().toISOString(),
                 totalChapters: usedChapters.length,
-                data: { chapters: usedChapters }
+                data: {chapters: usedChapters}
             };
             zip.file('chapters.json', JSON.stringify(chapterBackup, null, 2));
 
@@ -12052,7 +11677,7 @@
                     const blob = await ImageStore.get(id);
                     if (blob) {
                         let ext = blob.type.includes('jpeg') ? 'jpg' : blob.type.includes('png') ? 'png' : 'bin';
-                        imageFolder.file(`${id}.${ext}`, blob, { binary: true });
+                        imageFolder.file(`${id}.${ext}`, blob, {binary: true});
                     }
                 }
             }
@@ -12064,7 +11689,7 @@
                     const blob = await AudioStore.get(id);
                     if (blob) {
                         let ext = blob.type.includes('mp3') ? 'mp3' : blob.type.includes('wav') ? 'wav' : 'bin';
-                        audioFolder.file(`${id}.${ext}`, blob, { binary: true });
+                        audioFolder.file(`${id}.${ext}`, blob, {binary: true});
                     }
                 }
             }
@@ -12091,7 +11716,7 @@
             };
             zip.file('project.json', JSON.stringify(projectData, null, 2));
 
-            const blob = await zip.generateAsync({ type: 'blob' });
+            const blob = await zip.generateAsync({type: 'blob'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -12259,18 +11884,18 @@
                             const renumbered = imported.map(c => {
                                 if (existingNums.has(c.num)) {
                                     maxNum++;
-                                    return { ...c, num: maxNum };
+                                    return {...c, num: maxNum};
                                 }
                                 return c;
                             });
                             merged = existing.concat(renumbered);
                         }
                         merged.sort((a, b) => a.num - b.num);
-                        Storage.save({ chapters: merged });
+                        Storage.save({chapters: merged});
                     } else {
                         const merged = existing.concat(imported);
                         merged.sort((a, b) => a.num - b.num);
-                        Storage.save({ chapters: merged });
+                        Storage.save({chapters: merged});
                     }
                 }
             }
@@ -12447,9 +12072,7 @@
             });
         },
 
-        _renderMarkdown : function (text) {
-
-
+        _renderMarkdown: function (text) {
 
 
             if (!text) {
@@ -12497,7 +12120,7 @@
                 if (!idSet.has(id)) {
                     idSet.add(id);
                     const placeholder = `<!--IMG_PLACEHOLDER_${id}-->`;
-                    placeholders.push({ id, placeholder, alt });
+                    placeholders.push({id, placeholder, alt});
 
                     imagePromises.push(
                         ImageStore.get(id).then(blob => {
@@ -12518,11 +12141,11 @@
                                 };
                             } else {
                                 console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                                return { id, html: `![${alt}](图片丢失)` };
+                                return {id, html: `![${alt}](图片丢失)`};
                             }
                         }).catch(err => {
                             console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                            return { id, html: `![${alt}](图片加载错误)` };
+                            return {id, html: `![${alt}](图片加载错误)`};
                         })
                     );
                     return placeholder;
@@ -12538,7 +12161,7 @@
                 if (!idSet.has(id)) {
                     idSet.add(id);
                     const placeholder = `<!--HTML_IMG_PLACEHOLDER_${id}-->`;
-                    placeholders.push({ id, placeholder, isHtml: true });
+                    placeholders.push({id, placeholder, isHtml: true});
 
                     imagePromises.push(
                         ImageStore.get(id).then(blob => {
@@ -12563,11 +12186,11 @@
                                 };
                             } else {
                                 console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                                return { id, html: `[图片丢失: ${id}]` };
+                                return {id, html: `[图片丢失: ${id}]`};
                             }
                         }).catch(err => {
                             console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                            return { id, html: `[图片加载错误: ${id}]` };
+                            return {id, html: `[图片加载错误: ${id}]`};
                         })
                     );
                     return placeholder;
@@ -12576,8 +12199,6 @@
                     return match;
                 }
             });
-
-
 
 
             let html;
@@ -12598,7 +12219,7 @@
             } else {
                 if (typeof marked !== 'undefined') {
                     try {
-                        html = marked.parse(processedText, { gfm: true, breaks: true });
+                        html = marked.parse(processedText, {gfm: true, breaks: true});
 
 
                     } catch (e) {
@@ -12667,73 +12288,13 @@
             return html;
         },
 
-        _replaceImagePlaceholders : async function (html) {
-            console.time('_replaceImagePlaceholders');
-
-            const placeholderRegex = /src="id:([^"]+)"/g;
-            const matches = [...html.matchAll(placeholderRegex)];
-
-
-            if (matches.length === 0) {
-                console.timeEnd('_replaceImagePlaceholders');
-                return html;
-            }
-
-            let result = html;
-            for (const match of matches) {
-                const id = match[1];
-
-
-                if (id.startsWith('img_')) {
-                    const blob = await ImageStore.get(id);
-                    if (blob) {
-                        const url = URL.createObjectURL(blob);
-                        result = result.replace(match[0], `src="${url}"`);
-
-                    } else {
-                        console.warn('[replaceImagePlaceholders] 图片', id, '不存在');
-                        result = result.replace(match[0], `src="#" alt="图片丢失"`);
-                    }
-                } else if (id.startsWith('other_')) {
-
-                    const textObj = await OtherFileStore.get(id);
-                    if (textObj && textObj.text) {
-                        const mime = textObj.format === 'html' ? 'text/html' :
-                            textObj.format === 'js' ? 'application/javascript' :
-                                'text/plain';
-                        const blob = new Blob([textObj.text], { type: mime });
-                        const url = URL.createObjectURL(blob);
-                        replacement = `${attrName}="${url}"`;
-
-                    } else {
-                        console.warn(`[replaceImagePlaceholders] 其余文件 ${id} 不存在，替换为 #`);
-                        replacement = `${attrName}="#" alt="文件丢失"`;
-                    }
-                } else if (id.startsWith('audio_')) {
-                    const blob = await AudioStore.get(id);
-                    if (blob) {
-                        const url = URL.createObjectURL(blob);
-                        result = result.replace(match[0], `src="${url}"`);
-
-                    } else {
-                        console.warn('[replaceImagePlaceholders] 音频', id, '不存在');
-                        result = result.replace(match[0], `src="#" alt="音频丢失"`);
-                    }
-                } else {
-                    console.warn('[replaceImagePlaceholders] 未知ID前缀', id);
-                }
-            }
-            console.timeEnd('_replaceImagePlaceholders');
-            return result;
-        },
-
         /**
          * 显示主审核模态框
          * @param {string} agentKey - Agent键
          * @param {string} originalContent - Agent生成的原始输出
          * @returns {Promise<{action: 'continue'|'reject', content?: string, suggestion?: string, attachType?: 'original'|'modified'}>}
          */
-        showReviewModal : function (agentKey, originalContent) {
+        showReviewModal: function (agentKey, originalContent) {
 
             const agent = CONFIG.AGENTS[agentKey];
             const agentName = getAgentDisplayName(agentKey);
@@ -12941,7 +12502,7 @@
                     ModalStack.remove(overlay);
                     overlay.remove();
 
-                    resolve({ action: 'continue', content: finalContent });
+                    resolve({action: 'continue', content: finalContent});
                 });
 
                 // 打回按钮：打开次级框
@@ -12994,7 +12555,7 @@
          * @param {Object} initialState - 初始状态 { suggestion, attachType }
          * @returns {Promise<{suggestion: string, attachType: 'original'|'modified', state: Object} | null>} null表示取消
          */
-        showRejectModal : function (initialState) {
+        showRejectModal: function (initialState) {
 
             return new Promise((resolve) => {
 
@@ -13098,7 +12659,7 @@
          * @param {string} content - 要预览的HTML内容
          * @param {string} title - 预览标题
          */
-        showPreviewModal : async function (content, title = '预览') {
+        showPreviewModal: async function (content, title = '预览') {
 
             const overlay = document.createElement('div');
             overlay.className = 'nc-modal-overlay nc-font';
@@ -13163,14 +12724,14 @@
         /**
          * 创建统一风格的按钮（简化）
          */
-        _createButton : function (text, className = 'nc-btn') {
+        _createButton: function (text, className = 'nc-btn') {
             const btn = document.createElement('button');
             btn.className = className;
             btn.textContent = text;
             return btn;
         },
 
-        openConfigGUI : async function () {
+        openConfigGUI: async function () {
 
 
             const existing = document.querySelector('#nc-config-gui-overlay');
@@ -13721,7 +13282,7 @@
 
             modal.querySelector('#nc-config-export').addEventListener('click', () => {
                 const configJSON = editor.getConfig();
-                const blob = new Blob([JSON.stringify(configJSON, null, 2)], { type: 'application/json' });
+                const blob = new Blob([JSON.stringify(configJSON, null, 2)], {type: 'application/json'});
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -13877,13 +13438,6 @@
         _getCurrentConfigForEditor: function () {
 
 
-
-
-
-
-
-
-
             const configCopy = {
                 version: WORKFLOW_STATE.configVersion || CONFIG.VERSION,
                 description: WORKFLOW_STATE.configDescription || '',
@@ -13927,12 +13481,10 @@
             }
 
 
-
-
             return configCopy;
         },
 
-        _loadScript : function (src) {
+        _loadScript: function (src) {
             return new Promise((resolve, reject) => {
                 const script = document.createElement('script');
                 script.src = src;
@@ -14023,11 +13575,11 @@
             this.offsetX = 0;
             this.offsetY = 0;
             this.isPanning = false;
-            this.panStart = { x: 0, y: 0 };
+            this.panStart = {x: 0, y: 0};
 
             // 拖拽节点
             this.draggingNode = null;
-            this.draggingOffset = { x: 0, y: 0 };
+            this.draggingOffset = {x: 0, y: 0};
             this.draggingStartX = 0;
             this.draggingStartY = 0;
 
@@ -14169,12 +13721,9 @@
             }
 
 
-
-
         }
 
         loadConfig(newConfig) {
-
 
 
             this.config = newConfig;
@@ -14238,7 +13787,7 @@
             this.canvas.addEventListener('mousedown', this._onMouseDown.bind(this));
             this.canvas.addEventListener('mousemove', this._onMouseMove.bind(this));
             this.canvas.addEventListener('mouseup', this._onMouseUp.bind(this));
-            this.canvas.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
+            this.canvas.addEventListener('wheel', this._onWheel.bind(this), {passive: false});
             this.canvas.addEventListener('contextmenu', e => e.preventDefault());
             window.addEventListener('keydown', this._onKeyDown.bind(this));
         }
@@ -14248,7 +13797,7 @@
             const stage = this.config.workflowStages.find(s => s.id === stageId);
             if (!stage) return [];
             return stage.agents
-                .map(key => ({ key, agent: this.config.agents[key] }))
+                .map(key => ({key, agent: this.config.agents[key]}))
                 .filter(item => item.agent)
                 .sort((a, b) => (a.agent.order || 999) - (b.agent.order || 999));
         }
@@ -14269,14 +13818,14 @@
             }
             const x = stageNode.x + stageNode.width + this.stageAgentOffsetX + offsetX;
             const y = stageNode.y + (stageNode.height / 2) - (this.agentNodeHeight / 2);
-            return { x, y };
+            return {x, y};
         }
 
         _getUnassignedAgents() {
             const allAgents = Object.entries(this.config.agents || {});
             return allAgents
                 .filter(([key, agent]) => !agent.stage || agent.stage.trim() === '')
-                .map(([key, agent]) => ({ key, agent }))
+                .map(([key, agent]) => ({key, agent}))
                 .sort((a, b) => (a.agent.order || 999) - (b.agent.order || 999));
         }
 
@@ -14345,7 +13894,6 @@
             const y = (e.clientY - rect.top - this.offsetY) / this.scale;
 
 
-
             // 清除潜在拖拽状态
             this.potentialDragAgentKey = null;
             this.potentialDragStageId = null;
@@ -14367,7 +13915,7 @@
                 const agentTotalHeight = this.orderRectHeight + this.orderTopMargin + this.agentNodeHeight;
 
                 for (let i = 0; i < unassignedAgents.length; i++) {
-                    const { key, agent } = unassignedAgents[i];
+                    const {key, agent} = unassignedAgents[i];
                     const col = Math.floor(i / rowsPerColumn);
                     const row = i % rowsPerColumn;
                     const ax = this.unassignedAreaX + col * columnWidth;
@@ -14394,8 +13942,8 @@
                 if (node.type !== 'stage') continue;
                 const sortedAgents = this._getSortedAgentsForStage(node.key);
                 for (let j = sortedAgents.length - 1; j >= 0; j--) {
-                    const { key, agent } = sortedAgents[j];
-                    const { x: ax, y: ay } = this._getAgentPosition(node, j);
+                    const {key, agent} = sortedAgents[j];
+                    const {x: ax, y: ay} = this._getAgentPosition(node, j);
                     const agentWidth = this._getAgentWidth(agent);
                     if (x >= ax && x <= ax + agentWidth && y >= ay && y <= ay + this.agentNodeHeight) {
 
@@ -14453,13 +14001,13 @@
             // 中键平移
             if (e.button === 1 || e.button === 2) {
                 this.isPanning = true;
-                this.panStart = { x: e.clientX - this.offsetX, y: e.clientY - this.offsetY };
+                this.panStart = {x: e.clientX - this.offsetX, y: e.clientY - this.offsetY};
                 e.preventDefault();
             } else if (e.button === 0) {
                 // 左键开始框选
                 this.isSelecting = true;
-                this.selectStart = { x, y };
-                this.selectRect = { x, y, width: 0, height: 0 };
+                this.selectStart = {x, y};
+                this.selectRect = {x, y, width: 0, height: 0};
                 this._requestRender();
             }
         }
@@ -14570,7 +14118,6 @@
                 const sourceStage = sourceStageId ? this.config.workflowStages.find(s => s.id === sourceStageId) : null;
 
 
-
                 // 移除模式兼容性检查：任何 Agent 均可放入任何阶段
 
                 let configChanged = false;
@@ -14590,7 +14137,7 @@
                     agent.stage = targetStageId;
 
                     const currentAgents = targetStage.agents
-                        .map(key => ({ key, order: this.config.agents[key]?.order || 0 }))
+                        .map(key => ({key, order: this.config.agents[key]?.order || 0}))
                         .sort((a, b) => a.order - b.order)
                         .map(item => item.key);
 
@@ -14684,9 +14231,6 @@
          * @param {KeyboardEvent} e
          */
         async _onKeyDown(e) {
-
-
-
 
 
             // 检查当前焦点是否在输入框或文本域内
@@ -14812,7 +14356,6 @@
                     type: edgeType,
                 });
             }
-
 
 
         }
@@ -15021,7 +14564,7 @@
                     const stageId = node.key;
                     const sortedAgents = this._getSortedAgentsForStage(stageId);
                     sortedAgents.forEach((item, index) => {
-                        const { x, y } = this._getAgentPosition(node, index);
+                        const {x, y} = this._getAgentPosition(node, index);
                         let alpha = 1.0;
                         if (this.draggingAgentKey &&
                             this.draggingTargetStageNode === node &&
@@ -15094,8 +14637,6 @@
                 // 边框左上角坐标
                 const borderX = this.unassignedAreaX - 10;
                 const borderY = this.unassignedAreaY - this.unassignedAreaTopPadding;
-
-
 
 
                 ctx.save();
@@ -15250,7 +14791,6 @@
 
                 return;
             }
-
 
 
             // 从阶段 agents 列表中移除
@@ -15650,7 +15190,7 @@
         }
 
         _renderApiProperties(apiId) {
-            console.log(`[ConfigEditor._renderApiProperties] 渲染 API: ${apiId}`);
+
 
             const api = this.config.apiConfigs[apiId];
             if (!api) {
@@ -15740,7 +15280,7 @@
 
             // ==================== 辅助函数 ====================
             const updateField = (field, value) => {
-                console.log(`[API属性] 更新 ${field} =`, value);
+
                 this.config.apiConfigs[apiId][field] = value;
                 if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
             };
@@ -15750,7 +15290,7 @@
             const sourceSelect = basicCard.querySelector('#api-source');
             const updateSourceOptions = (type) => {
                 const sources = {
-                    text: ['openai', 'claude', 'gemini', 'wenxin', 'qwen', 'glm', 'mistral', 'siliconflow', 'huggingface', 'groq', 'inference', 'openrouter', '4sapi', 'other'],
+                    text: ['openai', 'claude', 'gemini', 'deepseek', 'wenxin', 'qwen', 'glm', 'mistral', 'siliconflow', 'huggingface', 'groq', 'inference', 'openrouter', '4sapi', 'other'],
                     image: ['openai', 'stability', 'midjourney', 'sora', 'flux', 'picsart', 'siliconflow', 'sdwebui', 'other'],
                     audio: ['elevenlabs', 'stableaudio', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'custom', 'other']
                 };
@@ -15820,7 +15360,6 @@
                 modelTip.textContent = '';
 
                 try {
-                    // 调用全局 fetchModelList 函数（需在外部定义）
                     const models = await fetchModelList(currentConfig);
                     if (models && models.length > 0) {
                         modelSelect.innerHTML = '<option value="">选择模型</option>' +
@@ -15828,7 +15367,6 @@
                         modelSelectContainer.style.display = 'block';
                         modelInput.style.display = 'none';
 
-                        // 如果当前已有模型值，尝试预选
                         if (modelInput.value) {
                             const option = Array.from(modelSelect.options).find(opt => opt.value === modelInput.value);
                             if (option) option.selected = true;
@@ -15846,7 +15384,6 @@
                 }
             });
 
-            // 下拉框选择事件
             modelSelect.addEventListener('change', () => {
                 if (modelSelect.value) {
                     modelInput.value = modelSelect.value;
@@ -15854,13 +15391,11 @@
                 }
             });
 
-            // 返回手动输入
             backToManual.addEventListener('click', () => {
                 modelSelectContainer.style.display = 'none';
                 modelInput.style.display = 'block';
             });
 
-            // 用户手动修改输入框时，同步更新
             modelInput.addEventListener('input', () => {
                 updateField('model', modelInput.value);
             });
@@ -15870,7 +15405,6 @@
             typeSelect.addEventListener('change', e => {
                 const newType = e.target.value;
                 const oldType = api.type;
-                // 图像配置唯一性检查
                 if (newType === 'image' && oldType !== 'image') {
                     const hasOtherImage = Object.values(this.config.apiConfigs || {}).some(cfg => cfg.type === 'image' && cfg !== api);
                     if (hasOtherImage) {
@@ -15881,14 +15415,23 @@
                 }
                 updateField('type', newType);
                 updateSourceOptions(newType);
+
+                // ===== 新增：根据新的类型和当前选择的 source 自动填充 apiUrl =====
+                const currentSource = sourceSelect.value;
+                const apiUrlInput = basicCard.querySelector('#api-url');
+                if (apiUrlInput && defaultApiUrls[currentSource]) {
+                    apiUrlInput.value = defaultApiUrls[currentSource];
+                    updateField('apiUrl', defaultApiUrls[currentSource]);
+                }
+                // ===== 结束新增 =====
+
                 renderExtraFields();
             });
 
-            // 平台改变 - 【修改点】始终填充默认 apiUrl，无论当前是否有值
+            // 平台改变 - 始终填充默认 apiUrl
             sourceSelect.addEventListener('change', e => {
                 const newSource = e.target.value;
                 updateField('source', newSource);
-                // 自动填充默认 apiUrl（始终覆盖，确保切换后立即更新）
                 const apiUrlInput = basicCard.querySelector('#api-url');
                 if (apiUrlInput && defaultApiUrls[newSource]) {
                     apiUrlInput.value = defaultApiUrls[newSource];
@@ -15897,7 +15440,7 @@
                 renderExtraFields();
             });
 
-            // 【关键修复】初始化时根据当前 source 自动填充 apiUrl（如果为空）
+            // 初始化时根据当前 source 自动填充 apiUrl（如果为空）
             const initialSource = sourceSelect.value;
             const apiUrlInput = basicCard.querySelector('#api-url');
             if (apiUrlInput && defaultApiUrls[initialSource] && !apiUrlInput.value.trim()) {
@@ -15918,7 +15461,6 @@
                 let extraHTML = '';
 
                 if (currentType === 'image') {
-                    // 图像平台特有字段
                     const unavailableModes = (() => {
                         const set = new Set();
                         const entries = Object.entries(this.config.apiConfigs || {});
@@ -15991,7 +15533,6 @@
                 </div>
             `;
                 } else if (currentType === 'audio') {
-                    // 音频平台特有字段
                     const unavailableModes = (() => {
                         const set = new Set();
                         const entries = Object.entries(this.config.apiConfigs || {});
@@ -16018,7 +15559,6 @@
                     </select>
                 </div>
             `;
-                    // 根据 source 添加特有字段
                     if (currentSource === 'elevenlabs') {
                         extraHTML += `
                     <div class="field-group" style="margin-bottom:16px;">
@@ -16212,7 +15752,6 @@
                     timeout: parseInt(basicCard.querySelector('#api-timeout')?.value) || 60000,
                 };
 
-                // 调用全局 testAPIConnection 函数
                 const result = await testAPIConnection(currentConfig);
                 if (result.ok) {
                     testResultDiv.innerHTML = '<span style="color:#28a745;">✅ 连接成功</span>';
@@ -16434,7 +15973,7 @@
                     Notify.error(`选项ID ${optKey} 已存在`);
                     return;
                 }
-                cat.options[optKey] = { name: optKey, description: '', icon: '', agents: [] };
+                cat.options[optKey] = {name: optKey, description: '', icon: '', agents: []};
                 renderOptions();
                 if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
             });
@@ -16590,8 +16129,6 @@
         _renderAgentPropertiesInPanel(agentKey, stageNode) {
 
 
-
-
             const agent = this.config.agents[agentKey];
             if (!agent) {
                 console.error(`[ConfigEditor._renderAgentPropertiesInPanel] Agent ${agentKey} 不存在`);
@@ -16692,9 +16229,9 @@
             <select id="agent-apiConfigId" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
                 <option value="">无</option>
                 ${Object.entries(this.config.apiConfigs || {})
-                    .filter(([_, cfg]) => cfg.type === 'text')
-                    .map(([id]) => `<option value="${id}" ${agent.apiConfigId === id ? 'selected' : ''}>${id}</option>`)
-                    .join('')}
+                .filter(([_, cfg]) => cfg.type === 'text')
+                .map(([id]) => `<option value="${id}" ${agent.apiConfigId === id ? 'selected' : ''}>${id}</option>`)
+                .join('')}
             </select>
         </div>
         <div class="field-group">
@@ -16772,11 +16309,8 @@
                 let templateValue = agent.inputTemplate || '';
 
 
-
                 const convertedValue = templateValue.replace(/\\n/g, '\n');
                 const afterLength = convertedValue.length;
-
-
 
 
                 if (templateValue !== convertedValue) {
@@ -16940,7 +16474,6 @@
                 ];
                 allCandidates.push('id.other_example', 'id.img_example', 'id.audio_example');
                 const uniqueCandidates = [...new Set(allCandidates)];
-
 
 
                 let html = '';
@@ -17170,7 +16703,7 @@
             this.selectedAgentKey = null;
             this.highlightedAgents.clear();      // 新增：清空高亮
             this.selectedGlobal = false;
-            this._renderPropertyPanel({ type: 'api' });
+            this._renderPropertyPanel({type: 'api'});
         }
 
         selectCategory(id) {
@@ -17183,7 +16716,7 @@
             this.selectedAgentKey = null;
             this.highlightedAgents.clear();      // 新增：清空高亮
             this.selectedGlobal = false;
-            this._renderPropertyPanel({ type: 'category' });
+            this._renderPropertyPanel({type: 'category'});
         }
 
         selectGroup(index) {
@@ -17196,7 +16729,7 @@
             this.selectedAgentKey = null;
             this.highlightedAgents.clear();      // 新增：清空高亮
             this.selectedGlobal = false;
-            this._renderPropertyPanel({ type: 'group' });
+            this._renderPropertyPanel({type: 'group'});
         }
 
         selectAgent(agentKey) {
@@ -17403,7 +16936,6 @@
             if (!stageData) return;
 
 
-
             const overlay = document.createElement('div');
             overlay.className = 'nc-modal-overlay nc-font';
             overlay.style.zIndex = '100090';
@@ -17469,7 +17001,7 @@
                             // 从阶段agents列表中移除
                             stageData.agents = stageData.agents.filter(k => k !== agentKey);
                             agent.stage = '';
-                            Notify.info(`Agent ${agent.displayName || agentKey} 已移至未分配区`, '', { timeOut: 2000 });
+                            Notify.info(`Agent ${agent.displayName || agentKey} 已移至未分配区`, '', {timeOut: 2000});
                             renderAgentGrid();
                             if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
                         } else {
@@ -17552,7 +17084,6 @@
 
         // ========== 新增：Agent键名更新辅助方法 ==========
         _updateAgentKey(oldKey, newKey) {
-
 
 
             // 1. 更新 agents 对象
@@ -17648,7 +17179,7 @@
 
             // 拖拽状态
             this.draggingNode = null;
-            this.draggingOffset = { x: 0, y: 0 };
+            this.draggingOffset = {x: 0, y: 0};
             this.draggingStartX = 0;
             this.draggingStartY = 0;
 
@@ -17662,11 +17193,11 @@
             this.offsetX = 0;
             this.offsetY = 0;
             this.isPanning = false;
-            this.panStart = { x: 0, y: 0 };
+            this.panStart = {x: 0, y: 0};
 
             // 框选
             this.isSelecting = false;
-            this.selectStart = { x: 0, y: 0 };
+            this.selectStart = {x: 0, y: 0};
             this.selectRect = null;
 
             // 对齐辅助线与吸附
@@ -17717,7 +17248,7 @@
             this.canvas.addEventListener('mousedown', this._onMouseDown.bind(this));
             this.canvas.addEventListener('mousemove', this._onMouseMove.bind(this));
             this.canvas.addEventListener('mouseup', this._onMouseUp.bind(this));
-            this.canvas.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
+            this.canvas.addEventListener('wheel', this._onWheel.bind(this), {passive: false});
 
             // 新增：双击画布创建节点
             this.canvas.addEventListener('dblclick', this._onDoubleClick.bind(this));
@@ -17787,7 +17318,7 @@
                     this.draggingNode = node;
                     this.draggingStartX = node.x;
                     this.draggingStartY = node.y;
-                    this.draggingOffset = { x: x - node.x, y: y - node.y };
+                    this.draggingOffset = {x: x - node.x, y: y - node.y};
                     this.isSelecting = false;
                     this._requestRender();
                     e.preventDefault();
@@ -17808,15 +17339,15 @@
             // 中键或右键：平移画布
             if (e.button === 1 || e.button === 2) {
                 this.isPanning = true;
-                this.panStart = { x: e.clientX - this.offsetX, y: e.clientY - this.offsetY };
+                this.panStart = {x: e.clientX - this.offsetX, y: e.clientY - this.offsetY};
                 e.preventDefault();
                 return;
             }
 
             // 左键：开始框选
             this.isSelecting = true;
-            this.selectStart = { x, y };
-            this.selectRect = { x, y, width: 0, height: 0 };
+            this.selectStart = {x, y};
+            this.selectRect = {x, y, width: 0, height: 0};
             this._requestRender();
         }
 
@@ -17832,7 +17363,7 @@
                     y >= node.y && y <= node.y + this.nodeHeight) {
 
                     if (node.chapterNum) {
-                        HistoryUI.viewChapter(node.chapterNum, { mode: 'readonly' });
+                        HistoryUI.viewChapter(node.chapterNum, {mode: 'readonly'});
                     } else {
                         Notify.info('该节点未绑定任何章节');
                     }
@@ -17937,8 +17468,8 @@
                     this._recordAction({
                         type: 'update',
                         nodeId: this.draggingFrom.node.id,
-                        oldProps: { resultMap: { [this.draggingFrom.key]: oldTarget } },
-                        newProps: { resultMap: { [this.draggingFrom.key]: targetNode.id } }
+                        oldProps: {resultMap: {[this.draggingFrom.key]: oldTarget}},
+                        newProps: {resultMap: {[this.draggingFrom.key]: targetNode.id}}
                     });
                     if (this.callbacks.onNodeSelect) this.callbacks.onNodeSelect(this.selectedNode);
                     if (this.callbacks.onNodesChange) this.callbacks.onNodesChange();
@@ -18058,30 +17589,30 @@
                 const nodeCenterY = node.y + this.nodeHeight / 2;
                 if (Math.abs(draggedCenterY - nodeCenterY) < threshold) {
 
-                    this.alignLines.push({ y: nodeCenterY, horizontal: true });
+                    this.alignLines.push({y: nodeCenterY, horizontal: true});
                 }
                 if (Math.abs(draggedNode.y - node.y) < threshold) {
 
-                    this.alignLines.push({ y: node.y, horizontal: true });
+                    this.alignLines.push({y: node.y, horizontal: true});
                 }
                 if (Math.abs(draggedNode.y + this.nodeHeight - node.y - this.nodeHeight) < threshold) {
 
-                    this.alignLines.push({ y: node.y + this.nodeHeight, horizontal: true });
+                    this.alignLines.push({y: node.y + this.nodeHeight, horizontal: true});
                 }
 
                 const draggedCenterX = draggedNode.x + this.nodeWidth / 2;
                 const nodeCenterX = node.x + this.nodeWidth / 2;
                 if (Math.abs(draggedCenterX - nodeCenterX) < threshold) {
 
-                    this.alignLines.push({ x: nodeCenterX, horizontal: false });
+                    this.alignLines.push({x: nodeCenterX, horizontal: false});
                 }
                 if (Math.abs(draggedNode.x - node.x) < threshold) {
 
-                    this.alignLines.push({ x: node.x, horizontal: false });
+                    this.alignLines.push({x: node.x, horizontal: false});
                 }
                 if (Math.abs(draggedNode.x + this.nodeWidth - node.x - this.nodeWidth) < threshold) {
 
-                    this.alignLines.push({ x: node.x + this.nodeWidth, horizontal: false });
+                    this.alignLines.push({x: node.x + this.nodeWidth, horizontal: false});
                 }
             }
 
@@ -18097,7 +17628,7 @@
                 const dist = Math.abs(draggedNode.x + this.nodeWidth / 2 - x);
                 if (dist < threshold) {
 
-                    this.alignLines.push({ x: x, horizontal: false, isColumn: true });
+                    this.alignLines.push({x: x, horizontal: false, isColumn: true});
                 }
             }
 
@@ -18113,7 +17644,7 @@
                 const dist = Math.abs(draggedNode.y + this.nodeHeight / 2 - y);
                 if (dist < threshold) {
 
-                    this.alignLines.push({ y: y, horizontal: true, isRow: true });
+                    this.alignLines.push({y: y, horizontal: true, isRow: true});
                 }
             }
         }
@@ -18135,7 +17666,6 @@
                 console.warn('[GalgameEditor._snapToAlignLines] 未找到基准节点');
                 return;
             }
-
 
 
             let snapX = null, snapY = null;
@@ -18255,7 +17785,7 @@
 
             for (const node of newNodes) {
                 this.nodes.push(node);
-                this._recordAction({ type: 'add', node: JSON.parse(JSON.stringify(node)) });
+                this._recordAction({type: 'add', node: JSON.parse(JSON.stringify(node))});
             }
             this.selectedNodes.clear();
             for (const node of newNodes) {
@@ -18277,7 +17807,7 @@
             // 确保节点有 type 字段
             if (!node.type) node.type = 'normal';
             this.nodes.push(node);
-            this._recordAction({ type: 'add', node: JSON.parse(JSON.stringify(node)) });
+            this._recordAction({type: 'add', node: JSON.parse(JSON.stringify(node))});
             this._requestRender();
             if (this.callbacks.onNodesChange) this.callbacks.onNodesChange();
         }
@@ -18292,11 +17822,11 @@
                 if (n.resultMap) {
                     for (const [key, target] of Object.entries(n.resultMap)) {
                         if (target === nodeId) {
-                            references.push({ nodeId: n.id, key, oldTarget: target });
+                            references.push({nodeId: n.id, key, oldTarget: target});
                         }
                     }
                     if (n.resultMap.default === nodeId) {
-                        references.push({ nodeId: n.id, key: 'default', oldTarget: nodeId });
+                        references.push({nodeId: n.id, key: 'default', oldTarget: nodeId});
                     }
                 }
             }
@@ -18318,7 +17848,7 @@
             if (idx !== -1) this.nodes.splice(idx, 1);
 
             if (!batch) {
-                this._recordAction({ type: 'delete', node: nodeCopy, references });
+                this._recordAction({type: 'delete', node: nodeCopy, references});
             }
             this._requestRender();
             if (this.callbacks.onNodesChange) this.callbacks.onNodesChange();
@@ -18332,7 +17862,7 @@
                     oldProps[key] = node[key];
                 }
                 Object.assign(node, updates);
-                this._recordAction({ type: 'update', nodeId, oldProps, newProps: updates });
+                this._recordAction({type: 'update', nodeId, oldProps, newProps: updates});
                 this._requestRender();
                 if (this.callbacks.onNodeSelect && this.selectedNode && this.selectedNode.id === nodeId) {
                     this.callbacks.onNodeSelect(node);
@@ -18711,12 +18241,12 @@
                     // BFS 逐层向外搜索（无半径限制）
                     let found = false;
                     let bestCol = targetCol, bestRow = targetRow;
-                    const queue = [{ col: targetCol, row: targetRow, dist: 0 }];
+                    const queue = [{col: targetCol, row: targetRow, dist: 0}];
                     const visited = new Set([key]);
                     let idx = 0;
 
                     while (idx < queue.length && !found) {
-                        const { col, row, dist } = queue[idx++];
+                        const {col, row, dist} = queue[idx++];
                         const currentKey = `${col},${row}`;
                         if (!occupied.has(currentKey)) {
                             bestCol = col;
@@ -18728,18 +18258,18 @@
 
                         // 四个方向扩展（右、左、下、上）
                         const directions = [
-                            { dc: 1, dr: 0 },  // 右
-                            { dc: -1, dr: 0 }, // 左
-                            { dc: 0, dr: 1 },  // 下
-                            { dc: 0, dr: -1 }  // 上
+                            {dc: 1, dr: 0},  // 右
+                            {dc: -1, dr: 0}, // 左
+                            {dc: 0, dr: 1},  // 下
+                            {dc: 0, dr: -1}  // 上
                         ];
-                        for (const { dc, dr } of directions) {
+                        for (const {dc, dr} of directions) {
                             const ncol = col + dc;
                             const nrow = row + dr;
                             const nkey = `${ncol},${nrow}`;
                             if (!visited.has(nkey)) {
                                 visited.add(nkey);
-                                queue.push({ col: ncol, row: nrow, dist: dist + 1 });
+                                queue.push({col: ncol, row: nrow, dist: dist + 1});
                             }
                         }
                     }
@@ -18782,7 +18312,7 @@
             }
 
             if (movedNodes.length > 0) {
-                this._recordAction({ type: 'moveMultiple', nodes: movedNodes });
+                this._recordAction({type: 'moveMultiple', nodes: movedNodes});
 
             } else {
 
@@ -18831,7 +18361,7 @@
             const utils = {
                 getControl: (res) => {
                     const match = res.match(/^\[([^:]+):\s*(.*)\]$/);
-                    return match ? { type: match[1], value: match[2] } : null;
+                    return match ? {type: match[1], value: match[2]} : null;
                 },
                 getNumber: (res) => {
                     const ctrl = utils.getControl(res);
@@ -19006,7 +18536,7 @@
             const chapters = Storage.loadChapters();
 
 
-            const { childrenMap, chapterMap } = buildTreeMaps(chapters);
+            const {childrenMap, chapterMap} = buildTreeMaps(chapters);
             const roots = chapters.filter(ch => ch.parent === null).sort((a, b) => a.num - b.num);
 
             const expandedSet = new Set();
@@ -19017,7 +18547,7 @@
             const flattenTree = (nodes, level) => {
                 let flat = [];
                 for (const node of nodes) {
-                    flat.push({ ...node, level, hasChildren: childrenMap[node.num]?.length > 0 });
+                    flat.push({...node, level, hasChildren: childrenMap[node.num]?.length > 0});
                     if (expandedSet.has(node.num) && childrenMap[node.num]) {
                         flat = flat.concat(flattenTree(childrenMap[node.num], level + 1));
                     }
@@ -19195,7 +18725,7 @@
 
                     switch (action) {
                         case 'view':
-                            if (chapterNum) await this.viewChapter(chapterNum, { mode: 'readonly', fromHistory: true });
+                            if (chapterNum) await this.viewChapter(chapterNum, {mode: 'readonly', fromHistory: true});
                             break;
                         case 'viewStatus':
                             if (chapterNum) await this.viewChapterStatus(chapterNum, true);
@@ -19258,7 +18788,7 @@
             try {
                 const chapters = Storage.loadChapters().filter(c => selectedNums.includes(c.num));
                 if (chapters.length === 0) {
-                    Notify.warning('没有可导出的章节', '', { timeOut: 2000 });
+                    Notify.warning('没有可导出的章节', '', {timeOut: 2000});
                     return;
                 }
 
@@ -19268,7 +18798,7 @@
                     version: CONFIG.VERSION,
                     exportTime: new Date().toISOString(),
                     totalChapters: chapters.length,
-                    data: { chapters: chapters.map(ch => ({ ...ch })) }
+                    data: {chapters: chapters.map(ch => ({...ch}))}
                 };
 
                 // 收集所有图片ID、音频ID和其余文件ID
@@ -19303,7 +18833,6 @@
                 }
 
 
-
                 // 如果没有需要导出的文件，直接导出JSON
                 if (imageIds.size === 0 && audioIds.size === 0 && otherFileIds.size === 0) {
                     const jsonStr = JSON.stringify(chapterBackup, null, 2);
@@ -19331,7 +18860,7 @@
                                 else if (blob.type.includes('gif')) ext = 'gif';
                                 else if (blob.type.includes('webp')) ext = 'webp';
                                 const fileName = `${id}.${ext}`;
-                                imageFolder.file(fileName, blob, { binary: true });
+                                imageFolder.file(fileName, blob, {binary: true});
                                 imageCount++;
 
                             } else {
@@ -19359,7 +18888,7 @@
                                 else if (blob.type.includes('m4a')) ext = 'm4a';
                                 else if (blob.type.includes('flac')) ext = 'flac';
                                 const fileName = `${id}.${ext}`;
-                                audioFolder.file(fileName, blob, { binary: true });
+                                audioFolder.file(fileName, blob, {binary: true});
                                 audioCount++;
 
                             } else {
@@ -19385,7 +18914,7 @@
                                 const ext = format === 'html' ? 'html' :
                                     format === 'js' ? 'js' : 'txt';
                                 const fileName = `${id}.${ext}`;
-                                otherFolder.file(fileName, item.text, { binary: false });
+                                otherFolder.file(fileName, item.text, {binary: false});
                                 otherCount++;
 
                             } else {
@@ -19400,7 +18929,7 @@
                 }
 
                 // 生成ZIP并下载
-                const blob = await zip.generateAsync({ type: 'blob' });
+                const blob = await zip.generateAsync({type: 'blob'});
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -19584,7 +19113,7 @@
             const chapters = Storage.loadChapters();
             const chapter = chapters.find(c => c.num === num);
             if (!chapter) {
-                Notify.info('未找到对应章节', '', { timeOut: 2000 });
+                Notify.info('未找到对应章节', '', {timeOut: 2000});
                 return;
             }
 
@@ -19761,7 +19290,7 @@
 
                     try {
                         await navigator.clipboard.writeText(chapter.content);
-                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
+                        Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
                     } catch (err) {
                         // 降级方案
                         const textarea = document.createElement('textarea');
@@ -19772,7 +19301,7 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
+                        Notify.success('内容已复制到剪贴板（降级方案）', '', {timeOut: 2000});
                     }
                 });
 
@@ -19787,7 +19316,7 @@
 
                         UI._closeModal(overlay);
                         const newMode = mode === 'readonly' ? 'edit' : 'readonly';
-                        this.viewChapter(num, { mode: newMode, fromHistory });
+                        this.viewChapter(num, {mode: newMode, fromHistory});
                     });
                 }
 
@@ -19822,7 +19351,7 @@
                     const newTitle = editTitle.value.trim();
                     const newContent = editContent.value;
                     if (!newTitle) {
-                        Notify.warning('请输入章节标题', '', { timeOut: 2000 });
+                        Notify.warning('请输入章节标题', '', {timeOut: 2000});
                         return;
                     }
 
@@ -19857,7 +19386,7 @@
                     };
                     chapters.sort((a, b) => a.num - b.num);
 
-                    if (Storage.save({ chapters })) {
+                    if (Storage.save({chapters})) {
                         // 收集新内容中的图片ID
                         const newImageIds = [];
                         const newImageRegex = /!\[.*?\]\(id:(img_[^)]+)\)|src="id:(img_[^"]+)"/g;
@@ -19876,7 +19405,7 @@
                             }
                         }
 
-                        Notify.success(`第${chapter.num}章已更新`, '', { timeOut: 2000 });
+                        Notify.success(`第${chapter.num}章已更新`, '', {timeOut: 2000});
                         if (document.getElementById(CONFIG.UI.panelId)) {
                             UI.createPanel();
                         }
@@ -19895,7 +19424,7 @@
                     const textToCopy = `# ${editTitle.value}\n\n${editContent.value}`;
                     try {
                         await navigator.clipboard.writeText(textToCopy);
-                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
+                        Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
                     } catch (err) {
                         // 降级
                         const textarea = document.createElement('textarea');
@@ -19906,7 +19435,7 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
+                        Notify.success('内容已复制到剪贴板（降级方案）', '', {timeOut: 2000});
                     }
                 });
 
@@ -19914,7 +19443,7 @@
                 switchBtn.addEventListener('click', () => {
 
                     UI._closeModal(overlay);
-                    this.viewChapter(num, { mode: 'readonly', fromHistory });
+                    this.viewChapter(num, {mode: 'readonly', fromHistory});
                 });
 
                 // 关闭
@@ -20011,7 +19540,7 @@
                 const newTitle = titleInput.value.trim();
                 const newContent = contentInput.value;
                 if (!newTitle) {
-                    Notify.warning('请输入章节标题', '', { timeOut: 2000 });
+                    Notify.warning('请输入章节标题', '', {timeOut: 2000});
                     return;
                 }
 
@@ -20043,7 +19572,7 @@
                     };
                     const success = Storage.saveChapter(newChapter, newChapter.num, snapshot);
                     if (success) {
-                        Notify.success(`第${newChapter.num}章已保存，并附带状态快照`, '', { timeOut: 2000 });
+                        Notify.success(`第${newChapter.num}章已保存，并附带状态快照`, '', {timeOut: 2000});
                         if (document.getElementById(CONFIG.UI.panelId)) {
                             UI.createPanel();
                         }
@@ -20073,8 +19602,8 @@
                         snapshot: snapshot
                     };
                     chapters.sort((a, b) => a.num - b.num);
-                    if (Storage.save({ chapters })) {
-                        Notify.success(`第${chapter.num}章已更新`, '', { timeOut: 2000 });
+                    if (Storage.save({chapters})) {
+                        Notify.success(`第${chapter.num}章已更新`, '', {timeOut: 2000});
                         if (document.getElementById(CONFIG.UI.panelId)) {
                             UI.createPanel();
                         }
@@ -20105,7 +19634,7 @@
             const chapter = chapters.find(c => c.num === num);
             if (!chapter) {
 
-                Notify.info('未找到对应章节', '', { timeOut: 2000 });
+                Notify.info('未找到对应章节', '', {timeOut: 2000});
                 return;
             }
 
@@ -20113,7 +19642,7 @@
 
             if (!chapter.snapshot || snapshotCount === 0) {
 
-                Notify.info('该章节没有状态快照', '', { timeOut: 2000 });
+                Notify.info('该章节没有状态快照', '', {timeOut: 2000});
                 return;
             }
 
@@ -20175,7 +19704,7 @@
                 await AudioStore.clear();
                 // ===== 结束 =====
 
-                Notify.success('历史章节已清空，状态书已清空', '', { timeOut: 2000 });
+                Notify.success('历史章节已清空，状态书已清空', '', {timeOut: 2000});
                 if (document.getElementById(CONFIG.UI.panelId)) {
                     UI.createPanel();
                 }
@@ -20409,7 +19938,7 @@
                                             continue;
                                         }
                                     }
-                                    await API.updateWorldbook(bookName, () => bookData.entries, { render: 'immediate' });
+                                    await API.updateWorldbook(bookName, () => bookData.entries, {render: 'immediate'});
 
                                     UI.updateProgress(`  ✓ 已恢复世界书 ${bookName}`);
                                 } catch (err) {
@@ -20463,7 +19992,7 @@
                             }
 
                             UI.updateProgress('✅ ZIP 导入完成！');
-                            Notify.success('完整备份导入成功', '', { timeOut: 2000 });
+                            Notify.success('完整备份导入成功', '', {timeOut: 2000});
 
                         } else {
                             // ========== 旧版 JSON 导入（仅章节） ==========
@@ -20475,7 +20004,6 @@
                             if (json.data && Array.isArray(json.data.chapters)) dataToImport = json.data;
                             else if (Array.isArray(json.chapters)) dataToImport = json;
                             else throw new Error('无效的备份文件格式：缺少 chapters 数组');
-
 
 
                             const confirmed = await UI.showConfirmModal('导入将覆盖当前所有历史章节，确定继续吗？', '确认');
@@ -20496,7 +20024,7 @@
 
                                     const ok = await Snapshot.restore(last.snapshot);
                                     UI.updateProgress(ok ? '✓ 状态书状态已恢复' : '❌ 状态书状态恢复失败', !ok);
-                                    if (!ok) Notify.warning('状态书状态恢复失败，但章节数据已导入', '', { timeOut: 2000 });
+                                    if (!ok) Notify.warning('状态书状态恢复失败，但章节数据已导入', '', {timeOut: 2000});
                                 } else {
                                     UI.updateProgress('导入章节无快照，清空状态书...');
 
@@ -20508,7 +20036,7 @@
                                 await resetWorldStateToInitial();
                             }
 
-                            Notify.success('备份导入成功', '', { timeOut: 2000 });
+                            Notify.success('备份导入成功', '', {timeOut: 2000});
                         }
 
                         // 刷新界面
@@ -20563,7 +20091,7 @@
 
 
             if (chapters.length === 0) {
-                Notify.info('暂无历史章节', '', { timeOut: 2000 });
+                Notify.info('暂无历史章节', '', {timeOut: 2000});
                 console.warn('[HistorySelection] 无章节，退出');
                 return;
             }
@@ -20634,7 +20162,7 @@
                     if (checkbox) {
                         checkbox.checked = !checkbox.checked;
 
-                        const changeEvent = new Event('change', { bubbles: true });
+                        const changeEvent = new Event('change', {bubbles: true});
                         checkbox.dispatchEvent(changeEvent);
                     }
                 });
@@ -20698,7 +20226,7 @@
 
             if (books.length === 0) {
 
-                Notify.info('没有状态书', '', { timeOut: 2000 });
+                Notify.info('没有状态书', '', {timeOut: 2000});
                 return;
             }
 
@@ -20712,7 +20240,7 @@
         async openStateEditor(chapterNum, initialBookName = null, stayOpenAfterSave = false, readonly = false) {
             const books = await getAllStateBooks();
             if (books.length === 0) {
-                Notify.info('没有状态书', '', { timeOut: 2000 });
+                Notify.info('没有状态书', '', {timeOut: 2000});
                 return;
             }
             // 确保模板已加载
@@ -20775,7 +20303,7 @@
             // 如果没有书籍，则关闭模态框并提示
             if (!books || books.length === 0) {
                 console.warn('[HistoryUI._openStateEditorModal] 没有可用的状态书，关闭编辑器');
-                Notify.info('没有可用的状态书', '', { timeOut: 2000 });
+                Notify.info('没有可用的状态书', '', {timeOut: 2000});
                 return;
             }
 
@@ -20850,7 +20378,7 @@
                         const catId = match[1];
                         const catName = match[2].trim();
                         const definition = match[3].trim();
-                        map[catId] = { name: catName, definition };
+                        map[catId] = {name: catName, definition};
                         count++;
                     }
                     // 输出最终映射的键，便于确认
@@ -21125,7 +20653,7 @@
                         const bookName = item.bookName || currentBook;
                         if (!updatesByBook[bookName]) updatesByBook[bookName] = {};
                         if (!updatesByBook[bookName][item.stateName]) {
-                            updatesByBook[bookName][item.stateName] = { type: 'structured', fields: [] };
+                            updatesByBook[bookName][item.stateName] = {type: 'structured', fields: []};
                         }
                         updatesByBook[bookName][item.stateName].fields.push({
                             node: item.node,
@@ -21136,7 +20664,7 @@
                     currentFallbackInputs.forEach(item => {
                         const bookName = item.bookName || currentBook;
                         if (!updatesByBook[bookName]) updatesByBook[bookName] = {};
-                        updatesByBook[bookName][item.stateName] = { type: 'fallback', content: item.textarea.value };
+                        updatesByBook[bookName][item.stateName] = {type: 'fallback', content: item.textarea.value};
                     });
 
                     for (const [bookName, stateUpdates] of Object.entries(updatesByBook)) {
@@ -21158,7 +20686,7 @@
                                 const catId = update.fields[0]?.catId;
                                 const templateDef = catId ? templateMap[catId]?.definition : null;
                                 if (!templateDef) {
-                                    Notify.warning(`无法重组 ${stateName}：缺少模板定义`, '', { timeOut: 2000 });
+                                    Notify.warning(`无法重组 ${stateName}：缺少模板定义`, '', {timeOut: 2000});
                                     continue;
                                 }
                                 const tree = this._parseStateDefinition(templateDef);
@@ -21187,7 +20715,7 @@
                         }
 
                         // 保存到实时世界书
-                        await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
+                        await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
                         UI.updateProgress(`✓ 已更新 ${bookName}`);
                     }
 
@@ -21197,12 +20725,12 @@
                         const chapter = chapters.find(c => c.num === chapterNum);
                         if (chapter) {
                             chapter.snapshot = await Snapshot.create();
-                            Storage.save({ chapters });
+                            Storage.save({chapters});
                             UI.updateProgress(`✓ 已更新第${chapterNum}章的快照`);
                         }
                     }
 
-                    Notify.success('状态修改已保存', '', { timeOut: 2000 });
+                    Notify.success('状态修改已保存', '', {timeOut: 2000});
 
                     if (stayOpen) {
                         // 重新加载当前书
@@ -21229,13 +20757,13 @@
                         const stateGroups = {};
                         currentFieldInputs.forEach(item => {
                             if (!stateGroups[item.stateName]) {
-                                stateGroups[item.stateName] = { fields: [], fallback: null };
+                                stateGroups[item.stateName] = {fields: [], fallback: null};
                             }
                             stateGroups[item.stateName].fields.push(item);
                         });
                         currentFallbackInputs.forEach(item => {
                             if (!stateGroups[item.stateName]) {
-                                stateGroups[item.stateName] = { fields: [], fallback: item };
+                                stateGroups[item.stateName] = {fields: [], fallback: item};
                             } else {
                                 stateGroups[item.stateName].fallback = item;
                             }
@@ -21284,7 +20812,7 @@
 
                         const fullText = texts.join('\n\n');
                         await navigator.clipboard.writeText(fullText);
-                        Notify.success('状态内容已复制到剪贴板', '', { timeOut: 2000 });
+                        Notify.success('状态内容已复制到剪贴板', '', {timeOut: 2000});
                     } catch (err) {
                         Notify.error('复制失败: ' + err.message);
                     }
@@ -21344,7 +20872,7 @@
             // ===== 结束新增 =====
 
             // 保存剩余章节
-            Storage.save({ chapters: remainingChapters });
+            Storage.save({chapters: remainingChapters});
 
         },
 
@@ -21495,8 +21023,6 @@
     async function openPanelWithCheck(force = false) {
 
 
-
-
         // 如果存在上次检查失败的结果且不是强制重新检查，则直接显示错误面板
         if (!force && WORKFLOW_STATE.lastCheckFailed) {
 
@@ -21508,9 +21034,7 @@
             UI.closeAll();
 
 
-
             const checkResults = await PreCheck.checkAll();
-
 
 
             if (!checkResults.allPassed) {
@@ -21623,7 +21147,7 @@
             if (missingRequired.length > 0) {
                 const missingNames = missingRequired.map(k => CONFIG.AGENTS[k]?.name || k).join(', ');
                 Notify.error(`配置缺少以下必选Agent:\n${missingNames}`, '配置错误');
-                return { success: false, error: '缺少必选Agent' };
+                return {success: false, error: '缺少必选Agent'};
             }
 
             WORKFLOW_STATE.enabledAgents = calculatedAgents;
@@ -21710,12 +21234,12 @@
 
         async startDatafication(chapters) {
             if (!chapters || chapters.length === 0) {
-                Notify.warning('没有选中任何章节，请先选择要数据化的章节', '', { timeOut: 2000 });
+                Notify.warning('没有选中任何章节，请先选择要数据化的章节', '', {timeOut: 2000});
                 return;
             }
 
             if (WORKFLOW_STATE.isRunning) {
-                Notify.warning('已有工作流正在运行，请先停止', '', { timeOut: 2000 });
+                Notify.warning('已有工作流正在运行，请先停止', '', {timeOut: 2000});
                 return;
             }
 
@@ -21821,7 +21345,7 @@
                 UI.updateAllAgentStatusButtons();
                 UI.updateFloatButtonText();
                 UI.updateWorkflowViz();  // 刷新工作流预览，隐藏数据化横幅
-                Notify.success('数据化处理结束', '', { timeOut: 2000 });
+                Notify.success('数据化处理结束', '', {timeOut: 2000});
             }
         },
 
@@ -21944,7 +21468,7 @@
             }
 
 
-            return { deletedCount, deactivatedCount };
+            return {deletedCount, deactivatedCount};
         },
 
         async _deactivateAllWorldbooks() {
@@ -21995,7 +21519,7 @@
          * @returns {Promise<void>}
          */
         async _executeAgentByRole(agentKey, isReflow, options = {}) {
-            const { userInput = '', isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {userInput = '', isParallel = false, parallelBeforeSnapshot = null} = options;
             const agent = CONFIG.AGENTS[agentKey];
             if (!agent) return;
 
@@ -22014,13 +21538,13 @@
                     });
                     break;
                 case 'imageVariator':
-                    await this._executeImageVariator(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
+                    await this._executeImageVariator(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
                     break;
                 case 'imageLibrarian':
-                    await this._executeImageLibrarian(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
+                    await this._executeImageLibrarian(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
                     break;
                 case 'typesetter':
-                    await this._executeTypesetter(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
+                    await this._executeTypesetter(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
                     break;
 
                 // 状态管理（优化师、维护师暂不支持回流和并行参数）
@@ -22033,21 +21557,21 @@
 
                 // 音频相关
                 case 'musicGenerator':
-                    await this._executeMusicGenerator(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
+                    await this._executeMusicGenerator(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
                     break;
                 case 'voiceCloner':
-                    await this._executeVoiceCloner(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
+                    await this._executeVoiceCloner(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
                     break;
                 case 'audioEditor':
-                    await this._executeAudioEditor(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
+                    await this._executeAudioEditor(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
                     break;
                 case 'audioLibrarian':
-                    await this._executeAudioLibrarian(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
+                    await this._executeAudioLibrarian(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
                     break;
 
                 // 默认通用 Agent
                 default:
-                    await this._executeAgent(agentKey, userInput, isReflow, { isParallel, parallelBeforeSnapshot });
+                    await this._executeAgent(agentKey, userInput, isReflow, {isParallel, parallelBeforeSnapshot});
             }
         },
 
@@ -22099,7 +21623,7 @@
             } else {
                 console.error(`[DEBUG][_executeDataficationChapter] 未找到 finalChapter 角色，数据化可能失败`);
                 UI.updateProgress(`❌ 未找到最终章节师角色，无法继续`, true);
-                return { success: false };
+                return {success: false};
             }
 
             const preSnapshot = await Snapshot.create();
@@ -22128,7 +21652,7 @@
                         );
                         for (const agentKey of sorted) {
                             // ===== 替换点：串行阶段调用公共函数 =====
-                            await this._executeAgentByRole(agentKey, false, { userInput, isParallel: false });
+                            await this._executeAgentByRole(agentKey, false, {userInput, isParallel: false});
                         }
                     } else {
                         // 并行阶段：需要处理 before 快照
@@ -22206,7 +21730,7 @@
 
                 const snapshot = await Snapshot.create();
                 const title = chapter.title || `第${chapter.num}章`;
-                const saveSuccess = Storage.saveChapter({ title, content: finalContent }, chapter.num, snapshot);
+                const saveSuccess = Storage.saveChapter({title, content: finalContent}, chapter.num, snapshot);
                 if (saveSuccess) {
                     UI.updateProgress(`📚 第${chapter.num}章已保存`);
                     UI.updateCurrentChapterNum();
@@ -22223,7 +21747,7 @@
                     }
                 }
 
-                return { success: true };
+                return {success: true};
 
             } catch (error) {
                 if (error.name === 'AbortChapterError') {
@@ -22236,7 +21760,7 @@
                     WORKFLOW_STATE.discarded = true;
                 }
 
-                return { success: false };
+                return {success: false};
             }
         },
 
@@ -22358,7 +21882,7 @@
                 } while (WORKFLOW_STATE.autoMode && !WORKFLOW_STATE.shouldStop);
 
                 if (!interrupted) {
-                    Notify.success('工作流已停止', '', { timeOut: 2000 });
+                    Notify.success('工作流已停止', '', {timeOut: 2000});
                 }
 
             } catch (e) {
@@ -22366,7 +21890,7 @@
                 if (e.name === 'UserInterruptError') {
                     interrupted = true;
                     UI.updateProgress('⏸️ 用户中断');
-                    Notify.warning('工作流已中断', '', { timeOut: 2000 });
+                    Notify.warning('工作流已中断', '', {timeOut: 2000});
                 } else {
                     agentError = e;
                     let errorMsg = e.message;
@@ -22442,7 +21966,7 @@
                     const catId = match[1];
                     const catName = match[2].trim();
                     const definition = match[3].trim(); // 字段列表部分（不含类别标题行）
-                    categoryMap.set(catId, { catName, definition });
+                    categoryMap.set(catId, {catName, definition});
 
                 }
 
@@ -22453,7 +21977,7 @@
 
                 // 3. 遍历每个类别，查找对应的状态条目
                 const categoriesOutput = [];
-                for (const [catId, { catName, definition }] of categoryMap.entries()) {
+                for (const [catId, {catName, definition}] of categoryMap.entries()) {
                     // 构造状态条目名称格式：状态-书号-类别编号-类别名
                     const expectedStateEntryName = `状态-${bookIndex}-${catId.padStart(2, '0')}-${catName}`;
 
@@ -22468,7 +21992,7 @@
                     }
 
                     // 提取状态条目的属性（排除 content 和 name）
-                    const entryCopy = { ...stateEntry };
+                    const entryCopy = {...stateEntry};
                     delete entryCopy.content;
                     delete entryCopy.name;
                     // 将属性对象转换为扁平化的键值对数组
@@ -22677,7 +22201,7 @@
                     // 这些平台大多兼容 OpenAI 的 chat/completions 格式
                     requestBody = {
                         model: config.model,
-                        messages: [{ role: 'user', content: userInput }],
+                        messages: [{role: 'user', content: userInput}],
                         max_tokens: config.maxTokens,
                         temperature: config.temperature,
                         top_p: config.top_p,
@@ -22807,7 +22331,7 @@
                     maxHistory: 0
                 });
 
-                results.push({ agent: agentKey, output });
+                results.push({agent: agentKey, output});
                 currentInput = output; // 将输出作为下一个的输入
             }
 
@@ -22872,8 +22396,7 @@
         // ==================== 修改后的 _executeAgent 函数 ====================
 
         async _executeAgent(agentKey, initialUserInput, isReflow = false, options = {}) {
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
-
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
 
             if (WORKFLOW_STATE.discarded) {
@@ -22942,7 +22465,7 @@
                             // 非 user 源，直接获取现有内容（不触发用户输入）
                             content = await this._collectInputSourceWithoutWait(agentKey, i, isReflow, options);
                         }
-                        inputContents.push({ index: i, src, content });
+                        inputContents.push({index: i, src, content});
 
                     }
 
@@ -22973,7 +22496,7 @@
 
                     // ===== 新增：用户交互完成提示 =====
                     UI.updateProgress(`✓ 用户交互完成，选择: ${userChoice}`);
-                    Notify.success('交互已响应', '', { timeOut: 2000 });
+                    Notify.success('交互已响应', '', {timeOut: 2000});
 
                     // ===== 新增：唯一性检查 =====
                     if (WORKFLOW_STATE.enforceUniqueBranches && WORKFLOW_STATE.currentParentNum) {
@@ -23014,7 +22537,6 @@
                     let prompt = agent.inputTemplate;
                     let placeholderIdx = 0;
                     prompt = prompt.replace(/【】/g, () => finalInputs[placeholderIdx++] || '');
-
 
 
                     // 添加回流反馈（如果有）
@@ -23099,7 +22621,7 @@
                     AgentStateManager.setState(agentKey, 'completed');
 
                     if (!isParallel) {
-                        WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
+                        WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
                     }
 
                     // 检查回流条件
@@ -23209,7 +22731,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
                 }
 
                 if (agent.reflowConditions && agent.reflowConditions.length > 0) {
@@ -23246,7 +22768,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`✗ Agent ${getAgentDisplayName(agentKey)} 执行出错，已保存最佳内容作为废章`, true);
                 }
                 throw enhancedError;
@@ -23436,7 +22958,7 @@
                 for (const target of uniqueTargets) {
                     // 初始化 reflowMap[target]
                     if (!WORKFLOW_STATE.reflowMap[target]) {
-                        WORKFLOW_STATE.reflowMap[target] = { sources: [], outputs: {}, previousOutput: undefined };
+                        WORKFLOW_STATE.reflowMap[target] = {sources: [], outputs: {}, previousOutput: undefined};
                     }
 
                     // 保存目标当前的输出（剔除图片）作为“上次输出”
@@ -23480,14 +23002,13 @@
                     const currentCount = WORKFLOW_STATE.reflowTargetCount[target];
 
 
-
                     if (currentCount >= CONFIG.MAX_CONSECUTIVE_REFLOWS) {
                         WORKFLOW_STATE.discarded = true;
                         const bestContent = this._getBestOutputForSaving();
                         if (bestContent) {
                             const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                             const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                            WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                            WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                         }
                         UI.updateProgress(`⚠️ 目标 ${target} 被同一源 ${sourceKey} 连续回流达到 ${CONFIG.MAX_CONSECUTIVE_REFLOWS} 次，本章标记为废章，立即终止`, true);
                         throw new AbortChapterError(`目标 ${target} 被同一源 ${sourceKey} 连续回流达到 ${CONFIG.MAX_CONSECUTIVE_REFLOWS} 次`);
@@ -23536,8 +23057,6 @@
                 const processing = Object.keys(AgentStateManager.states).filter(
                     k => AgentStateManager.states[k] === 'reflow_processing'
                 );
-
-
 
 
                 if (processing.length === 0) break;
@@ -23591,7 +23110,7 @@
             const found = CONFIG.workflowStages.some(s => {
                 const match = s.id === id;
                 if (match)
-                return match;
+                    return match;
             });
 
             return found;
@@ -23601,9 +23120,6 @@
 
         async executeWorkflow(agents, userInput) {
             console.time('executeWorkflow 总耗时');
-
-
-
 
 
             await activateAllExistingStateBooks();
@@ -23645,8 +23161,6 @@
             const interactiveAgentKey = getAgentKeyByRole('interactiveAgent');
 
 
-
-
             const preSnapshot = await Snapshot.create();
             WORKFLOW_STATE.currentUserInput = userInput;
 
@@ -23670,7 +23184,7 @@
                         );
                         for (const agentKey of sorted) {
                             console.time(`Agent ${agentKey}`);
-                            await this._executeAgentByRole(agentKey, false, { userInput, isParallel: false });
+                            await this._executeAgentByRole(agentKey, false, {userInput, isParallel: false});
                             console.timeEnd(`Agent ${agentKey}`);
 
                             if (WORKFLOW_STATE.shouldStop) {
@@ -23735,7 +23249,6 @@
                     .filter(([key, agent]) => agent.role === 'saver' && enabledSet.has(key))
                     .sort((a, b) => (a[1].order || 999) - (b[1].order || 999))
                     .map(([key]) => key);
-
 
 
                 // 收集有输出的 saver 的输出
@@ -23818,7 +23331,7 @@
                     UI.updateProgress('→ 保存章节...');
                     const snapshot = await Snapshot.create();
 
-                    const chapterData = { title, content: cleanContent };
+                    const chapterData = {title, content: cleanContent};
 
                     // 判断是否为互动章节
                     const hasInteractive = agents.includes(interactiveAgentKey);
@@ -23873,23 +23386,23 @@
 
                 if (aborted) {
 
-                    return { success: false, aborted: true };
+                    return {success: false, aborted: true};
                 }
 
                 console.timeEnd('executeWorkflow 总耗时');
-                return { success: true };
+                return {success: true};
 
             } catch (error) {
                 console.error('[DEBUG][executeWorkflow] 捕获到异常:', error);
                 console.timeEnd('executeWorkflow 总耗时');
                 if (error.name === 'ExistingBranchError') {
                     WORKFLOW_STATE.discarded = true;
-                    return { success: false, aborted: false, branchConflict: true };
+                    return {success: false, aborted: false, branchConflict: true};
                 } else if (error.name === 'AbortChapterError') {
                     aborted = true;
                     WORKFLOW_STATE.discarded = true;
                     UI.updateProgress('⚠️ 因连续回流超限，本章强制终止并回滚', true);
-                    return { success: false, aborted: true };
+                    return {success: false, aborted: true};
                 } else if (error.name === 'UserInterruptError') {
                     throw error;
                 } else {
@@ -23946,7 +23459,6 @@
             const apiConfigId = agent.apiConfigId;
             const useCustomAPI = apiConfigId && apiConfigId.trim() !== '';
 
-            console.log(`[callAgent][${agentKey}] 开始执行, useCustomAPI=${useCustomAPI}`);
 
             if (useCustomAPI) {
                 // 检查输入中是否包含文件标记
@@ -23959,11 +23471,11 @@
                 }
                 if (fileIds.length > 0) {
                     cleanMessage = message.replace(fileRegex, '').trim();
-                    console.log(`[callAgent][${agentKey}] 检测到文件 ID:`, fileIds);
+
                 }
 
                 const config = CONFIG.apiConfigs[apiConfigId];
-                const { source, apiUrl, key, model, timeout = 60000 } = config;
+                const {source, apiUrl, key, model, timeout = 60000} = config;
                 const url = apiUrl.replace(/\/+$/, '');
 
                 // 构建组合信号（用于中断）
@@ -23974,14 +23486,13 @@
                 signals.push(AbortSignal.timeout(timeout));
                 const combinedSignal = AbortSignal.any(signals);
 
-                console.log(`[callAgent][${agentKey}] 使用自定义API: source=${source}, url=${url}, model=${model}, timeout=${timeout}ms`);
 
                 try {
-                    // ========== OpenAI 兼容平台 (包括 SiliconFlow/Qwen/DeepSeek 等) ==========
-                    if (source === 'openai' || source === 'deepseek' || source === 'qwen' || source === 'siliconflow' || source === 'other') {
+                    // ========== OpenAI 兼容平台 (包括 deepseek, siliconflow, qwen, glm, mistral, groq, inference, openrouter, 4sapi, other) ==========
+                    if (['openai', 'deepseek', 'siliconflow', 'qwen', 'glm', 'mistral', 'groq', 'inference', 'openrouter', '4sapi', 'other'].includes(source)) {
                         const requestBody = {
                             model: model,
-                            messages: [{ role: 'user', content: cleanMessage }],
+                            messages: [{role: 'user', content: cleanMessage}],
                             max_tokens: config.maxTokens,
                             temperature: config.temperature,
                             top_p: config.top_p,
@@ -23994,7 +23505,7 @@
                         }
                         Object.keys(requestBody).forEach(k => requestBody[k] === undefined && delete requestBody[k]);
 
-                        console.log(`[callAgent][${agentKey}] OpenAI 兼容请求体 (部分隐藏):`, {
+                        console.log(`[callAgent][${agentKey}] OpenAI 兼容请求体:`, {
                             ...requestBody,
                             messages: [{
                                 role: 'user',
@@ -24012,7 +23523,6 @@
                             signal: combinedSignal,
                         });
 
-                        console.log(`[callAgent][${agentKey}] 响应状态: ${response.status}`);
 
                         if (!response.ok) {
                             const errText = await response.text();
@@ -24022,7 +23532,7 @@
                         const data = await response.json();
                         console.log(`[callAgent][${agentKey}] 响应数据 (简化):`, {
                             choices: data.choices ? data.choices.map(c => ({
-                                message: c.message ? { content_length: c.message.content?.length } : {},
+                                message: c.message ? {content_length: c.message.content?.length} : {},
                                 text_length: c.text?.length
                             })) : '无choices'
                         });
@@ -24044,14 +23554,14 @@
                     else if (source === 'claude') {
                         const requestBody = {
                             model: model,
-                            messages: [{ role: 'user', content: cleanMessage }],
+                            messages: [{role: 'user', content: cleanMessage}],
                             max_tokens: config.maxTokens,
                             temperature: config.temperature,
                             top_p: config.top_p,
                             stop_sequences: config.stop ? (Array.isArray(config.stop) ? config.stop : [config.stop]) : undefined,
                         };
                         if (fileIds.length > 0) {
-                            requestBody.files = fileIds.map(id => ({ type: 'file', file_id: id }));
+                            requestBody.files = fileIds.map(id => ({type: 'file', file_id: id}));
                         }
                         Object.keys(requestBody).forEach(k => requestBody[k] === undefined && delete requestBody[k]);
 
@@ -24074,7 +23584,6 @@
                             signal: combinedSignal,
                         });
 
-                        console.log(`[callAgent][${agentKey}] Claude 响应状态: ${response.status}`);
 
                         if (!response.ok) {
                             const errText = await response.text();
@@ -24091,55 +23600,133 @@
                         return generatedText;
                     }
 
-                    // ========== Gemini (通过本地代理) ==========
+                    // ========== Gemini：支持原生和代理两种模式 ==========
                     else if (source === 'gemini') {
-                        console.log(`[callAgent][${agentKey}] 调用 Gemini 代理, 代理地址: ${url}, 模型: ${model}`);
-                        console.log(`[callAgent][${agentKey}] 请求消息预览: ${cleanMessage.substring(0, 200)}...`);
+                        const isLocalProxy = url.includes('localhost') || url.includes('127.0.0.1');
+                        let generatedText;
 
-                        // 构建代理请求 URL（假设代理端点固定为 /api/gemini）
-                        const proxyUrl = url + '/api/gemini';
-                        console.log(`[callAgent][${agentKey}] 完整代理 URL: ${proxyUrl}`);
+                        if (isLocalProxy) {
+                            // 代理模式：使用 POST /api/gemini
+                            const proxyUrl = url + '/api/gemini';
+
+
+                            const requestBody = {
+                                contents: [{
+                                    parts: [{text: cleanMessage}]
+                                }]
+                            };
+
+
+                            const response = await fetch(proxyUrl, {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify(requestBody),
+                                signal: combinedSignal,
+                            });
+
+
+                            if (!response.ok) {
+                                const errText = await response.text();
+                                console.error(`[callAgent][${agentKey}] 代理错误响应:`, errText);
+                                throw new Error(`代理错误 (${response.status}): ${errText}`);
+                            }
+                            const data = await response.json();
+
+                            generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        } else {
+                            // 原生模式：直接调用 Google API
+
+
+                            const requestBody = {
+                                contents: [{
+                                    parts: [{text: cleanMessage}]
+                                }]
+                            };
+
+
+                            const response = await fetch(`${url}/v1beta/models/${model}:generateContent?key=${key}`, {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify(requestBody),
+                                signal: combinedSignal,
+                            });
+
+
+                            if (!response.ok) {
+                                const errText = await response.text();
+                                console.error(`[callAgent][${agentKey}] 原生错误响应:`, errText);
+                                throw new Error(`Gemini 原生错误 (${response.status}): ${errText}`);
+                            }
+                            const data = await response.json();
+
+                            generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        }
+
+                        if (!generatedText) {
+                            console.error(`[callAgent][${agentKey}] Gemini 响应中无有效文本`);
+                            throw new Error('Gemini 响应中无有效文本');
+                        }
+
+
+                        WORKFLOW_STATE.outputs[agentKey] = generatedText;
+                        AgentStateManager.setState(agentKey, 'completed');
+                        UI.updateAgentStatusButton(agentKey);
+                        return generatedText;
+                    }
+
+                    // ========== 文心一言 (wenxin) ==========
+                    else if (source === 'wenxin') {
+
 
                         const requestBody = {
-                            contents: [{
-                                parts: [{ text: cleanMessage }]
-                            }]
+                            messages: [{role: 'user', content: cleanMessage}],
+                            stream: false,
+                            ...(config.maxTokens && {max_tokens: config.maxTokens}),
+                            ...(config.temperature && {temperature: config.temperature}),
+                            ...(config.top_p && {top_p: config.top_p}),
                         };
-                        console.log(`[callAgent][${agentKey}] 请求体结构:`, JSON.stringify(requestBody).substring(0, 500));
 
-                        const response = await fetch(proxyUrl, {
+
+                        const response = await fetch(url, {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${key}`,
                             },
                             body: JSON.stringify(requestBody),
                             signal: combinedSignal,
                         });
 
-                        console.log(`[callAgent][${agentKey}] 代理响应状态: ${response.status} ${response.statusText}`);
 
                         if (!response.ok) {
                             const errText = await response.text();
-                            console.error(`[callAgent][${agentKey}] 代理错误响应:`, errText);
-                            throw new Error(`代理错误 (${response.status}): ${errText}`);
+                            console.error(`[callAgent][${agentKey}] 文心一言错误响应:`, errText);
+                            throw new Error(`文心一言错误 (${response.status}): ${errText}`);
                         }
-
                         const data = await response.json();
-                        console.log(`[callAgent][${agentKey}] 代理响应数据预览:`, JSON.stringify(data).substring(0, 500));
 
-                        const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                        if (!generatedText) {
-                            console.error(`[callAgent][${agentKey}] 响应中无有效文本`, data);
-                            throw new Error('Gemini 响应中无有效文本');
-                        }
 
-                        console.log(`[callAgent][${agentKey}] 生成文本长度: ${generatedText.length} 字符`);
+                        const generatedText = data.result || data.choices?.[0]?.message?.content;
+                        if (!generatedText) throw new Error('文心一言响应中无有效文本');
 
                         WORKFLOW_STATE.outputs[agentKey] = generatedText;
                         AgentStateManager.setState(agentKey, 'completed');
                         UI.updateAgentStatusButton(agentKey);
-
                         return generatedText;
+                    }
+
+                    // ========== 图像平台 ==========
+                    else if (['openai', 'stability', 'midjourney', 'flux', 'picsart', 'siliconflow', 'sdwebui', 'other'].includes(source) && type === 'image') {
+                        // 图像平台的调用已由 _executeImageGenerator 等专用函数处理，此处不应进入
+                        console.warn(`[callAgent][${agentKey}] 图像平台 ${source} 不应通过 callAgent 直接调用，请检查配置`);
+                        throw new Error(`图像平台 ${source} 必须由专用函数调用`);
+                    }
+
+                    // ========== 音频平台 ==========
+                    else if (['elevenlabs', 'stableaudio', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'custom', 'other'].includes(source) && type === 'audio') {
+                        // 音频平台的调用已由 _executeMusicGenerator 等专用函数处理，此处不应进入
+                        console.warn(`[callAgent][${agentKey}] 音频平台 ${source} 不应通过 callAgent 直接调用，请检查配置`);
+                        throw new Error(`音频平台 ${source} 必须由专用函数调用`);
                     }
 
                     // ========== 其他平台 ==========
@@ -24162,7 +23749,7 @@
                         message: msg,
                         stack: error.stack,
                         timestamp: Date.now(),
-                        apiConfig: config ? { source, model, timeout } : null,
+                        apiConfig: config ? {source, model, timeout} : null,
                         prompt: message.substring(0, 500)
                     };
                     // 显示友好错误信息到进度区域
@@ -24270,7 +23857,6 @@
                 .map(([key]) => key);
 
 
-
             // 收集有输出的 saver 输出
             const saverOutputs = [];
             for (const key of saverKeys) {
@@ -24352,7 +23938,7 @@
 
             if (!headerMatch) {
 
-                return { success: false, error: '未找到协议头部' };
+                return {success: false, error: '未找到协议头部'};
             }
 
             const chapterNum = WORKFLOW_STATE.currentChapter; // 使用当前章节号，不从头部提取
@@ -24368,16 +23954,16 @@
                 const catName = catMatch[2].trim();
                 const fieldsContent = catMatch[3].trim();
 
-                data[catId] = { name: catName, content: fieldsContent };
+                data[catId] = {name: catName, content: fieldsContent};
             }
 
             if (Object.keys(data).length === 0) {
 
-                return { success: false, error: '协议中未找到任何类别定义' };
+                return {success: false, error: '协议中未找到任何类别定义'};
             }
 
 
-            return { success: true, chapterNum, data };
+            return {success: true, chapterNum, data};
         },
 
         // ==================== 优化师专用执行函数 ====================
@@ -24558,7 +24144,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress('⚠️ 无状态书，本章标记为废章，将回滚状态书...', true);
                 }
                 throw new AbortChapterError('无可用状态书，更新失败');
@@ -24627,7 +24213,7 @@
                 const parseResult = this.parseProtocol(protocol);
                 if (parseResult.success) {
                     try {
-                        const { successIds, errorIds } = await updateWorldState(bookName, parseResult.data);
+                        const {successIds, errorIds} = await updateWorldState(bookName, parseResult.data);
                         if (successIds.length) {
                             UI.updateProgress(`    ✅ 更新成功: ${successIds.join(', ')} (共 ${successIds.length} 个类别)`);
                         }
@@ -24653,7 +24239,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress('⚠️ 部分状态更新失败，本章标记为废章，将回滚状态书...', true);
                 }
                 AgentStateManager.setState(agentKey, 'error');
@@ -24668,7 +24254,7 @@
 
         async _executeImageGenerator(agentKey, initialUserInput = '', isReflow = false, options = {}) {
 
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[IMAGE DEBUG] 本章已被标记为废章，终止执行`);
@@ -24791,13 +24377,11 @@
                 }
 
 
-
                 if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
 
                 // 调用生图师 Agent
 
                 const responseText = await this.callAgent(agentKey, prompt);
-
 
 
                 // 保存原始输出
@@ -24889,7 +24473,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
                 }
 
                 UI.updateProgress(`✅ 生图师执行完成，生成 ${imageResults.length} 张图片`);
@@ -24918,7 +24502,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`  ❌ 生图师出错，已保存最佳内容作为废章`, true);
                 }
 
@@ -24930,7 +24514,7 @@
 
         async _executeTypesetter(agentKey, isReflow = false, options = {}) {
 
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[TYPESETTER DEBUG] 本章已被标记为废章，终止执行`);
@@ -25144,7 +24728,6 @@
                 const responseText = await this.callAgent(agentKey, prompt);
 
 
-
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
                 WORKFLOW_STATE.agentRawOutputs[agentKey] = responseText;
@@ -25152,7 +24735,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
                 }
 
                 // 回流条件检查
@@ -25187,7 +24770,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`  ❌ 排版师出错，已保存最佳内容作为废章`, true);
                 }
 
@@ -25199,7 +24782,7 @@
 
         async _executeFusionGenerator(agentKey, initialUserInput = '', isReflow = false, options = {}) {
 
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[FUSION DEBUG] 本章已被标记为废章，终止执行`);
@@ -25302,7 +24885,6 @@
                 const rawOutput = await this.callAgent(agentKey, prompt);
 
 
-
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
                 WORKFLOW_STATE.agentRawOutputs[agentKey] = rawOutput;
@@ -25319,7 +24901,6 @@
 
                 const preprocessSteps = parsed.preprocessSteps || [];
                 const fusionSteps = parsed.fusionSteps || [];
-
 
 
                 let controlMap = {}; // 保存为 -> 实际图片ID
@@ -25377,10 +24958,10 @@
                         imageData = `data:image/png;base64,${resultBase64}`;
                     }
                     const fusionId = await ImageStore.save(imageData, 'png');
-                    WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({ fusion_image_id: fusionId });
+                    WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({fusion_image_id: fusionId});
                     AgentStateManager.setState(agentKey, 'completed');
                     if (!isParallel) {
-                        WORKFLOW_STATE.lastSerialOutput = { agentKey, output: fusionId };
+                        WORKFLOW_STATE.lastSerialOutput = {agentKey, output: fusionId};
                     }
                     UI.updateProgress(`✅ 融合生图师执行完成（降级），生成图片 ID: ${fusionId}`);
 
@@ -25467,11 +25048,11 @@
                 }
 
                 const fusionId = currentImageId;
-                WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({ fusion_image_id: fusionId });
+                WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({fusion_image_id: fusionId});
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: fusionId };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: fusionId};
                 }
 
                 UI.updateProgress(`✅ 融合生图师执行完成，生成图片 ID: ${fusionId}`);
@@ -25494,7 +25075,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`  ❌ 融合生图师出错，已保存最佳内容作为废章`, true);
                 }
 
@@ -25514,8 +25095,7 @@
         async _executeImageLibrarian(agentKey, isReflow = false, options = {}) {
 
 
-
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn('[ImageLibrarian] 本章已被标记为废章，终止执行');
@@ -25573,7 +25153,6 @@
                 prompt = prompt.replace(/【】/g, () => collected[placeholderIdx++] || '');
 
 
-
                 // 添加回流反馈
                 if (isReflow && WORKFLOW_STATE.reflowMap?.[agentKey]) {
                     const feedbackData = WORKFLOW_STATE.reflowMap[agentKey];
@@ -25606,7 +25185,6 @@
                 const responseText = await this.callAgent(agentKey, prompt);
 
 
-
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
                 WORKFLOW_STATE.agentRawOutputs[agentKey] = responseText;
@@ -25629,7 +25207,7 @@
                 WORKFLOW_STATE.outputs[agentKey] = responseText;
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
                 }
 
                 UI.updateProgress(`✅ 图片管理员执行完成`);
@@ -25665,7 +25243,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`  ❌ 图片管理员出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25679,8 +25257,7 @@
         async _executeImageVariator(agentKey, isReflow = false, options = {}) {
 
 
-
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn('[ImageVariator] 本章已被标记为废章，终止执行');
@@ -25732,7 +25309,6 @@
                 const collected = await this._collectInputs(agentKey, isReflow, options);
 
 
-
                 // 构建提示词，调用 Agent 生成指令
                 let prompt = agent.inputTemplate;
                 let placeholderIdx = 0;
@@ -25780,7 +25356,6 @@
                 const responseText = await this.callAgent(agentKey, prompt);
 
 
-
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
                 WORKFLOW_STATE.agentRawOutputs[agentKey] = responseText;
@@ -25804,7 +25379,7 @@
                     WORKFLOW_STATE.outputs[agentKey] = '[]';
                     AgentStateManager.setState(agentKey, 'completed');
                     if (!isParallel) {
-                        WORKFLOW_STATE.lastSerialOutput = { agentKey, output: '[]' };
+                        WORKFLOW_STATE.lastSerialOutput = {agentKey, output: '[]'};
                     }
                     UI.updateProgress(`✅ 变化生图师完成，无变体生成`);
                     return;
@@ -25833,7 +25408,7 @@
                     }
 
                     // 合并参数：使用 inst.params 覆盖默认配置
-                    const params = { ...imageConfig, ...(inst.params || {}), prompt: inst.prompt || inst.params?.prompt };
+                    const params = {...imageConfig, ...(inst.params || {}), prompt: inst.prompt || inst.params?.prompt};
                     if (!params.prompt) {
                         console.warn(`[ImageVariator] 变体 ${i + 1} 缺少 prompt，跳过`);
                         continue;
@@ -25864,7 +25439,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: outputJson };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: outputJson};
                 }
 
                 UI.updateProgress(`✅ 变化生图师完成，生成 ${generatedImages.length} 张图片`);
@@ -25892,7 +25467,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`  ❌ 变化生图师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25909,7 +25484,7 @@
          */
         async _executeMusicGenerator(agentKey, isReflow = false, options = {}) {
 
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
             if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
             if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
@@ -25978,7 +25553,7 @@
                     console.warn('[MusicGenerator] 输出非JSON，使用降级处理');
                     tasks = [{
                         name: '默认音乐',
-                        params: { prompt: agentResponse }
+                        params: {prompt: agentResponse}
                     }];
                 }
 
@@ -25986,7 +25561,7 @@
                 const processedTasks = [];
                 for (const task of tasks) {
                     // 合并参数：任务params + 配置默认值
-                    const params = { ...audioConfig, ...task.params };
+                    const params = {...audioConfig, ...task.params};
                     // 确保有 prompt
                     if (!params.prompt) {
                         console.warn('[MusicGenerator] 任务缺少 prompt，跳过', task);
@@ -26009,7 +25584,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: JSON.stringify(processedTasks) };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: JSON.stringify(processedTasks)};
                 }
 
                 UI.updateProgress(`✅ 音乐生成师完成，生成 ${processedTasks.length} 个音频`);
@@ -26032,7 +25607,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`  ❌ 音乐生成师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -26049,7 +25624,7 @@
          */
         async _executeVoiceCloner(agentKey, isReflow = false, options = {}) {
 
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
             if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
             if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
@@ -26129,7 +25704,7 @@
                         continue;
                     }
                     // 合并参数：任务 params + 配置默认值 + 样本 Blob 和文本
-                    const params = { ...audioConfig, ...task.params, audioBlob: sampleBlob, text: task.text };
+                    const params = {...audioConfig, ...task.params, audioBlob: sampleBlob, text: task.text};
                     // 调用 API
                     const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 60000));
                     const audioId = await AudioStore.save(audioBlob);
@@ -26147,7 +25722,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: JSON.stringify(processedTasks) };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: JSON.stringify(processedTasks)};
                 }
 
                 UI.updateProgress(`✅ 语音克隆师完成，生成 ${processedTasks.length} 个语音`);
@@ -26169,7 +25744,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`  ❌ 语音克隆师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -26184,7 +25759,7 @@
          */
         async _executeAudioEditor(agentKey, isReflow = false, options = {}) {
 
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
             if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
             if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
@@ -26255,7 +25830,7 @@
                     // 降级：将整个输出作为 params 中的 prompt
                     tasks = [{
                         name: '编辑结果',
-                        params: { prompt: agentResponse }
+                        params: {prompt: agentResponse}
                     }];
                 }
 
@@ -26263,7 +25838,7 @@
                 const processedTasks = [];
                 for (const task of tasks) {
                     // 合并参数
-                    const params = { ...audioConfig, ...task.params, sourceAudioBlob: sourceBlob };
+                    const params = {...audioConfig, ...task.params, sourceAudioBlob: sourceBlob};
                     // 调用 API
                     const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 60000));
                     const audioId = await AudioStore.save(audioBlob);
@@ -26280,7 +25855,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: JSON.stringify(processedTasks) };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: JSON.stringify(processedTasks)};
                 }
 
                 UI.updateProgress(`✅ 音频编辑师完成，生成 ${processedTasks.length} 个编辑结果`);
@@ -26302,7 +25877,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`  ❌ 音频编辑师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -26314,8 +25889,7 @@
         async _executeAudioLibrarian(agentKey, isReflow = false, options = {}) {
 
 
-
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn('[AudioLibrarian] 本章已被标记为废章，终止执行');
@@ -26371,10 +25945,6 @@
                 const currentLibraryJson = collected[3];    // 当前音频库全量条目
 
 
-
-
-
-
                 // 解析 JSON
                 let newAudios = [];
                 try {
@@ -26419,7 +25989,6 @@
                 const responseText = await this.callAgent(agentKey, prompt);
 
 
-
                 // 保存原始输出
                 if (!WORKFLOW_STATE.agentRawOutputs) WORKFLOW_STATE.agentRawOutputs = {};
                 WORKFLOW_STATE.agentRawOutputs[agentKey] = responseText;
@@ -26439,7 +26008,7 @@
                 WORKFLOW_STATE.outputs[agentKey] = responseText;
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
+                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
                 }
 
                 UI.updateProgress(`✅ 音频管理员执行完成`);
@@ -26466,7 +26035,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
+                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
                     UI.updateProgress(`  ❌ 音频管理员出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -26476,8 +26045,6 @@
         },
 
         _parseAudioLibrarianOutput(output) {
-
-
 
 
             const actions = [];
@@ -26510,7 +26077,7 @@
                     }
                     // 开始新的新增操作
 
-                    currentAction = { type: 'add', uid: null, book: null };
+                    currentAction = {type: 'add', uid: null, book: null};
                     fieldLines = [];
                 } else if (modifyMatch) {
                     if (currentAction) {
@@ -26521,7 +26088,7 @@
                     const uidStr = modifyMatch[1];
                     const [book, uid] = uidStr.split('-').map(Number);
 
-                    currentAction = { type: 'modify', book, uid };
+                    currentAction = {type: 'modify', book, uid};
                     fieldLines = [];
                 } else if (deleteMatch) {
                     if (currentAction) {
@@ -26533,10 +26100,10 @@
                     const uidPairs = uidListStr.split(/[，,]\s*/);
                     const toDelete = uidPairs.map(pair => {
                         const [b, u] = pair.split('-').map(Number);
-                        return { book: b, uid: u };
+                        return {book: b, uid: u};
                     }).filter(item => !isNaN(item.book) && !isNaN(item.uid));
 
-                    actions.push({ type: 'delete', targets: toDelete });
+                    actions.push({type: 'delete', targets: toDelete});
                     // 删除操作没有后续字段行，直接重置 currentAction
                     currentAction = null;
                     fieldLines = [];
@@ -26655,7 +26222,7 @@
                     const maxUid = entries.reduce((max, e) => Math.max(max, e.uid || 0), 0);
                     const newUid = maxUid + 1;
 
-                    const newEntry = { uid: newUid, enabled: true };
+                    const newEntry = {uid: newUid, enabled: true};
 
                     for (const [key, value] of Object.entries(action.fields)) {
                         setNestedValue(newEntry, key, value);
@@ -26668,12 +26235,12 @@
                     }
 
                     entries.push(newEntry);
-                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
+                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
                     UI.updateProgress(`  ✅ 音频库新增条目: ${bookName} - uid=${newUid}`);
 
 
                 } else if (action.type === 'modify') {
-                    const { book, uid } = action;
+                    const {book, uid} = action;
                     const bookName = `状态书-音频库${book}`;
 
 
@@ -26691,12 +26258,12 @@
                     }
 
                     entries[entryIndex] = entry;
-                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
+                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
                     UI.updateProgress(`  ✅ 音频库修改条目: ${bookName} uid=${uid}`);
 
                 } else if (action.type === 'delete') {
                     for (const target of action.targets) {
-                        const { book, uid } = target;
+                        const {book, uid} = target;
                         const bookName = `状态书-音频库${book}`;
 
 
@@ -26706,7 +26273,7 @@
                         if (newEntries.length === entries.length) {
                             console.warn(`[updateAudioLibrary] 未找到条目 ${book}-${uid}，跳过删除`);
                         } else {
-                            await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
+                            await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
                             UI.updateProgress(`  ✅ 音频库删除条目: ${bookName} uid=${uid}`);
                         }
                     }
@@ -26807,10 +26374,7 @@
         async _callImageVariationAPI(config, sourceBlob, params) {
 
 
-
-
-
-            const { source, apiUrl, key, timeout = 120000 } = config;
+            const {source, apiUrl, key, timeout = 120000} = config;
             const url = apiUrl.replace(/\/+$/, '');
 
             // 构建组合信号（用于中断）
@@ -26829,7 +26393,7 @@
 
             // 从 params 中提取 prompt 和其他参数
             const prompt = params.prompt || '';
-            const mergedParams = { ...config, ...params }; // 合并，但注意 config 可能包含不需要的字段
+            const mergedParams = {...config, ...params}; // 合并，但注意 config 可能包含不需要的字段
 
             // ==================== SD WebUI (AUTOMATIC1111) ====================
             if (source === 'sdwebui') {
@@ -26880,13 +26444,13 @@
                 console.log('[ImageVariationAPI] payload 概览:', JSON.stringify({
                     ...payload,
                     init_images: ['[BASE64]'],
-                    ...(payload.alwayson_scripts && { alwayson_scripts: '[CONTROLNET]' })
+                    ...(payload.alwayson_scripts && {alwayson_scripts: '[CONTROLNET]'})
                 }));
 
                 try {
                     const response = await fetch(sdApiUrl, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload),
                         signal: combinedSignal,
                     });
@@ -26960,7 +26524,7 @@
                             return `data:image/png;base64,${data.data[0].b64_json}`;
                         } else if (data.data[0].url) {
 
-                            const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
+                            const imgRes = await fetch(data.data[0].url, {signal: combinedSignal});
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         }
@@ -27020,8 +26584,6 @@
                 if (mergedParams.style_preset) formData.append('style_preset', mergedParams.style_preset);
 
 
-
-
                 try {
                     const response = await fetch(`${url}${endpoint}`, {
                         method: 'POST',
@@ -27062,7 +26624,6 @@
                 }
 
 
-
                 try {
                     const response = await fetch(`${url}/openai/images/variations`, {
                         method: 'POST',
@@ -27084,7 +26645,7 @@
                         if (data.data[0].b64_json) {
                             return `data:image/png;base64,${data.data[0].b64_json}`;
                         } else if (data.data[0].url) {
-                            const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
+                            const imgRes = await fetch(data.data[0].url, {signal: combinedSignal});
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         }
@@ -27125,7 +26686,7 @@
                     if (contentType?.includes('application/json')) {
                         const data = await response.json();
                         if (data.image_url) {
-                            const imgRes = await fetch(data.image_url, { signal: combinedSignal });
+                            const imgRes = await fetch(data.image_url, {signal: combinedSignal});
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         } else if (data.image_data) {
@@ -27178,7 +26739,7 @@
                         if (data.data[0].b64_json) {
                             return `data:image/png;base64,${data.data[0].b64_json}`;
                         } else if (data.data[0].url) {
-                            const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
+                            const imgRes = await fetch(data.data[0].url, {signal: combinedSignal});
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         }
@@ -27204,8 +26765,6 @@
          * @returns {Array<object>} 操作数组
          */
         _parseImageLibrarianOutput(output) {
-
-
 
 
             const actions = [];
@@ -27238,7 +26797,7 @@
                     }
                     // 开始新的新增操作
 
-                    currentAction = { type: 'add', uid: null, book: null };
+                    currentAction = {type: 'add', uid: null, book: null};
                     fieldLines = [];
                 } else if (modifyMatch) {
                     if (currentAction) {
@@ -27249,7 +26808,7 @@
                     const uidStr = modifyMatch[1];
                     const [book, uid] = uidStr.split('-').map(Number);
 
-                    currentAction = { type: 'modify', book, uid };
+                    currentAction = {type: 'modify', book, uid};
                     fieldLines = [];
                 } else if (deleteMatch) {
                     if (currentAction) {
@@ -27261,10 +26820,10 @@
                     const uidPairs = uidListStr.split(/[，,]\s*/);
                     const toDelete = uidPairs.map(pair => {
                         const [b, u] = pair.split('-').map(Number);
-                        return { book: b, uid: u };
+                        return {book: b, uid: u};
                     }).filter(item => !isNaN(item.book) && !isNaN(item.uid));
 
-                    actions.push({ type: 'delete', targets: toDelete });
+                    actions.push({type: 'delete', targets: toDelete});
                     // 删除操作没有后续字段行，直接重置 currentAction
                     currentAction = null;
                     fieldLines = [];
@@ -27352,7 +26911,6 @@
             const apiUrl = imageConfig.apiUrl.replace(/\/+$/, '');
 
 
-
             // 预处理器名称映射
             const controlNetModuleMap = {
                 depth: 'depth_midas',
@@ -27416,7 +26974,7 @@
                     const startTime = Date.now();
                     const response = await fetch(`${apiUrl}/controlnet/detect`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload),
                         signal: combinedSignal,  // 使用组合信号
                     });
@@ -27463,7 +27021,6 @@
             }
 
 
-
             return resultMap;
         },
 
@@ -27495,7 +27052,7 @@
                     const newUid = maxUid + 1;
 
                     // 创建一个空的条目对象
-                    const newEntry = { uid: newUid, enabled: true };
+                    const newEntry = {uid: newUid, enabled: true};
 
                     // 使用 setNestedValue 设置所有字段（支持点号路径）
                     for (const [key, value] of Object.entries(action.fields)) {
@@ -27509,12 +27066,12 @@
                     }
 
                     entries.push(newEntry);
-                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
+                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
                     UI.updateProgress(`  ✅ 图库新增条目: ${bookName} - uid=${newUid}`);
 
 
                 } else if (action.type === 'modify') {
-                    const { book, uid } = action;
+                    const {book, uid} = action;
                     const bookName = `状态书-图库${book}`;
 
 
@@ -27533,14 +27090,14 @@
                     }
 
                     entries[entryIndex] = entry;
-                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
+                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
                     UI.updateProgress(`  ✅ 图库修改条目: ${bookName} uid=${uid}`);
 
 
                 } else if (action.type === 'delete') {
                     // 删除操作不变
                     for (const target of action.targets) {
-                        const { book, uid } = target;
+                        const {book, uid} = target;
                         const bookName = `状态书-图库${book}`;
 
 
@@ -27550,7 +27107,7 @@
                         if (newEntries.length === entries.length) {
                             console.warn(`[updateImageLibrary] 未找到条目 ${book}-${uid}，跳过删除`);
                         } else {
-                            await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
+                            await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
                             UI.updateProgress(`  ✅ 图库删除条目: ${bookName} uid=${uid}`);
 
                         }
@@ -27659,7 +27216,6 @@
         async _executePreprocessingSteps(preprocText) {
 
 
-
             const lines = preprocText.split('\n');
             let currentStep = null;
             const steps = [];
@@ -27667,7 +27223,7 @@
                 const trimmed = line.trim();
                 if (trimmed.startsWith('步骤')) {
                     if (currentStep) steps.push(currentStep);
-                    currentStep = { step: parseInt(trimmed.replace('步骤', '')) };
+                    currentStep = {step: parseInt(trimmed.replace('步骤', ''))};
                 } else if (currentStep) {
                     const colonIdx = trimmed.indexOf(':');
                     if (colonIdx === -1) continue;
@@ -27691,7 +27247,6 @@
                 throw new Error('预处理需要 SD WebUI 图像配置（source: sdwebui）');
             }
             const apiUrl = imageConfig.apiUrl.replace(/\/+$/, '');
-
 
 
             // 预处理器名称映射（可根据需要扩展）
@@ -27756,7 +27311,7 @@
                     const startTime = Date.now();
                     const response = await fetch(`${apiUrl}/controlnet/detect`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload),
                         signal: combinedSignal,  // 使用组合信号
                     });
@@ -27803,7 +27358,6 @@
             }
 
 
-
             return resultMap;
         },
 
@@ -27815,9 +27369,7 @@
         _parseFusionInstruction(rawOutput) {
 
 
-
-
-            const result = { preprocText: null, fusionSteps: null };
+            const result = {preprocText: null, fusionSteps: null};
 
             // 提取预处理指令块
             const preprocMatch = rawOutput.match(/===预处理指令===([\s\S]*?)(?===融合指令===|$)/);
@@ -27833,7 +27385,6 @@
             const fusionMatch = rawOutput.match(/===融合指令===([\s\S]*)/);
             if (fusionMatch) {
                 const fusionText = fusionMatch[1].trim();
-
 
 
                 const steps = [];
@@ -27972,7 +27523,6 @@
         async _callSingleControlNetAPI(initBlob, controlBlob, params) {
 
 
-
             const config = this._getImageConfig(); // 获取全局图像配置
             if (!config || config.source !== 'sdwebui') {
                 throw new Error('融合生图需要 SD WebUI 图像配置（source: sdwebui）');
@@ -27981,7 +27531,7 @@
             const sdApiUrl = `${apiUrl}/sdapi/v1/img2img`;
 
             // 合并参数：params 中的字段优先
-            const mergedParams = { ...config, ...params };
+            const mergedParams = {...config, ...params};
 
 
             // 构建组合信号
@@ -28031,11 +27581,10 @@
             };
 
 
-
             try {
                 const response = await fetch(sdApiUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(payload),
                     signal: combinedSignal,
                 });
@@ -28125,14 +27674,14 @@
                 n_iter: 1,
                 seed: -1,
                 alwayson_scripts: {
-                    controlnet: { args: [controlNetUnit] }
+                    controlnet: {args: [controlNetUnit]}
                 }
             };
 
             try {
                 const response = await fetch(sdApiUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(payload),
                     signal: combinedSignal,  // 使用组合信号
                 });
@@ -28239,7 +27788,7 @@
             try {
                 const response = await fetch(sdApiUrl, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(payload),
                     signal: combinedSignal,  // 使用组合信号
                 });
@@ -28327,7 +27876,7 @@
                     }
                     const start = parseInt(paraMatch[1]);
                     const end = paraMatch[2] ? parseInt(paraMatch[2]) : start;
-                    currentTask = { start, end, prompt: '', element: null };
+                    currentTask = {start, end, prompt: '', element: null};
                     promptLines = [];
                 }
                 // 2. 尝试匹配元素格式：以冒号结尾且不是段落格式，视为元素名称行
@@ -28339,7 +27888,7 @@
                         tasks.push(currentTask);
                     }
                     // 新任务：元素模式，无段落范围，默认放在章节末尾（-1）
-                    currentTask = { start: -1, end: -1, prompt: '', element: elementName };
+                    currentTask = {start: -1, end: -1, prompt: '', element: elementName};
                     promptLines = [];
                 } else if (currentTask) {
                     // 收集提示词行
@@ -28357,7 +27906,7 @@
 
             // 如果没有任何任务，将整个输出作为提示词，默认放在章节末尾
             if (tasks.length === 0) {
-                tasks.push({ start: -1, end: -1, prompt: output.trim(), element: null });
+                tasks.push({start: -1, end: -1, prompt: output.trim(), element: null});
             }
 
             return tasks;
@@ -28371,15 +27920,14 @@
         async _callImageAPI(params) {
 
 
-
             const config = this._getImageConfig(); // 获取全局唯一图像配置
 
 
             // 合并参数：params 中的字段优先于 config
-            const mergedParams = { ...config, ...params };
+            const mergedParams = {...config, ...params};
 
 
-            const { source, apiUrl, key, model, timeout = 60000 } = mergedParams;
+            const {source, apiUrl, key, model, timeout = 60000} = mergedParams;
             const url = apiUrl.replace(/\/+$/, '');
 
             // 构建组合信号
@@ -28427,7 +27975,7 @@
                     if (data.data && data.data[0] && data.data[0].url) {
                         const imageUrl = data.data[0].url;
 
-                        const imgRes = await fetch(imageUrl, { signal: combinedSignal });
+                        const imgRes = await fetch(imageUrl, {signal: combinedSignal});
                         const blob = await imgRes.blob();
                         const base64 = await this._blobToBase64(blob);
 
@@ -28466,7 +28014,7 @@
 
                     const response = await fetch(sdApiUrl, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload),
                         signal: combinedSignal,
                     });
@@ -28491,7 +28039,7 @@
                         'Content-Type': 'application/json',
                     };
                     const body = JSON.stringify({
-                        text_prompts: [{ text: mergedParams.prompt, weight: 1 }],
+                        text_prompts: [{text: mergedParams.prompt, weight: 1}],
                         cfg_scale: mergedParams.cfg_scale || 7,
                         height: mergedParams.height || 512,
                         width: mergedParams.width || 512,
@@ -28538,7 +28086,7 @@
                         const errorText = await submitRes.text();
                         throw new Error(`Midjourney 提交失败: ${errorText}`);
                     }
-                    const { taskId } = await submitRes.json();
+                    const {taskId} = await submitRes.json();
 
 
                     const maxAttempts = 30;
@@ -28546,7 +28094,7 @@
                     for (let i = 0; i < maxAttempts; i++) {
                         await this.sleep(pollInterval);
                         const resultRes = await fetch(`${url}/mj/task/${taskId}`, {
-                            headers: { 'Authorization': `Bearer ${key}` },
+                            headers: {'Authorization': `Bearer ${key}`},
                             signal: combinedSignal,
                         });
                         if (!resultRes.ok) {
@@ -28808,7 +28356,7 @@
                     const request = WORKFLOW_STATE.inputRequestQueue.shift();
                     if (!request) continue;
 
-                    const { mode, agentKey, inputIndex, src, isReflow } = request;
+                    const {mode, agentKey, inputIndex, src, isReflow} = request;
 
 
                     if (WORKFLOW_STATE.shouldStop) {
@@ -28843,7 +28391,7 @@
 
                     if (agent && agent.role === 'interactiveAgent' && mode === 'txt') {
                         // ========== interactiveAgent 特殊处理 ==========
-                        let html = await this._collectInputs(agentKey, isReflow, { isParallel: false });
+                        let html = await this._collectInputs(agentKey, isReflow, {isParallel: false});
                         html = html[0];
                         const userChoice = await UI.renderAndWaitForInteraction(html);
                         pending.resolved = true;
@@ -28886,11 +28434,11 @@
                     </div>
                     <div class="nc-modal-body" style="text-align:center; padding:20px;">
                         <input type="file" id="nc-file-input" accept="${fileType === 'png' ? 'image/png' :
-                                        fileType === 'txt' ? 'text/plain' :
-                                            fileType === 'html' ? 'text/html' :
-                                                fileType === 'js' ? 'application/javascript' :
-                                                    fileType === 'audio' ? 'audio/*' : '*/*'
-                                    }" style="margin:10px 0;">
+                                    fileType === 'txt' ? 'text/plain' :
+                                        fileType === 'html' ? 'text/html' :
+                                            fileType === 'js' ? 'application/javascript' :
+                                                fileType === 'audio' ? 'audio/*' : '*/*'
+                                }" style="margin:10px 0;">
                     </div>
                     <div class="nc-modal-footer">
                         <button class="nc-modal-close-btn">取消</button>
@@ -28972,7 +28520,7 @@
 
                         UI.updateSubmitButtons(null);
                         UI.updateProgress(`✓ 文件上传成功，ID: ${uploadResult.fileId}`);
-                        Notify.success('文件已上传', '', { timeOut: 2000 });
+                        Notify.success('文件已上传', '', {timeOut: 2000});
 
                         AgentStateManager.setState(agentKey, 'running');
                         UI.updateWorkflowAgentStates();
@@ -29013,11 +28561,11 @@
                     <div>
                         <label style="display:block; margin-bottom:5px; color:#aaa;">选择文件</label>
                         <input type="file" id="nc-file-input" accept="${fileType === 'png' ? 'image/png' :
-                                        fileType === 'txt' ? 'text/plain' :
-                                            fileType === 'html' ? 'text/html' :
-                                                fileType === 'js' ? 'application/javascript' :
-                                                    fileType === 'audio' ? 'audio/*' : '*/*'
-                                    }" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px;">
+                                    fileType === 'txt' ? 'text/plain' :
+                                        fileType === 'html' ? 'text/html' :
+                                            fileType === 'js' ? 'application/javascript' :
+                                                fileType === 'audio' ? 'audio/*' : '*/*'
+                                }" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px;">
                     </div>
                 </div>
                 <div class="nc-modal-footer" style="display:flex; gap:10px; justify-content:center;">
@@ -29178,7 +28726,7 @@
 
                         UI.updateSubmitButtons(null);
                         UI.updateProgress(`✓ 文件保存完成，ID: ${fileId}`);
-                        Notify.success('文件已保存', '', { timeOut: 2000 });
+                        Notify.success('文件已保存', '', {timeOut: 2000});
 
                         const textarea = document.getElementById('nc-user-input');
                         if (textarea) {
@@ -29221,7 +28769,7 @@
 
                         // ===== 新增：用户输入完成提示 =====
                         UI.updateProgress(`✓ 用户输入已提交，内容长度: ${userInput.length} 字符`);
-                        Notify.success('用户输入已接收', '', { timeOut: 2000 });
+                        Notify.success('用户输入已接收', '', {timeOut: 2000});
 
                         if (!isReflow) {
                             if (src.endsWith('.last')) {
@@ -29278,7 +28826,7 @@
          * @returns {Promise<Array<string>>} 收集到的内容数组，顺序与 agent.inputs 一致
          */
         async _collectInputs(agentKey, isReflow = false, options = {}) {
-            const { isParallel = false, parallelBeforeSnapshot = null } = options;
+            const {isParallel = false, parallelBeforeSnapshot = null} = options;
             const agent = CONFIG.AGENTS[agentKey];
             if (!agent) throw new Error(`Agent ${agentKey} 不存在`);
 
@@ -29506,7 +29054,7 @@
 
         // 在 Workflow 对象内添加以下方法
         async _uploadFile(apiConfig, fileBlob, purpose = 'assistants') {
-            const { source, apiUrl, key, timeout = 60000 } = apiConfig;
+            const {source, apiUrl, key, timeout = 60000} = apiConfig;
             const url = apiUrl.replace(/\/+$/, '');
             const signals = [];
             if (WORKFLOW_STATE.abortController) signals.push(WORKFLOW_STATE.abortController.signal);
@@ -29517,9 +29065,6 @@
             const formData = new FormData();
             formData.append('purpose', purpose);
             formData.append('file', fileBlob, fileBlob.name); // 保留原文件名
-
-
-
 
 
             // 根据 source 选择上传端点
@@ -29577,7 +29122,7 @@
                 }
 
 
-                return { fileId, fileName: fileBlob.name };
+                return {fileId, fileName: fileBlob.name};
             } catch (err) {
                 console.error('[Workflow._uploadFile] 上传过程中发生异常:', err);
                 throw err;
@@ -29616,9 +29161,8 @@
          * @returns {Promise<Blob>} 生成的音频 Blob
          */
         async _callAudioAPI(config, params, signal) {
-            const { mode, source, apiUrl, key } = config;
+            const {mode, source, apiUrl, key} = config;
             const url = apiUrl.replace(/\/+$/, '');
-
 
 
             switch (mode) {
@@ -29660,8 +29204,7 @@
                 });
                 if (!response.ok) throw new Error(`ElevenLabs 音乐生成失败: ${await response.text()}`);
                 return await response.blob();
-            }
-            else if (source === 'stableaudio') {
+            } else if (source === 'stableaudio') {
                 // Stable Audio
                 const endpoint = `${url}/v2beta/audio/stable-audio-2/text-to-audio`;
                 const formData = new FormData();
@@ -29670,30 +29213,28 @@
                 formData.append('output_format', params.output_format || 'mp3');
                 const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${key}` },
+                    headers: {'Authorization': `Bearer ${key}`},
                     body: formData,
                     signal,
                 });
                 if (!response.ok) throw new Error(`Stable Audio 生成失败: ${await response.text()}`);
                 return await response.blob();
-            }
-            else if (source === 'huggingface') {
+            } else if (source === 'huggingface') {
                 const model = params.model || 'facebook/musicgen-small';
                 const endpoint = `https://api-inference.huggingface.co/models/${model}`;
                 const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ inputs: params.prompt }),
+                    headers: {'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json'},
+                    body: JSON.stringify({inputs: params.prompt}),
                     signal,
                 });
                 if (!response.ok) throw new Error(`Hugging Face 错误: ${await response.text()}`);
                 return await response.blob();
-            }
-            else {
+            } else {
                 // 通用自定义平台（假设返回音频 blob）
                 const response = await fetch(url, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    headers: {'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json'},
                     body: JSON.stringify(params),
                     signal,
                 });
@@ -29716,7 +29257,7 @@
                     formData.append('description', params.description || 'Cloned voice');
                     const cloneRes = await fetch(`${url}/voices/add`, {
                         method: 'POST',
-                        headers: { 'xi-api-key': key },
+                        headers: {'xi-api-key': key},
                         body: formData,
                         signal,
                     });
@@ -29739,14 +29280,13 @@
                 };
                 const ttsRes = await fetch(`${url}/text-to-speech/${voiceId}`, {
                     method: 'POST',
-                    headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
+                    headers: {'xi-api-key': key, 'Content-Type': 'application/json'},
                     body: JSON.stringify(ttsBody),
                     signal,
                 });
                 if (!ttsRes.ok) throw new Error(`语音合成失败: ${await ttsRes.text()}`);
                 return await ttsRes.blob();
-            }
-            else {
+            } else {
                 // 其他平台占位，需用户自行实现
                 throw new Error(`语音克隆平台 ${source} 未完全实现，请使用 ElevenLabs 或自定义接口`);
             }
@@ -29764,14 +29304,13 @@
                 formData.append('prompt', params.prompt || '');
                 const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: { 'Authorization': `Bearer ${key}` },
+                    headers: {'Authorization': `Bearer ${key}`},
                     body: formData,
                     signal,
                 });
                 if (!response.ok) throw new Error(`Stable Audio 编辑失败: ${await response.text()}`);
                 return await response.blob();
-            }
-            else {
+            } else {
                 throw new Error(`音频编辑平台 ${source} 暂未实现，请使用 Stable Audio 或自定义接口`);
             }
         },
@@ -29807,7 +29346,7 @@
                     byteArrays.push(byteArray);
                 }
 
-                return new Blob(byteArrays, { type: mimeType });
+                return new Blob(byteArrays, {type: mimeType});
             } catch (err) {
                 console.error('[Workflow._base64ToBlob] 转换失败:', err);
                 throw err;
@@ -29954,14 +29493,14 @@
 
         // 加载保存的预选状态（此时可能为空）
         const savedSelection = Storage.loadSelectionState();
-        WORKFLOW_STATE.selectionState = { ...WORKFLOW_STATE.selectionState, ...savedSelection };
+        WORKFLOW_STATE.selectionState = {...WORKFLOW_STATE.selectionState, ...savedSelection};
 
         // 在 baseInit 中，找到 Storage.init 调用之后（约第9800行）
         try {
             await Storage.init();
         } catch (e) {
             console.error('[Storage] 初始化失败，但仍尝试继续', e);
-            HISTORY_CACHE = { chapters: [], lastUpdate: Date.now() };
+            HISTORY_CACHE = {chapters: [], lastUpdate: Date.now()};
         }
 
         // ===== 新增：加载映射表 =====
@@ -29997,7 +29536,7 @@
         UI.createFloatButton();
         localStorage.removeItem(CONFIG.SETTINGS_KEY);  // 清除保存的设置
 
-        Notify.success(`${CONFIG.NAME} v${CONFIG.VERSION} 已加载，请先加载配置文件`, '', { timeOut: 2000 });
+        Notify.success(`${CONFIG.NAME} v${CONFIG.VERSION} 已加载，请先加载配置文件`, '', {timeOut: 2000});
     }
 
     if (!window.__novelCreatorInit) {
