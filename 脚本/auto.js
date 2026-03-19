@@ -3123,7 +3123,7 @@
             if (typeof TavernHelper?.generate !== 'function') throw new Error('TavernHelper.generate 不可用');
             const context = this.getContext();
             const result = await TavernHelper.generate({
-                user_input: message, max_chat_history: 1, should_silence: true, ...options
+                user_input: message, max_chat_history: 0, should_silence: true, ...options
             });
             let text = '';
             if (typeof result === 'string') {
