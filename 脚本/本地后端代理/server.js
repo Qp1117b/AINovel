@@ -7,8 +7,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const API_KEY = "";
-const proxyAgent = new HttpsProxyAgent('http://127.0.0.1:9910');
+const API_KEY = "AI-******"; //API密钥
+const proxyAgent = new HttpsProxyAgent('http://127.0.0.1:9910'); //科学上网的代理地址
 
 app.post('/api/gemini', async (req, res) => {
     try {
