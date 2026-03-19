@@ -3196,7 +3196,6 @@
      * @returns {Promise<{ok: boolean, error?: string}>}
      */
     async function testAPIConnection(config) {
-        // [DEBUG] 添加调试日志
         console.debug(`[DEBUG][testAPIConnection] 开始测试: type=${config.type}, source=${config.source}, url=${config.apiUrl}, model=${config.model}`);
 
         const { type, source, apiUrl, key, model } = config;
@@ -3217,52 +3216,55 @@
         if (type === 'text') {
             // ----- Gemini 特殊处理：根据 url 判断原生或代理 -----
             if (source === 'gemini') {
-                const isLocalProxy = url.includes('localhost') || url.includes('127.0.0.1');
-                if (isLocalProxy) {
-                    // 代理模式：使用 POST /api/gemini 测试
-                    const testUrl = url + '/api/gemini';
-                    const testBody = {
-                        contents: [{
-                            parts: [{ text: "test" }]
-                        }]
-                    };
-
-                    const options = {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(testBody),
-                        signal: AbortSignal.timeout(testTimeout),
-                    };
-                    try {
-                        const response = await fetch(testUrl, options);
-                        if (response.ok) return { ok: true };
-                        else {
-                            const errorText = await response.text();
-                            return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
-                        }
-                    } catch (err) {
-                        console.error(`[DEBUG][testAPIConnection] Gemini代理请求失败:`, err);
-                        return { ok: false, error: err.message };
+                const modelsUrl = `${url}/v1beta/models?key=${key}`;
+                const options = {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: AbortSignal.timeout(testTimeout),
+                };
+                try {
+                    const response = await fetch(modelsUrl, options);
+                    if (response.ok) return { ok: true };
+                    else {
+                        const errorText = await response.text();
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                     }
-                } else {
-                    // 原生模式：使用 GET /v1beta/models 测试
-                    const modelsUrl = `${url}/v1beta/models?key=${key}`;
+                } catch (err) {
+                    console.error(`[DEBUG][testAPIConnection] Gemini请求失败:`, err);
+                    return { ok: false, error: err.message };
+                }
+            }
 
-                    try {
-                        const response = await fetch(modelsUrl, {
-                            method: 'GET',
-                            headers: { 'Content-Type': 'application/json' },
-                            signal: AbortSignal.timeout(testTimeout),
-                        });
-                        if (response.ok) return { ok: true };
-                        else {
-                            const errorText = await response.text();
-                            return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
-                        }
-                    } catch (err) {
-                        console.error(`[DEBUG][testAPIConnection] Gemini原生请求失败:`, err);
-                        return { ok: false, error: err.message };
+            // ===== 在 Gemini 分支之后，文心一言之前插入 =====
+            if (source === 'doubao') {
+                // 豆包测试：发送最小对话请求
+                const testUrl = url; // 假设 url 已是完整的 base URL，如 https://ark.cn-beijing.volces.com/api/v3
+                const testBody = {
+                    model: config.model || 'doubao-1-5-pro-32k-250115', // 使用配置中的模型或默认
+                    messages: [{ role: "user", content: "hi" }],
+                    max_tokens: 1
+                };
+
+                const options = {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${key}`
+                    },
+                    body: JSON.stringify(testBody),
+                    signal: AbortSignal.timeout(testTimeout),
+                };
+                try {
+                    const response = await fetch(testUrl, options);
+                    // 只要能收到响应（即使因为 max_tokens 太小而失败，也算连通）
+                    if (response.status < 500) return { ok: true };
+                    else {
+                        const errorText = await response.text();
+                        return { ok: false, error: `HTTP ${response.status}: ${response.statusText}\n${errorText}` };
                     }
+                } catch (err) {
+                    console.error(`[DEBUG][testAPIConnection] 豆包请求失败:`, err);
+                    return { ok: false, error: err.message };
                 }
             }
 
@@ -3309,6 +3311,7 @@
                 },
                 signal: AbortSignal.timeout(testTimeout),
             };
+
             try {
                 const response = await fetch(modelsUrl, options);
                 if (response.ok) {
@@ -3461,6 +3464,9 @@
                     console.error(`[DEBUG][testAPIConnection] SD WebUI测试失败:`, err);
                     return { ok: false, error: `无法连接到 SD WebUI: ${err.message}` };
                 }
+            } else if (source === 'sora') {
+                // Sora 不支持图像，返回明确错误
+                return { ok: false, error: 'Sora 平台仅支持视频生成，不支持图像生成' };
             } else if (source === 'other') {
                 // 其他图像 API：尝试 OPTIONS 请求或简单 GET
                 try {
@@ -3490,10 +3496,24 @@
             let method = 'GET';
             let headers = {};
 
-            const authSources = ['elevenlabs', 'minimax', 'minimax-music', 'minimax-speech', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'stableaudio', 'riffusion', 'custom'];
+            const authSources = [
+                'elevenlabs', 'minimax', 'minimax-music', 'minimax-speech',
+                'mureka', 'mubert', 'aiva', 'wondera', 'huggingface',
+                'openai-tts', 'azure-tts', 'google-tts', 'stableaudio',
+                'riffusion', 'audiocraft', 'edge-tts', 'other'
+            ];
             if (authSources.includes(source) && key && key.trim() !== '') {
                 if (source === 'azure-tts') {
                     headers['Ocp-Apim-Subscription-Key'] = key;
+                } else if (source === 'mubert') {
+                    headers['access-token'] = key;
+                    headers['customer-id'] = config.customer_id || 'test';
+                } else if (source === 'riffusion') {
+                    headers['Api-Key'] = key;
+                } else if (source === 'audiocraft' && url.includes('replicate.com')) {
+                    headers['Authorization'] = `Token ${key}`;
+                } else if (source === 'edge-tts') {
+                    // Edge TTS 无认证
                 } else {
                     headers['Authorization'] = `Bearer ${key}`;
                 }
@@ -3507,7 +3527,40 @@
                 case 'minimax':
                 case 'minimax-music':
                 case 'minimax-speech':
-                    testUrl = url + '/voice/list';
+                    // MiniMax 需要一个 Group ID，尝试访问用户信息
+                    testUrl = url + '/user/info?GroupId=' + (config.group_id || 'test');
+                    break;
+                case 'mureka':
+                    // 假设有健康检查端点
+                    testUrl = url + '/health';
+                    break;
+                case 'mubert':
+                    testUrl = url + '/api/v3/public/ping';
+                    method = 'POST';
+                    break;
+                case 'aiva':
+                    testUrl = url + '/health';
+                    break;
+                case 'wondera':
+                    testUrl = url + '/health';
+                    break;
+                case 'riffusion':
+                    testUrl = url + '/health';
+                    break;
+                case 'audiocraft':
+                    if (url.includes('replicate.com')) {
+                        testUrl = url + '/models';
+                    } else {
+                        testUrl = url + '/health';
+                    }
+                    break;
+                case 'edge-tts':
+                    if (!config.apiUrl || config.apiUrl.trim() === '') {
+                        return { ok: false, error: '请先配置 Edge TTS 的 API URL' };
+                    }
+                    testUrl = config.apiUrl.replace(/\/+$/, '') + '/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491EF6C';
+                    method = 'GET';
+                    headers = {};  // Edge TTS 无认证
                     break;
                 case 'huggingface':
                     testUrl = url + '/api/models';
@@ -3525,11 +3578,6 @@
                 case 'stableaudio':
                     testUrl = url + '/v2beta/audio/health';
                     break;
-                case 'riffusion':
-                    testUrl = url;
-                    method = 'HEAD';
-                    break;
-                case 'custom':
                 case 'other':
                     method = 'OPTIONS';
                     testUrl = url;
@@ -3569,11 +3617,12 @@
      * @returns {Promise<Array<{id: string, description: string}>>}
      */
     async function fetchModelList(config) {
-        const {type, source, apiUrl, key} = config;
+        const { type, source, apiUrl, key } = config;
         if (!apiUrl || !key) {
             throw new Error('请先填写 API URL 和密钥');
         }
         const url = apiUrl.replace(/\/+$/, ''); // 去除末尾多余的斜杠
+
 
 
         try {
@@ -3583,7 +3632,7 @@
                 if (source === 'gemini') {
                     const response = await fetch(`${url}/v1beta/models?key=${key}`, {
                         method: 'GET',
-                        headers: {'Content-Type': 'application/json'}
+                        headers: { 'Content-Type': 'application/json' }
                     });
                     if (!response.ok) {
                         throw new Error(`Gemini API 错误 (${response.status}): ${await response.text()}`);
@@ -3611,10 +3660,10 @@
                     const data = await response.json();
                     // 常见格式: { data: [{ id: "gpt-4", ... }] }
                     if (data.data && Array.isArray(data.data)) {
-                        return data.data.map(m => ({id: m.id, description: m.description || ''}));
+                        return data.data.map(m => ({ id: m.id, description: m.description || '' }));
                     } else if (Array.isArray(data)) {
                         // 某些平台直接返回数组
-                        return data.map(m => ({id: m.id || m, description: ''}));
+                        return data.map(m => ({ id: m.id || m, description: '' }));
                     } else {
                         throw new Error('无法解析响应格式');
                     }
@@ -3666,9 +3715,9 @@
                     }
                     const data = await response.json();
                     if (data.data && Array.isArray(data.data)) {
-                        return data.data.map(m => ({id: m.id, description: ''}));
+                        return data.data.map(m => ({ id: m.id, description: '' }));
                     } else if (Array.isArray(data)) {
-                        return data.map(m => ({id: m.id || m, description: ''}));
+                        return data.map(m => ({ id: m.id || m, description: '' }));
                     } else {
                         throw new Error('无法解析响应格式');
                     }
@@ -3679,14 +3728,23 @@
                     // 获取可用引擎：GET /v2beta/engines
                     const response = await fetch(`${url}/engines`, {
                         method: 'GET',
-                        headers: {'Authorization': `Bearer ${key}`}
+                        headers: { 'Authorization': `Bearer ${key}` }
                     });
                     if (!response.ok) {
                         throw new Error(`Stability AI 错误 (${response.status}): ${await response.text()}`);
                     }
                     const data = await response.json();
                     // 返回格式: [{ id: "stable-diffusion-xl-1024-v1-0", description: "..." }]
-                    return data.map(e => ({id: e.id, description: e.description || ''}));
+                    return data.map(e => ({ id: e.id, description: e.description || '' }));
+                }
+
+                // Midjourney
+                if (source === 'midjourney') {
+                    // Midjourney 通常没有模型列表接口，返回预设
+                    return [
+                        { id: 'midjourney-v7', description: 'Midjourney V7' },
+                        { id: 'midjourney-v6.1', description: 'Midjourney V6.1' }
+                    ];
                 }
 
                 // SD WebUI
@@ -3700,7 +3758,25 @@
                     }
                     const data = await response.json();
                     // 返回格式: [{ model_name: "v1-5-pruned-emaonly", ... }]
-                    return data.map(m => ({id: m.model_name || m.title, description: ''}));
+                    return data.map(m => ({ id: m.model_name || m.title, description: '' }));
+                }
+
+                // Picsart
+                if (source === 'picsart') {
+                    // 假设有模型列表接口
+                    const response = await fetch(`${url}/models`, {
+                        headers: { 'Authorization': `Bearer ${key}` }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Picsart 错误 (${response.status}): ${await response.text()}`);
+                    }
+                    const data = await response.json();
+                    return data.data.map(m => ({ id: m.id, description: m.name }));
+                }
+
+                // Sora（不支持图像）
+                if (source === 'sora') {
+                    throw new Error('Sora 平台不支持图像生成');
                 }
 
                 throw new Error(`图像平台 ${source} 暂不支持自动获取模型列表`);
@@ -3708,69 +3784,132 @@
 
             // ---------- 音频平台 ----------
             else if (type === 'audio') {
-                // ElevenLabs
-                if (source === 'elevenlabs') {
-                    const response = await fetch(`${url}/voices`, {
-                        method: 'GET',
-                        headers: {'xi-api-key': key}
-                    });
-                    if (!response.ok) {
-                        throw new Error(`ElevenLabs 错误 (${response.status}): ${await response.text()}`);
-                    }
-                    const data = await response.json();
-                    // 返回格式: { voices: [{ voice_id: "...", name: "..." }] }
-                    return data.voices.map(v => ({id: v.voice_id, description: v.name}));
-                }
+                switch (source) {
+                    case 'elevenlabs':
+                        const voicesRes = await fetch(`${url}/voices`, {
+                            headers: { 'xi-api-key': key }
+                        });
+                        if (!voicesRes.ok) throw new Error(`ElevenLabs 错误: ${await voicesRes.text()}`);
+                        const voicesData = await voicesRes.json();
+                        return voicesData.voices.map(v => ({ id: v.voice_id, description: v.name }));
 
-                // OpenAI TTS / SiliconFlow (兼容 OpenAI 格式)
-                if (source === 'openai-tts' || source === 'siliconflow') {
-                    const response = await fetch(`${url}/models`, {
-                        method: 'GET',
-                        headers: {'Authorization': `Bearer ${key}`}
-                    });
-                    if (!response.ok) {
-                        throw new Error(`TTS API 错误 (${response.status}): ${await response.text()}`);
-                    }
-                    const data = await response.json();
-                    if (data.data && Array.isArray(data.data)) {
-                        return data.data.map(m => ({id: m.id, description: ''}));
-                    } else {
-                        throw new Error('无法解析响应格式');
-                    }
-                }
+                    case 'minimax':
+                    case 'minimax-music':
+                    case 'minimax-speech':
+                        // MiniMax 没有公开模型列表，返回预设
+                        return [
+                            { id: 'music-2.5+', description: 'MiniMax Music 2.5' },
+                            { id: 'music-2.0', description: 'MiniMax Music 2.0' },
+                            { id: 'speech-2.8-hd', description: 'MiniMax Speech 2.8 HD' },
+                            { id: 'speech-2.8-turbo', description: 'MiniMax Speech 2.8 Turbo' }
+                        ];
 
-                // Azure TTS
-                if (source === 'azure-tts') {
-                    const response = await fetch(`${url}/cognitiveservices/voices/list`, {
-                        method: 'GET',
-                        headers: {'Ocp-Apim-Subscription-Key': key}
-                    });
-                    if (!response.ok) {
-                        throw new Error(`Azure TTS 错误 (${response.status}): ${await response.text()}`);
-                    }
-                    const data = await response.json();
-                    // 返回格式: [{ ShortName: "zh-CN-XiaoxiaoNeural", FriendlyName: "..." }]
-                    return data.map(v => ({id: v.ShortName, description: v.FriendlyName}));
-                }
+                    case 'mureka':
+                        return [
+                            { id: 'mureka-v8', description: 'Mureka V8' },
+                            { id: 'mureka-v7', description: 'Mureka V7' }
+                        ];
 
-                // Google TTS
-                if (source === 'google-tts') {
-                    const response = await fetch(`${url}/voices?key=${key}`, {
-                        method: 'GET',
-                        headers: {}
-                    });
-                    if (!response.ok) {
-                        throw new Error(`Google TTS 错误 (${response.status}): ${await response.text()}`);
-                    }
-                    const data = await response.json();
-                    // 返回格式: { voices: [{ name: "en-US-Wavenet-D", ssmlGender: "FEMALE", languageCodes: [...] }] }
-                    return data.voices.map(v => ({
-                        id: v.name,
-                        description: `${v.ssmlGender || ''} - ${v.languageCodes?.join(', ') || ''}`
-                    }));
-                }
+                    case 'mubert':
+                        const mubertRes = await fetch(`${url}/api/v3/public/channels`, {
+                            headers: { 'access-token': key, 'customer-id': config.customer_id || 'test' }
+                        });
+                        if (!mubertRes.ok) throw new Error(`Mubert 错误: ${await mubertRes.text()}`);
+                        const mubertData = await mubertRes.json();
+                        return mubertData.data.channels.map(c => ({ id: c.id, description: c.name }));
 
-                throw new Error(`音频平台 ${source} 暂不支持自动获取模型列表`);
+                    case 'aiva':
+                        const aivaRes = await fetch(`${url}/style_presets`, {
+                            headers: { 'Authorization': `Bearer ${key}` }
+                        });
+                        if (!aivaRes.ok) throw new Error(`AIVA 错误: ${await aivaRes.text()}`);
+                        const aivaData = await aivaRes.json();
+                        return aivaData.map(s => ({ id: s.id, description: s.name }));
+
+                    case 'wondera':
+                        return [
+                            { id: 'wondera-v1', description: 'Wondera V1' }
+                        ];
+
+                    case 'riffusion':
+                        return [
+                            { id: 'riffusion-v1', description: 'Riffusion V1' }
+                        ];
+
+                    case 'audiocraft':
+                        if (url.includes('replicate.com')) {
+                            const modelsRes = await fetch(`${url}/models`, {
+                                headers: { 'Authorization': `Token ${key}` }
+                            });
+                            if (!modelsRes.ok) throw new Error(`Replicate 错误: ${await modelsRes.text()}`);
+                            const modelsData = await modelsRes.json();
+                            return modelsData.results.map(m => ({ id: m.id, description: m.description || m.name }));
+                        } else {
+                            // 本地部署，返回常见模型
+                            return [
+                                { id: 'facebook/musicgen-small', description: 'MusicGen Small' },
+                                { id: 'facebook/musicgen-medium', description: 'MusicGen Medium' },
+                                { id: 'facebook/musicgen-large', description: 'MusicGen Large' },
+                                { id: 'facebook/musicgen-melody', description: 'MusicGen Melody' }
+                            ];
+                        }
+
+                    case 'edge-tts':
+                        if (!config.apiUrl || config.apiUrl.trim() === '') {
+                            throw new Error('请先配置 Edge TTS 的 API URL');
+                        }
+                        const listUrl = config.apiUrl.replace(/\/+$/, '') + '/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491EF6C';
+                        const edgeRes = await fetch(listUrl);
+                        const edgeVoices = await edgeRes.json();
+                        return edgeVoices.map(v => ({ id: v.ShortName, description: v.FriendlyName }));
+
+                    case 'huggingface':
+                        const hfRes = await fetch(`${url}/api/models`, {
+                            headers: { 'Authorization': `Bearer ${key}` }
+                        });
+                        if (!hfRes.ok) throw new Error(`Hugging Face 错误: ${await hfRes.text()}`);
+                        const hfData = await hfRes.json();
+                        return hfData.map(m => ({ id: m.id, description: m.cardData?.title || '' }));
+
+                    case 'openai-tts':
+                        const oaiRes = await fetch(`${url}/models`, {
+                            headers: { 'Authorization': `Bearer ${key}` }
+                        });
+                        if (!oaiRes.ok) throw new Error(`OpenAI TTS 错误: ${await oaiRes.text()}`);
+                        const oaiData = await oaiRes.json();
+                        return oaiData.data
+                            .filter(m => m.id.includes('tts'))
+                            .map(m => ({ id: m.id, description: m.id }));
+
+                    case 'azure-tts':
+                        const azureRes = await fetch(`${url}/cognitiveservices/voices/list`, {
+                            headers: { 'Ocp-Apim-Subscription-Key': key }
+                        });
+                        if (!azureRes.ok) throw new Error(`Azure TTS 错误: ${await azureRes.text()}`);
+                        const azureData = await azureRes.json();
+                        return azureData.map(v => ({ id: v.ShortName, description: v.FriendlyName }));
+
+                    case 'google-tts':
+                        const googleRes = await fetch(`${url}/voices?key=${key}`);
+                        if (!googleRes.ok) throw new Error(`Google TTS 错误: ${await googleRes.text()}`);
+                        const googleData = await googleRes.json();
+                        return googleData.voices.map(v => ({
+                            id: v.name,
+                            description: `${v.ssmlGender || ''} - ${v.languageCodes?.join(', ') || ''}`
+                        }));
+
+                    case 'stableaudio':
+                        // Stable Audio 没有模型列表接口，返回预设
+                        return [
+                            { id: 'stable-audio-2', description: 'Stable Audio 2.0' }
+                        ];
+
+                    case 'other':
+                        throw new Error('自定义平台请手动输入模型名称');
+
+                    default:
+                        throw new Error(`不支持的音频平台: ${source}`);
+                }
             }
 
             // ---------- 未知类型 ----------
@@ -6017,10 +6156,6 @@
             });
         },
 
-        _trimLines(text) {
-            return text ? text.replace(/^[ \t]+/gm, '') : '';
-        },
-
         _escapeHtml(text) {
             if (!text) return '';
             return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -6059,37 +6194,6 @@
                 }
                 // ===== 结束新增 =====
             }, 200);
-        },
-
-        showImageModal(imageUrl, title = '生成图片') {
-            const overlay = document.createElement('div');
-            overlay.className = 'nc-modal-overlay nc-font';
-            overlay.style.zIndex = '100060';
-
-            const modal = document.createElement('div');
-            modal.className = 'nc-modal nc-scroll';
-            modal.style.maxWidth = '800px';
-            modal.style.width = 'auto';
-            modal.style.background = '#1a1a2e';
-
-            modal.innerHTML = `
-        <div class="nc-modal-header">
-            <h2 style="margin:0; color:#667eea;">${this._escapeHtml(title)}</h2>
-        </div>
-        <div class="nc-modal-body" style="text-align:center; padding:20px;">
-            <img src="${imageUrl}" style="max-width:100%; max-height:60vh; border-radius:8px; border:2px solid #667eea;" alt="Generated Image">
-        </div>
-        <div class="nc-modal-footer">
-            <button class="nc-modal-copy-btn" onclick="navigator.clipboard.writeText('${imageUrl}');alert('URL已复制')">复制URL</button>
-            <button class="nc-modal-close-btn">关闭</button>
-        </div>
-    `;
-
-            overlay.appendChild(modal);
-            document.body.appendChild(overlay);
-            this._openModal(overlay);
-
-            modal.querySelector('.nc-modal-close-btn').addEventListener('click', () => ModalStack.closeTop());
         },
 
         updateSubmitButtons(mode) {
@@ -13519,16 +13623,6 @@
 
 
             return configCopy;
-        },
-
-        _loadScript: function (src) {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = src;
-                script.onload = resolve;
-                script.onerror = () => reject(new Error(`加载脚本失败: ${src}`));
-                document.head.appendChild(script);
-            });
         }
     };
 
@@ -14796,56 +14890,6 @@
         }
 
         /**
-         * 将阶段内与模式不兼容的 Agent 移动到未分配区
-         * @param {Object} stageNode - 阶段节点对象
-         */
-        _moveIncompatibleAgentsToUnassigned(stageNode) {
-
-            const stageId = stageNode.key;
-            const stage = this.config.workflowStages.find(s => s.id === stageId);
-            if (!stage) {
-                console.warn(`[ConfigEditor._moveIncompatibleAgentsToUnassigned] 未找到阶段数据，退出`);
-                return;
-            }
-            const newMode = stage.mode;
-
-
-            const agentsInStage = stage.agents || [];
-            const incompatibleAgents = [];
-
-            for (const agentKey of agentsInStage) {
-                const agent = this.config.agents[agentKey];
-                if (!agent) continue;
-                const isParallel = agent.parallel === true;
-                const isCompatible = (newMode === 'parallel' && isParallel) || (newMode === 'serial' && !isParallel);
-
-                if (!isCompatible) {
-                    incompatibleAgents.push(agentKey);
-                }
-            }
-
-            if (incompatibleAgents.length === 0) {
-
-                return;
-            }
-
-
-            // 从阶段 agents 列表中移除
-            stage.agents = stage.agents.filter(key => !incompatibleAgents.includes(key));
-            for (const agentKey of incompatibleAgents) {
-                this.config.agents[agentKey].stage = '';
-
-            }
-
-            // 触发回调并重绘
-            if (this.callbacks.onConfigChange) {
-
-                this.callbacks.onConfigChange(this.getConfig());
-            }
-            this._requestRender();
-        }
-
-        /**
          * 绘制单个 Agent 节点
          * - 节点上方：角色名称框 (roleRect)，显示完整角色名，白色文字，深色背景
          * - 第一行：显示名称
@@ -15227,7 +15271,7 @@
         }
 
         _renderApiProperties(apiId) {
-            console.debug(`[ConfigEditor._renderApiProperties] 渲染 API 属性: ${apiId}`);
+            console.debug(`[ConfigEditor._renderApiProperties] 开始渲染 API 属性: ${apiId}`);
 
             const api = this.config.apiConfigs[apiId];
             if (!api) {
@@ -15248,57 +15292,57 @@
             basicCard.className = 'property-section';
             basicCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             basicCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">
-            🔌 API 配置: ${this._escapeHtml(apiId)}
-        </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">类型</label>
-            <select id="api-type" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                <option value="text" ${api.type === 'text' ? 'selected' : ''}>text</option>
-                <option value="image" ${api.type === 'image' ? 'selected' : ''}>image</option>
-                <option value="audio" ${api.type === 'audio' ? 'selected' : ''}>audio</option>
-            </select>
-        </div>
-        <!-- 新增：模式选择，紧接类型下方 -->
-        <div class="field-group" style="margin-bottom:16px;" id="api-mode-group">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">模式 (mode)</label>
-            <select id="api-mode" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;"></select>
-        </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">平台 (source)</label>
-            <select id="api-source" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;"></select>
-        </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">API URL</label>
-            <input type="text" id="api-url" class="field-input" value="${api.apiUrl || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-        </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">密钥 (key)</label>
-            <input type="password" id="api-key" class="field-input" value="${api.key || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-        </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">超时 (ms)</label>
-            <input type="number" id="api-timeout" class="field-input" value="${api.timeout || 3600000}" min="1000" step="1000" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-        </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <div style="flex:1;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">模型 (model)</label>
-                <div style="display:flex; gap:8px;">
-                    <input type="text" id="api-model" class="field-input" value="${api.model || ''}" placeholder="模型名称" style="flex:1; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                    <button id="fetch-models-btn" class="btn-add" style="white-space:nowrap; background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;">🔄 获取模型</button>
+                <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">
+                    🔌 API 配置: ${this._escapeHtml(apiId)}
                 </div>
-            </div>
-        </div>
-        <div id="model-select-container" style="display:none; margin-bottom:16px;">
-            <select id="model-select" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                <option value="">选择模型</option>
-            </select>
-            <div style="margin-top:4px; text-align:right;">
-                <span id="back-to-manual" style="color:#667eea; font-size:12px; cursor:pointer;">返回手动输入</span>
-            </div>
-        </div>
-        <div id="model-tip" style="font-size:12px; color:#ffaa00; margin-top:4px;"></div>
-    `;
+                <div class="field-group" style="margin-bottom:16px;">
+                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">类型</label>
+                    <select id="api-type" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        <option value="text" ${api.type === 'text' ? 'selected' : ''}>text</option>
+                        <option value="image" ${api.type === 'image' ? 'selected' : ''}>image</option>
+                        <option value="audio" ${api.type === 'audio' ? 'selected' : ''}>audio</option>
+                    </select>
+                </div>
+                <!-- 模式选择，紧接类型下方 -->
+                <div class="field-group" style="margin-bottom:16px;" id="api-mode-group">
+                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">模式 (mode)</label>
+                    <select id="api-mode" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;"></select>
+                </div>
+                <div class="field-group" style="margin-bottom:16px;">
+                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">平台 (source)</label>
+                    <select id="api-source" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;"></select>
+                </div>
+                <div class="field-group" style="margin-bottom:16px;">
+                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">API URL</label>
+                    <input type="text" id="api-url" class="field-input" value="${api.apiUrl || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                </div>
+                <div class="field-group" style="margin-bottom:16px;">
+                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">密钥 (key)</label>
+                    <input type="password" id="api-key" class="field-input" value="${api.key || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                </div>
+                <div class="field-group" style="margin-bottom:16px;">
+                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">超时 (ms)</label>
+                    <input type="number" id="api-timeout" class="field-input" value="${api.timeout || 3600000}" min="1000" step="1000" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                </div>
+                <div class="field-group" style="margin-bottom:16px;">
+                    <div style="flex:1;">
+                        <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">模型 (model)</label>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="api-model" class="field-input" value="${api.model || ''}" placeholder="模型名称" style="flex:1; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <button id="fetch-models-btn" class="btn-add" style="white-space:nowrap; background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;">🔄 获取模型</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="model-select-container" style="display:none; margin-bottom:16px;">
+                    <select id="model-select" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        <option value="">选择模型</option>
+                    </select>
+                    <div style="margin-top:4px; text-align:right;">
+                        <span id="back-to-manual" style="color:#667eea; font-size:12px; cursor:pointer;">返回手动输入</span>
+                    </div>
+                </div>
+                <div id="model-tip" style="font-size:12px; color:#ffaa00; margin-top:4px;"></div>
+            `;
             container.appendChild(basicCard);
 
             // ----- 类型特有字段容器 -----
@@ -15313,9 +15357,9 @@
             testDiv.className = 'property-section';
             testDiv.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             testDiv.innerHTML = `
-        <button id="test-api" class="btn-add" style="background:linear-gradient(135deg, #667eea, #764ba2); border:none; color:white; border-radius:20px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer; width:100%;">测试连通性</button>
-        <div id="test-result" style="margin-top:8px; font-size:13px; color:#aaa;"></div>
-    `;
+                <button id="test-api" class="btn-add" style="background:linear-gradient(135deg, #667eea, #764ba2); border:none; color:white; border-radius:20px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer; width:100%;">测试连通性</button>
+                <div id="test-result" style="margin-top:8px; font-size:13px; color:#aaa;"></div>
+            `;
             container.appendChild(testDiv);
 
             panel.appendChild(container);
@@ -15327,10 +15371,10 @@
                 if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
             };
 
-            // 定义模式到平台的映射（根据现有平台支持情况）
+            // 定义模式到平台的映射（根据现有平台支持情况）- 已移除 custom
             const modeSourceMap = {
                 'text': {
-                    'txt-txt': ['openai', 'claude', 'gemini', 'deepseek', 'wenxin', 'qwen', 'glm', 'mistral', 'siliconflow', 'huggingface', 'groq', 'inference', 'openrouter', '4sapi', 'other']
+                    'txt-txt': ['openai', 'claude', 'gemini', 'deepseek', 'wenxin', 'qwen', 'glm', 'mistral', 'siliconflow', 'huggingface', 'groq', 'inference', 'openrouter', '4sapi', 'doubao', 'other']
                 },
                 'image': {
                     'txt2img': ['openai', 'stability', 'midjourney', 'sora', 'flux', 'picsart', 'siliconflow', 'sdwebui', 'other'],
@@ -15338,20 +15382,20 @@
                     'fusion': ['sdwebui', 'stability', 'flux', 'other']
                 },
                 'audio': {
-                    'music-generation': ['elevenlabs', 'stableaudio', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'custom', 'other'],
-                    'voice-cloning': ['elevenlabs', 'azure-tts', 'google-tts', 'custom'],
-                    'audio-editing': ['stableaudio', 'custom', 'other']
+                    'music-generation': ['elevenlabs', 'stableaudio', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'minimax', 'minimax-music', 'mureka', 'mubert', 'aiva', 'wondera', 'riffusion', 'audiocraft', 'edge-tts', 'other'],
+                    'voice-cloning': ['elevenlabs', 'azure-tts', 'google-tts', 'minimax', 'minimax-speech', 'edge-tts', 'other'],
+                    'audio-editing': ['stableaudio', 'lalal', 'other']
                 }
             };
 
             // 根据类型和模式获取平台列表
             const getSourcesForMode = (type, mode) => {
                 if (!mode) {
-                    // 如果模式为空，返回类型对应的所有平台（降级）
+                    // 如果模式为空，返回类型对应的所有平台（降级）- 已移除 custom
                     const allByType = {
-                        text: ['openai', 'claude', 'gemini', 'deepseek', 'wenxin', 'qwen', 'glm', 'mistral', 'siliconflow', 'huggingface', 'groq', 'inference', 'openrouter', '4sapi', 'other'],
+                        text: ['openai', 'claude', 'gemini', 'deepseek', 'wenxin', 'qwen', 'glm', 'mistral', 'siliconflow', 'huggingface', 'groq', 'inference', 'openrouter', '4sapi', 'doubao', 'other'],
                         image: ['openai', 'stability', 'midjourney', 'sora', 'flux', 'picsart', 'siliconflow', 'sdwebui', 'other'],
-                        audio: ['elevenlabs', 'stableaudio', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'custom', 'other']
+                        audio: ['elevenlabs', 'stableaudio', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'minimax', 'minimax-music', 'minimax-speech', 'mureka', 'mubert', 'aiva', 'wondera', 'riffusion', 'audiocraft', 'edge-tts', 'lalal', 'other']
                     };
                     return allByType[type] || [];
                 }
@@ -15386,7 +15430,7 @@
                 }
             };
 
-            // 更新平台下拉框选项
+            // 更新平台下拉框选项（关键修改点）
             const updateSourceOptions = (type, mode) => {
                 const sourceSelect = panel.querySelector('#api-source');
                 if (!sourceSelect) return;
@@ -15395,24 +15439,38 @@
                 const currentSource = api.source;
                 let newSource = sources.includes(currentSource) ? currentSource : (sources[0] || '');
 
+
+
                 sourceSelect.innerHTML = sources.map(s => `<option value="${s}" ${newSource === s ? 'selected' : ''}>${s}</option>`).join('');
 
                 if (api.source !== newSource) {
+
                     updateField('source', newSource);
                 }
 
-                // 自动填充默认 URL（如果当前 URL 为空）
+                // ===== 关键修复：始终根据新平台设置默认 URL（即使原 URL 非空）=====
                 const urlInput = panel.querySelector('#api-url');
-                if (urlInput && defaultApiUrls[newSource] && !urlInput.value.trim()) {
-                    urlInput.value = defaultApiUrls[newSource];
-                    updateField('apiUrl', defaultApiUrls[newSource]);
+                if (urlInput) {
+                    const defaultUrl = defaultApiUrls[newSource];
+
+                    if (defaultUrl) {
+                        // 始终将 URL 设置为默认值（覆盖原值）
+
+                        urlInput.value = defaultUrl;
+                        updateField('apiUrl', defaultUrl);
+                    } else {
+
+                    }
+                } else {
+                    console.warn('[updateSourceOptions] urlInput 未找到');
                 }
+                // ===== 结束修复 =====
 
                 // 主动触发 source 的 change 事件，确保后续处理（如重新渲染额外字段）执行
                 sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
             };
 
-            // 默认 API URL 映射
+            // 默认 API URL 映射 - 已移除 custom
             const defaultApiUrls = {
                 // 文本平台
                 'openai': 'https://api.openai.com/v1',
@@ -15430,6 +15488,7 @@
                 'inference': 'https://api.inference.net/v1',
                 'openrouter': 'https://openrouter.ai/api/v1',
                 '4sapi': 'https://api.4sapi.com/v1',
+                'doubao': 'https://ark.cn-beijing.volces.com/api/v3',
                 'other': '',
                 // 图像平台
                 'stability': 'https://api.stability.ai/v2beta',
@@ -15444,7 +15503,17 @@
                 'openai-tts': 'https://api.openai.com/v1',
                 'azure-tts': 'https://YOUR_REGION.tts.speech.microsoft.com/cognitiveservices',
                 'google-tts': 'https://texttospeech.googleapis.com/v1',
-                'custom': '',
+                'minimax': 'https://api.minimax.io/v1',
+                'minimax-music': 'https://api.minimax.io/v1',
+                'minimax-speech': 'https://api.minimax.io/v1',
+                'mureka': 'https://api.mureka.ai/v1',
+                'mubert': 'https://api.mubert.com/v2',
+                'aiva': 'https://api.aiva.ai/v1',
+                'wondera': 'https://api.wondera.com/v1',
+                'riffusion': 'https://api.riffusion.com/v1',
+                'audiocraft': 'https://api.replicate.com/v1',
+                'edge-tts': 'https://speech.platform.bing.com',
+                'lalal': 'https://api.lalal.ai/v1',
             };
 
             // 获取 DOM 元素
@@ -15476,6 +15545,7 @@
                     key: keyInput.value,
                 };
 
+
                 if (!currentConfig.apiUrl || !currentConfig.key) {
                     Notify.error('请先填写 API URL 和密钥');
                     return;
@@ -15492,6 +15562,7 @@
                             models.map(m => `<option value="${m.id}">${m.id}${m.description ? ' - ' + m.description : ''}</option>`).join('');
                         modelSelectContainer.style.display = 'block';
                         modelInput.style.display = 'none';
+
 
                         if (modelInput.value) {
                             const option = Array.from(modelSelect.options).find(opt => opt.value === modelInput.value);
@@ -15514,12 +15585,14 @@
                 if (modelSelect.value) {
                     modelInput.value = modelSelect.value;
                     updateField('model', modelSelect.value);
+
                 }
             });
 
             backToManual.addEventListener('click', () => {
                 modelSelectContainer.style.display = 'none';
                 modelInput.style.display = 'block';
+
             });
 
             modelInput.addEventListener('input', () => {
@@ -15531,6 +15604,7 @@
             typeSelect.addEventListener('change', e => {
                 const newType = e.target.value;
                 const oldType = api.type;
+
                 if (newType === 'image' && oldType !== 'image') {
                     const hasOtherImage = Object.values(this.config.apiConfigs || {}).some(cfg => cfg.type === 'image' && cfg !== api);
                     if (hasOtherImage) {
@@ -15557,6 +15631,7 @@
             modeSelect.addEventListener('change', e => {
                 const newMode = e.target.value;
                 const currentType = typeSelect.value;
+
                 updateField('mode', newMode);
 
                 // 更新平台下拉框（自动触发 source 的 change 事件）
@@ -15569,9 +15644,11 @@
             // 平台改变
             sourceSelect.addEventListener('change', e => {
                 const newSource = e.target.value;
+
                 updateField('source', newSource);
-                // 自动填充默认 URL
-                if (urlInput && defaultApiUrls[newSource] && !urlInput.value.trim()) {
+                // 自动填充默认 URL（已在 updateSourceOptions 中强制设置，此处可省略，但保留以防 updateSourceOptions 未触发）
+                if (urlInput && defaultApiUrls[newSource]) {
+
                     urlInput.value = defaultApiUrls[newSource];
                     updateField('apiUrl', defaultApiUrls[newSource]);
                 }
@@ -15590,151 +15667,175 @@
                 const currentType = typeSelect.value;
                 const currentSource = sourceSelect.value;
                 const currentMode = modeSelect.value;
+
                 let extraHTML = '';
 
                 if (currentType === 'image') {
                     // 图像特有参数，不再包含 mode
                     const samplers = ['DPM++ 2M Karras', 'DPM++ SDE Karras', 'DPM++ 2M SDE', 'Euler a', 'Euler', 'LMS', 'Heun', 'DPM2', 'DPM2 a', 'DPM++ 2S a', 'DPM++ 2M SDE Karras', 'DPM++ 2M SDE Exponential', 'DPM++ 3M SDE', 'DPM++ 3M SDE Karras', 'DPM++ 3M SDE Exponential'];
                     extraHTML = `
-                <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🖼️ 图像参数</div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">尺寸 (size)</label>
-                    <input type="text" id="api-size" class="field-input" value="${api.size || '1024x1024'}" placeholder="如 1024x1024" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">采样步数 (steps)</label>
-                    <input type="number" id="api-steps" class="field-input" value="${api.steps || 20}" min="1" max="150" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">CFG Scale</label>
-                    <input type="number" step="0.5" id="api-cfg-scale" class="field-input" value="${api.cfg_scale || 7}" min="1" max="30" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">反向提示词</label>
-                    <input type="text" id="api-negative-prompt" class="field-input" value="${api.negative_prompt || ''}" placeholder="反向提示词" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">采样器 (sampler_name)</label>
-                    <select id="api-sampler-name" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                        ${samplers.map(s => `<option value="${s}" ${api.sampler_name === s ? 'selected' : ''}>${s}</option>`).join('')}
-                    </select>
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">种子 (seed)</label>
-                    <input type="number" id="api-seed" class="field-input" value="${api.seed !== undefined ? api.seed : -1}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                    <div style="font-size:12px; color:#888;">-1 表示随机</div>
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">批次大小 (batch_size)</label>
-                    <input type="number" id="api-batch-size" class="field-input" value="${api.batch_size || 1}" min="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">生成数量 (n / samples)</label>
-                    <input type="number" id="api-samples" class="field-input" value="${api.samples || 1}" min="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="checkbox-group" style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px;">
-                    <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
-                        <input type="checkbox" id="api-restore-faces" ${api.restore_faces ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 面部修复
-                    </label>
-                    <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
-                        <input type="checkbox" id="api-tiling" ${api.tiling ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 平铺
-                    </label>
-                </div>
-            `;
+                        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🖼️ 图像参数</div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">尺寸 (size)</label>
+                            <input type="text" id="api-size" class="field-input" value="${api.size || '1024x1024'}" placeholder="如 1024x1024" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">采样步数 (steps)</label>
+                            <input type="number" id="api-steps" class="field-input" value="${api.steps || 20}" min="1" max="150" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">CFG Scale</label>
+                            <input type="number" step="0.5" id="api-cfg-scale" class="field-input" value="${api.cfg_scale || 7}" min="1" max="30" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">反向提示词</label>
+                            <input type="text" id="api-negative-prompt" class="field-input" value="${api.negative_prompt || ''}" placeholder="反向提示词" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">采样器 (sampler_name)</label>
+                            <select id="api-sampler-name" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                ${samplers.map(s => `<option value="${s}" ${api.sampler_name === s ? 'selected' : ''}>${s}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">种子 (seed)</label>
+                            <input type="number" id="api-seed" class="field-input" value="${api.seed !== undefined ? api.seed : -1}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <div style="font-size:12px; color:#888;">-1 表示随机</div>
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">批次大小 (batch_size)</label>
+                            <input type="number" id="api-batch-size" class="field-input" value="${api.batch_size || 1}" min="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">生成数量 (n / samples)</label>
+                            <input type="number" id="api-samples" class="field-input" value="${api.samples || 1}" min="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="checkbox-group" style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px;">
+                            <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
+                                <input type="checkbox" id="api-restore-faces" ${api.restore_faces ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 面部修复
+                            </label>
+                            <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
+                                <input type="checkbox" id="api-tiling" ${api.tiling ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 平铺
+                            </label>
+                        </div>
+                    `;
                 } else if (currentType === 'audio') {
                     // 音频特有参数，不再包含 mode
                     extraHTML = `
-                <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🎵 音频参数</div>
-            `;
+                        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🎵 音频参数</div>
+                    `;
                     if (currentSource === 'elevenlabs') {
                         extraHTML += `
-                    <div class="field-group" style="margin-bottom:16px;">
-                        <label class="field-label">Voice ID (可选)</label>
-                        <input type="text" id="api-voiceId" class="field-input" value="${api.voiceId || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                    </div>
-                    <div class="field-group" style="margin-bottom:16px;">
-                        <label class="field-label">Stability (0-1)</label>
-                        <input type="number" step="0.05" id="api-stability" class="field-input" value="${api.stability || 0.5}" min="0" max="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                    </div>
-                    <div class="field-group" style="margin-bottom:16px;">
-                        <label class="field-label">Similarity Boost (0-1)</label>
-                        <input type="number" step="0.05" id="api-similarity" class="field-input" value="${api.similarity_boost || 0.75}" min="0" max="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                    </div>
-                `;
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">Voice ID (可选)</label>
+                                <input type="text" id="api-voiceId" class="field-input" value="${api.voiceId || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            </div>
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">Stability (0-1)</label>
+                                <input type="number" step="0.05" id="api-stability" class="field-input" value="${api.stability || 0.5}" min="0" max="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            </div>
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">Similarity Boost (0-1)</label>
+                                <input type="number" step="0.05" id="api-similarity" class="field-input" value="${api.similarity_boost || 0.75}" min="0" max="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            </div>
+                        `;
                     } else if (currentSource === 'stableaudio') {
                         extraHTML += `
-                    <div class="field-group" style="margin-bottom:16px;">
-                        <label class="field-label">时长 (秒)</label>
-                        <input type="number" id="api-duration" class="field-input" value="${api.duration || 30}" min="1" max="300" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                    </div>
-                    <div class="field-group" style="margin-bottom:16px;">
-                        <label class="field-label">输出格式</label>
-                        <select id="api-output-format" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                            <option value="mp3" ${api.output_format === 'mp3' ? 'selected' : ''}>mp3</option>
-                            <option value="wav" ${api.output_format === 'wav' ? 'selected' : ''}>wav</option>
-                        </select>
-                    </div>
-                `;
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">时长 (秒)</label>
+                                <input type="number" id="api-duration" class="field-input" value="${api.duration || 30}" min="1" max="300" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            </div>
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">输出格式</label>
+                                <select id="api-output-format" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                    <option value="mp3" ${api.output_format === 'mp3' ? 'selected' : ''}>mp3</option>
+                                    <option value="wav" ${api.output_format === 'wav' ? 'selected' : ''}>wav</option>
+                                </select>
+                            </div>
+                        `;
                     } else if (currentSource === 'azure-tts') {
                         extraHTML += `
-                    <div class="field-group" style="margin-bottom:16px;">
-                        <label class="field-label">区域 (region)</label>
-                        <input type="text" id="api-region" class="field-input" value="${api.region || 'eastus'}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                    </div>
-                `;
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">区域 (region)</label>
+                                <input type="text" id="api-region" class="field-input" value="${api.region || 'eastus'}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            </div>
+                        `;
                     } else if (currentSource === 'huggingface') {
                         extraHTML += `
-                    <div class="field-group" style="margin-bottom:16px;">
-                        <label class="field-label">模型 (model)</label>
-                        <input type="text" id="api-hf-model" class="field-input" value="${api.model || ''}" placeholder="如 facebook/musicgen-small" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                    </div>
-                `;
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">模型 (model)</label>
+                                <input type="text" id="api-hf-model" class="field-input" value="${api.model || ''}" placeholder="如 facebook/musicgen-small" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            </div>
+                        `;
+                    } else if (currentSource === 'minimax' || currentSource === 'minimax-music' || currentSource === 'minimax-speech') {
+                        extraHTML += `
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">Group ID (必填)</label>
+                                <input type="text" id="api-group-id" class="field-input" value="${api.group_id || ''}" placeholder="MiniMax Group ID" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <div style="font-size:12px; color:#888;">从 MiniMax 控制台获取</div>
+                            </div>
+                        `;
+                    } else if (currentSource === 'mubert') {
+                        extraHTML += `
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">Customer ID (可选)</label>
+                                <input type="text" id="api-customer-id" class="field-input" value="${api.customer_id || ''}" placeholder="Mubert Customer ID" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            </div>
+                        `;
+                    } else if (currentSource === 'edge-tts') {
+                        extraHTML += `
+                            <div class="field-group" style="margin-bottom:16px;">
+                                <label class="field-label">代理 URL (可选)</label>
+                                <input type="text" id="api-proxy-url" class="field-input" value="${api.proxy_url || ''}" placeholder="Edge TTS 代理地址" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <div style="font-size:12px; color:#888;">若不填则使用默认公共端点</div>
+                            </div>
+                        `;
                     }
                 } else if (currentType === 'text') {
                     extraHTML = `
-                <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">📝 文本参数</div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">max_tokens</label>
-                    <input type="number" id="api-max-tokens" class="field-input" value="${api.maxTokens || 4000}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">temperature</label>
-                    <input type="number" step="0.1" id="api-temperature" class="field-input" value="${api.temperature || 0.8}" min="0" max="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">top_p</label>
-                    <input type="number" step="0.05" id="api-top-p" class="field-input" value="${api.top_p || 1}" min="0" max="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">top_k</label>
-                    <input type="number" id="api-top-k" class="field-input" value="${api.top_k || 0}" min="0" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">frequency_penalty</label>
-                    <input type="number" step="0.1" id="api-frequency-penalty" class="field-input" value="${api.frequency_penalty || 0}" min="-2" max="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">presence_penalty</label>
-                    <input type="number" step="0.1" id="api-presence-penalty" class="field-input" value="${api.presence_penalty || 0}" min="-2" max="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">停止序列 (stop)</label>
-                    <textarea id="api-stop" class="field-textarea" rows="3" placeholder="每行一个停止词" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px; font-family:monospace; line-height:1.5;">${Array.isArray(api.stop) ? api.stop.join('\n') : (api.stop || '')}</textarea>
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">logit_bias (token_id:bias)</label>
-                    <textarea id="api-logit-bias" class="field-textarea" rows="3" placeholder="每行一个，如 123: -100" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px; font-family:monospace; line-height:1.5;">${api.logit_bias ? Object.entries(api.logit_bias).map(([k, v]) => `${k}: ${v}`).join('\n') : ''}</textarea>
-                </div>
-                <div class="checkbox-group" style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px;">
-                    <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
-                        <input type="checkbox" id="api-stream" ${api.stream ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 流式输出
-                    </label>
-                </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">n (生成数量)</label>
-                    <input type="number" id="api-n" class="field-input" value="${api.n || 1}" min="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                </div>
-            `;
+                        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">📝 文本参数</div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">max_tokens</label>
+                            <input type="number" id="api-max-tokens" class="field-input" value="${api.maxTokens || 4000}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">temperature</label>
+                            <input type="number" step="0.1" id="api-temperature" class="field-input" value="${api.temperature || 0.8}" min="0" max="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">top_p</label>
+                            <input type="number" step="0.05" id="api-top-p" class="field-input" value="${api.top_p || 1}" min="0" max="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">top_k</label>
+                            <input type="number" id="api-top-k" class="field-input" value="${api.top_k || 0}" min="0" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">frequency_penalty</label>
+                            <input type="number" step="0.1" id="api-frequency-penalty" class="field-input" value="${api.frequency_penalty || 0}" min="-2" max="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">presence_penalty</label>
+                            <input type="number" step="0.1" id="api-presence-penalty" class="field-input" value="${api.presence_penalty || 0}" min="-2" max="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">停止序列 (stop)</label>
+                            <textarea id="api-stop" class="field-textarea" rows="3" placeholder="每行一个停止词" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px; font-family:monospace; line-height:1.5;">${Array.isArray(api.stop) ? api.stop.join('\n') : (api.stop || '')}</textarea>
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">logit_bias (token_id:bias)</label>
+                            <textarea id="api-logit-bias" class="field-textarea" rows="3" placeholder="每行一个，如 123: -100" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px; font-family:monospace; line-height:1.5;">${api.logit_bias ? Object.entries(api.logit_bias).map(([k, v]) => `${k}: ${v}`).join('\n') : ''}</textarea>
+                        </div>
+                        <div class="checkbox-group" style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px;">
+                            <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
+                                <input type="checkbox" id="api-stream" ${api.stream ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 流式输出
+                            </label>
+                        </div>
+                        <div class="field-group" style="margin-bottom:16px;">
+                            <label class="field-label">n (生成数量)</label>
+                            <input type="number" id="api-n" class="field-input" value="${api.n || 1}" min="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                        </div>
+                    `;
                 }
                 extraContainer.innerHTML = extraHTML;
 
@@ -15775,6 +15876,12 @@
                     if (regionInput) regionInput.addEventListener('input', e => updateField('region', e.target.value));
                     const hfModelInput = panel.querySelector('#api-hf-model');
                     if (hfModelInput) hfModelInput.addEventListener('input', e => updateField('model', e.target.value));
+                    const groupIdInput = panel.querySelector('#api-group-id');
+                    if (groupIdInput) groupIdInput.addEventListener('input', e => updateField('group_id', e.target.value));
+                    const customerIdInput = panel.querySelector('#api-customer-id');
+                    if (customerIdInput) customerIdInput.addEventListener('input', e => updateField('customer_id', e.target.value));
+                    const proxyUrlInput = panel.querySelector('#api-proxy-url');
+                    if (proxyUrlInput) proxyUrlInput.addEventListener('input', e => updateField('proxy_url', e.target.value));
                 } else if (currentType === 'text') {
                     const maxTokensInput = panel.querySelector('#api-max-tokens');
                     if (maxTokensInput) maxTokensInput.addEventListener('input', e => updateField('maxTokens', parseInt(e.target.value) || 4000));
@@ -15835,11 +15942,14 @@
                     timeout: parseInt(timeoutInput?.value) || 3600000,
                 };
 
+
                 const result = await testAPIConnection(currentConfig);
                 if (result.ok) {
                     testResultDiv.innerHTML = '<span style="color:#28a745;">✅ 连接成功</span>';
+
                 } else {
                     testResultDiv.innerHTML = `<span style="color:#dc3545;">❌ 失败: ${result.error}</span>`;
+                    console.error('[testAPI] 测试失败:', result.error);
                 }
                 testBtn.disabled = false;
                 testBtn.textContent = '测试连通性';
@@ -18070,13 +18180,6 @@
             }
         }
 
-        // ==================== 搜索 ====================
-
-        setSearchKeyword(keyword) {
-            this.searchKeyword = keyword.toLowerCase();
-            this._requestRender();
-        }
-
         // ==================== 渲染（含视口裁剪、临时连线）====================
 
         _requestRender() {
@@ -19074,10 +19177,6 @@
             const last = content.lastIndexOf('---');
             if (last !== -1) content = content.substring(0, last);
             return content.replace(/本章节由自动化系统生成并保存/, '').trim() || '无内容';
-        },
-
-        _formatChapterForExport(chapter) {
-            return `第${chapter.num}章 ${chapter.title}\n${chapter.timestamp}\n\n${this._extractPureContent(chapter)}`;
         },
 
         _parseStateDefinition(definition) {
@@ -21432,25 +21531,19 @@
             }
         },
 
-        /**
-         * 数据化专用重置函数：
-         * 1. 删除所有状态书（状态书-1, 状态书-2, ...）
-         * 2. 将其余世界书（如设定书）从全局激活列表中移除（取消激活）
-         * 3. 重新设置全局激活列表为仅包含非状态书（即清除了状态书的激活）
-         * @returns {Promise<{deletedCount: number, deactivatedCount: number}>}
-         */
-        async _resetStateBooksForDatafication() {
-
+        _resetStateBooksForDatafication: async function () {
+            console.debug('[Workflow._resetStateBooksForDatafication] ========== 开始重置状态书并取消激活所有世界书 ==========');
             let allBooks = [];
 
             // 获取所有世界书列表（尝试多种方法）
             // 尝试1: TavernHelper.getAllWorldbookNames
             if (typeof TavernHelper?.getAllWorldbookNames === 'function') {
                 try {
+                    console.debug('[Workflow._resetStateBooksForDatafication] 尝试使用 TavernHelper.getAllWorldbookNames()');
                     allBooks = await TavernHelper.getAllWorldbookNames();
-
+                    console.debug('[Workflow._resetStateBooksForDatafication] 通过 getAllWorldbookNames 获取到', allBooks.length, '本世界书:', allBooks);
                 } catch (e) {
-                    console.warn('[DEBUG][_resetStateBooksForDatafication] 调用 TavernHelper.getAllWorldbookNames 失败:', e);
+                    console.warn('[Workflow._resetStateBooksForDatafication] 调用 TavernHelper.getAllWorldbookNames 失败:', e);
                     allBooks = [];
                 }
             }
@@ -21458,51 +21551,67 @@
             // 尝试2: 从 context.worldInfo 提取
             if (allBooks.length === 0) {
                 try {
+                    console.debug('[Workflow._resetStateBooksForDatafication] 尝试从 context.worldInfo 获取');
                     const context = API.getContext();
                     if (context.worldInfo && Array.isArray(context.worldInfo)) {
                         allBooks = context.worldInfo.map(w => w.name).filter(Boolean);
-
+                        console.debug('[Workflow._resetStateBooksForDatafication] 从 context.worldInfo 获取到', allBooks.length, '本世界书:', allBooks);
                     } else {
-
+                        console.debug('[Workflow._resetStateBooksForDatafication] context.worldInfo 无效或不存在');
                     }
                 } catch (e) {
-                    console.warn('[DEBUG][_resetStateBooksForDatafication] 尝试获取 context.worldInfo 失败:', e);
+                    console.warn('[Workflow._resetStateBooksForDatafication] 尝试获取 context.worldInfo 失败:', e);
                 }
             }
 
             // 尝试3: 回退到全局激活的世界书列表（仅激活的，可能不全）
             if (allBooks.length === 0) {
-                console.warn('[DEBUG][_resetStateBooksForDatafication] 无法获取所有世界书列表，将尝试从激活列表中获取（可能不完整）');
+                console.warn('[Workflow._resetStateBooksForDatafication] 无法获取所有世界书列表，将尝试从激活列表中获取（可能不完整）');
                 try {
                     if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
+                        console.debug('[Workflow._resetStateBooksForDatafication] 尝试 TavernHelper.getGlobalWorldbookNames()');
                         allBooks = await TavernHelper.getGlobalWorldbookNames();
-
+                        console.debug('[Workflow._resetStateBooksForDatafication] 从全局激活列表获取到', allBooks.length, '本世界书:', allBooks);
                     } else if (typeof window.getGlobalWorldbookNames === 'function') {
+                        console.debug('[Workflow._resetStateBooksForDatafication] 尝试 window.getGlobalWorldbookNames()');
                         allBooks = await window.getGlobalWorldbookNames();
-
+                        console.debug('[Workflow._resetStateBooksForDatafication] 从 window 获取到', allBooks.length, '本世界书:', allBooks);
                     }
                 } catch (e) {
-                    console.warn('[DEBUG][_resetStateBooksForDatafication] 获取激活列表失败:', e);
+                    console.warn('[Workflow._resetStateBooksForDatafication] 获取激活列表失败:', e);
                 }
             }
 
+            // 如果没有获取到任何世界书，直接返回
+            if (allBooks.length === 0) {
+                console.warn('[Workflow._resetStateBooksForDatafication] 未找到任何世界书，返回');
+                return { deletedCount: 0, deactivatedCount: 0 };
+            }
 
-            // 分类：状态书 和 其他书
+            // 分类：状态书 和 其他书（仅用于统计）
             const stateBooks = allBooks.filter(name => name && name.startsWith(CONFIG.STATE_BOOK_PREFIX));
-            allBooks.filter(name => name && !name.startsWith(CONFIG.STATE_BOOK_PREFIX));
+            const nonStateBooks = allBooks.filter(name => name && !name.startsWith(CONFIG.STATE_BOOK_PREFIX));
+            console.debug('[Workflow._resetStateBooksForDatafication] 状态书列表:', stateBooks);
+            console.debug('[Workflow._resetStateBooksForDatafication] 非状态书列表:', nonStateBooks);
+
             // 1. 删除所有状态书
             let deletedCount = 0;
             for (const bookName of stateBooks) {
                 UI.updateProgress(`  删除状态书: ${bookName}...`);
+                console.debug(`[Workflow._resetStateBooksForDatafication] 尝试删除状态书: ${bookName}`);
 
                 try {
                     let success = false;
                     if (typeof TavernHelper?.deleteWorldbook === 'function') {
-                        success = await TavernHelper.deleteWorldbook(bookName);
-
+                        console.debug(`[Workflow._resetStateBooksForDatafication] 调用 TavernHelper.deleteWorldbook(${bookName})`);
+                        const result = await TavernHelper.deleteWorldbook(bookName);
+                        success = result === true;
+                        console.debug(`[Workflow._resetStateBooksForDatafication] deleteWorldbook 返回:`, result);
                     } else if (typeof window.deleteWorldbook === 'function') {
-                        success = await window.deleteWorldbook(bookName);
-
+                        console.debug(`[Workflow._resetStateBooksForDatafication] 调用 window.deleteWorldbook(${bookName})`);
+                        const result = await window.deleteWorldbook(bookName);
+                        success = result === true;
+                        console.debug(`[Workflow._resetStateBooksForDatafication] deleteWorldbook 返回:`, result);
                     } else {
                         throw new Error('deleteWorldbook API 不可用');
                     }
@@ -21510,48 +21619,44 @@
                     if (success) {
                         UI.updateProgress(`    ✓ 已删除 ${bookName}`);
                         deletedCount++;
+                        console.debug(`[Workflow._resetStateBooksForDatafication] 成功删除 ${bookName}`);
                     } else {
                         UI.updateProgress(`    ⚠️ ${bookName} 删除失败（可能不存在）`, true);
+                        console.warn(`[Workflow._resetStateBooksForDatafication] ${bookName} 删除失败，可能不存在`);
                     }
-                    await API.sleep(100);
                 } catch (e) {
                     UI.updateProgress(`    ✗ 删除 ${bookName} 时出错: ${e.message}`, true);
-                    console.error(`[DEBUG][_resetStateBooksForDatafication] 删除 ${bookName} 失败:`, e);
+                    console.error(`[Workflow._resetStateBooksForDatafication] 删除 ${bookName} 时发生异常:`, e);
                 }
+                await API.sleep(100);
             }
 
-            // 2. 获取当前的全局激活世界书列表
+            // 2. 记录当前激活列表的长度（用于统计），然后调用 _deactivateAllWorldbooks 取消激活所有世界书
             let currentGlobalBooks = [];
             try {
                 if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
+                    console.debug('[Workflow._resetStateBooksForDatafication] 获取当前全局激活列表（用于统计）');
                     currentGlobalBooks = await TavernHelper.getGlobalWorldbookNames();
-                } else if (typeof window.getGlobalWorldbookNames === 'function') {
-                    currentGlobalBooks = await window.getGlobalWorldbookNames();
+                    console.debug('[Workflow._resetStateBooksForDatafication] 当前全局激活列表:', currentGlobalBooks);
                 }
-
             } catch (e) {
-                console.warn('[DEBUG][_resetStateBooksForDatafication] 获取当前激活列表失败:', e);
+                console.warn('[Workflow._resetStateBooksForDatafication] 获取当前激活列表失败（不影响后续取消激活）:', e);
             }
 
-            // 3. 过滤出应该保留激活的非状态书（即当前激活列表中且不是状态书的书）
-            const booksToKeepActive = currentGlobalBooks.filter(name => !name.startsWith(CONFIG.STATE_BOOK_PREFIX));
-            const deactivatedCount = currentGlobalBooks.length - booksToKeepActive.length;
+            const deactivatedCount = currentGlobalBooks.length;
 
-
-            // 4. 重新设置全局激活列表为 booksToKeepActive
+            // 调用专用的取消激活函数
+            console.debug('[Workflow._resetStateBooksForDatafication] 调用 _deactivateAllWorldbooks 取消激活所有世界书...');
             try {
-                if (typeof TavernHelper?.rebindGlobalWorldbooks === 'function') {
-                    await TavernHelper.rebindGlobalWorldbooks(booksToKeepActive);
-
-                } else {
-                    console.warn('[DEBUG][_resetStateBooksForDatafication] rebindGlobalWorldbooks API 不可用，无法取消激活');
-                }
+                await this._deactivateAllWorldbooks();
+                console.debug('[Workflow._resetStateBooksForDatafication] _deactivateAllWorldbooks 执行成功');
             } catch (e) {
-                console.warn('[DEBUG][_resetStateBooksForDatafication] 重新设置激活列表失败:', e);
+                console.error('[Workflow._resetStateBooksForDatafication] 调用 _deactivateAllWorldbooks 时出错:', e);
+                UI.updateProgress(`  ⚠️ 取消激活世界书时出错: ${e.message}`, true);
             }
 
-
-            return {deletedCount, deactivatedCount};
+            console.debug('[Workflow._resetStateBooksForDatafication] 完成，deletedCount=', deletedCount, 'deactivatedCount=', deactivatedCount);
+            return { deletedCount, deactivatedCount };
         },
 
         async _deactivateAllWorldbooks() {
@@ -22131,293 +22236,6 @@
                 // 基本类型
                 results.push(`${prefix}：${String(obj)}`);
             }
-            return results;
-        },
-
-        /**
-         * 使用酒馆助手的官方 generate 函数，通过 custom_api 参数
-         * 在完整保留酒馆上下文构建能力的前提下，将请求发送到自定义API。
-         * 增强版：包含详细的调试日志，请在浏览器控制台查看输出。
-         * @param {string} agentKey - 要执行的Agent键（如 'M2'）
-         * @param {string} userInput - 最终构建好的提示词
-         * @param {Object} options - 可选参数，如 { silent: true, maxHistory: 10 }
-         * @returns {Promise<string>} - 生成的文本
-         */
-        generateWithCustomAPI: async function (agentKey, userInput, options = {}) {
-            const agent = CONFIG.AGENTS[agentKey];
-            if (!agent) throw new Error(`[generateWithCustomAPI] 未知Agent: ${agentKey}`);
-
-
-            // 1. 切换到目标角色
-            try {
-                await API.selectCharacter(agent.name);
-                await API.sleep(150);
-
-                const context = SillyTavern.getContext();
-                if (context.name2 !== agent.name) {
-                    console.warn(`[generateWithCustomAPI] 角色切换后 name2 为 ${context.name2}，期望 ${agent.name}，可能未完全生效`);
-                } else {
-
-                }
-            } catch (e) {
-                console.error(`[generateWithCustomAPI] 切换角色失败:`, e);
-                throw new Error(`切换至角色 ${agent.name} 失败: ${e.message}`);
-            }
-
-            // 2. 获取自定义API配置
-            const apiConfigId = agent.apiConfigId;
-            let customApiConfig = null;
-            let config = null;
-            if (apiConfigId && CONFIG.apiConfigs && CONFIG.apiConfigs[apiConfigId]) {
-                config = CONFIG.apiConfigs[apiConfigId];
-                console.log(`[generateWithCustomAPI] 使用自定义API配置: ${apiConfigId}`, {
-                    apiUrl: config.apiUrl,
-                    model: config.model,
-                    source: config.source,
-                    type: config.type,
-                });
-
-                customApiConfig = {
-                    apiurl: config.apiUrl,
-                    key: config.key,
-                    model: config.model,
-                    source: config.source || 'openai',
-                    temperature: config.temperature ?? 'same_as_preset',
-                    max_tokens: config.maxTokens ?? 'same_as_preset',
-                    frequency_penalty: config.frequency_penalty ?? 'unset',
-                    presence_penalty: config.presence_penalty ?? 'unset',
-                    top_p: config.top_p ?? 'unset',
-                    top_k: config.top_k ?? 'unset'
-                };
-            } else {
-                console.error(`[generateWithCustomAPI] Agent ${agentKey} 未指定有效的 apiConfigId:`, apiConfigId);
-                throw new Error(`[generateWithCustomAPI] Agent ${agentKey} 未指定有效的 apiConfigId`);
-            }
-
-            // 确定 source 类型
-            const source = config.source;
-
-
-            // 3. 对于某些平台，可能 TavernHelper 已经支持，但为了确保兼容性，我们手动实现新平台
-            //    这里维护一个列表：TavernHelper 已知支持的 source（根据原有代码判断）
-            const tavernHelperSupportedSources = ['openai', 'claude', 'custom']; // 原有 source
-            // 注意：原 TavernHelper 可能通过 custom_api 处理了这些 source，但不确定是否支持新增的。
-            // 为了保险，我们对于新增的平台手动实现，对于原有的仍使用 TavernHelper.generate。
-
-            if (tavernHelperSupportedSources.includes(source)) {
-
-                if (typeof TavernHelper?.generate !== 'function') {
-                    console.error(`[generateWithCustomAPI] 酒馆助手 TavernHelper.generate 函数不可用`);
-                    throw new Error('[generateWithCustomAPI] 酒馆助手 TavernHelper.generate 函数不可用');
-                }
-
-                try {
-                    const startTime = Date.now();
-
-                    const generateParams = {
-                        user_input: userInput,
-                        custom_api: customApiConfig,
-                        max_chat_history: options.maxHistory || 'all',
-                        generation_id: `agent_${agentKey}_${Date.now()}`,
-                        should_silence: options.silent ?? true,
-                        should_stream: false
-                    };
-
-
-                    const result = await TavernHelper.generate(generateParams);
-
-                    const elapsed = (Date.now() - startTime) / 1000;
-
-
-                    if (result && typeof result === 'object' && result.extra?.prompt) {
-
-                    }
-
-                    // 提取生成的文本 - 兼容多种返回格式
-                    let generatedText = '';
-                    if (typeof result === 'string') {
-                        generatedText = result;
-                    } else if (result && typeof result === 'object') {
-                        generatedText = result?.text || result?.message || result?.response || result?.mes || '';
-                    }
-                    if (!generatedText) {
-                        console.error(`[generateWithCustomAPI] 生成结果为空，result:`, result);
-                        throw new Error('生成结果为空');
-                    }
-
-                    WORKFLOW_STATE.outputs[agentKey] = generatedText;
-                    AgentStateManager.setState(agentKey, 'completed');
-                    UI.updateAgentStatusButton(agentKey);
-
-                    const estimatedTokens = Math.ceil(generatedText.length / 3.5);
-                    WORKFLOW_STATE.tokenStats.lastOutput = estimatedTokens;
-                    WORKFLOW_STATE.tokenStats.totalOutput += estimatedTokens;
-                    UI.updateTokenDisplay();
-
-                    return generatedText;
-
-                } catch (error) {
-                    console.error(`[generateWithCustomAPI] TavernHelper.generate 调用失败:`, error);
-                    if (error.response) {
-                        console.error(`[generateWithCustomAPI] 错误响应状态:`, error.response.status);
-                        console.error(`[generateWithCustomAPI] 错误响应体:`, await error.response.text().catch(() => '无法读取'));
-                    }
-                    AgentStateManager.setState(agentKey, 'error');
-                    WORKFLOW_STATE.lastAgentError = WORKFLOW_STATE.lastAgentError || {};
-                    WORKFLOW_STATE.lastAgentError[agentKey] = error.message;
-                    WORKFLOW_STATE.discarded = true;
-                    throw error;
-                }
-            } else {
-                // 手动调用新平台
-
-                const url = config.apiUrl.replace(/\/+$/, '');
-                const headers = {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${config.key}`,
-                };
-                const timeout = config.timeout || 3600000;
-
-                // 构造请求体
-                let requestBody;
-                if (source === 'gemini' || source === 'wenxin' || source === 'qwen' || source === 'glm' || source === 'mistral' || source === 'siliconflow' || source === 'groq' || source === 'inference' || source === 'openrouter' || source === '4sapi' || source === 'other') {
-                    // 这些平台大多兼容 OpenAI 的 chat/completions 格式
-                    requestBody = {
-                        model: config.model,
-                        messages: [{role: 'user', content: userInput}],
-                        max_tokens: config.maxTokens,
-                        temperature: config.temperature,
-                        top_p: config.top_p,
-                        frequency_penalty: config.frequency_penalty,
-                        presence_penalty: config.presence_penalty,
-                        stop: config.stop,
-                        stream: false,
-                    };
-                    // 移除未定义的字段
-                    Object.keys(requestBody).forEach(key => requestBody[key] === undefined && delete requestBody[key]);
-                } else if (source === 'huggingface') {
-                    // Hugging Face 推理端点格式可能不同，这里假设使用 /models/{model} 端点，输入为 {"inputs": userInput}
-                    requestBody = {
-                        inputs: userInput,
-                        parameters: {
-                            max_new_tokens: config.maxTokens,
-                            temperature: config.temperature,
-                            top_p: config.top_p,
-                        }
-                    };
-                    // 注意：Hugging Face 的 Authorization 头是 Bearer token
-                } else {
-                    throw new Error(`不支持的文本平台: ${source}`);
-                }
-
-                try {
-                    let response;
-                    if (source === 'huggingface') {
-                        // Hugging Face 推理端点通常为 /models/{model}
-                        response = await fetch(`${url}/models/${config.model}`, {
-                            method: 'POST',
-                            headers,
-                            body: JSON.stringify(requestBody),
-                            signal: AbortSignal.timeout(timeout),
-                        });
-                    } else {
-                        // 默认使用 /chat/completions
-                        response = await fetch(`${url}/chat/completions`, {
-                            method: 'POST',
-                            headers,
-                            body: JSON.stringify(requestBody),
-                            signal: AbortSignal.timeout(timeout),
-                        });
-                    }
-
-
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error('[generateWithCustomAPI] 响应错误:', errorText);
-                        throw new Error(`HTTP ${response.status}: ${errorText}`);
-                    }
-
-                    const data = await response.json();
-
-
-                    let generatedText = '';
-                    if (source === 'huggingface') {
-                        // Hugging Face 返回可能是字符串或数组
-                        if (Array.isArray(data) && data[0] && data[0].generated_text) {
-                            generatedText = data[0].generated_text;
-                        } else if (typeof data === 'string') {
-                            generatedText = data;
-                        } else if (data.generated_text) {
-                            generatedText = data.generated_text;
-                        }
-                    } else {
-                        // 兼容 OpenAI 格式
-                        if (data.choices && data.choices[0] && data.choices[0].message) {
-                            generatedText = data.choices[0].message.content;
-                        } else if (data.choices && data.choices[0] && data.choices[0].text) {
-                            generatedText = data.choices[0].text;
-                        }
-                    }
-
-                    if (!generatedText) {
-                        console.error('[generateWithCustomAPI] 无法从响应中提取文本');
-                        throw new Error('响应中无有效文本');
-                    }
-
-                    WORKFLOW_STATE.outputs[agentKey] = generatedText;
-
-
-                    WORKFLOW_STATE.outputs[agentKey] = generatedText;
-
-
-                    AgentStateManager.setState(agentKey, 'completed');
-                    UI.updateAgentStatusButton(agentKey);
-
-                    const estimatedTokens = Math.ceil(generatedText.length / 3.5);
-                    WORKFLOW_STATE.tokenStats.lastOutput = estimatedTokens;
-                    WORKFLOW_STATE.tokenStats.totalOutput += estimatedTokens;
-                    UI.updateTokenDisplay();
-
-                    return generatedText;
-
-                } catch (error) {
-                    console.error(`[generateWithCustomAPI] 手动调用 ${source} 失败:`, error);
-                    AgentStateManager.setState(agentKey, 'error');
-                    WORKFLOW_STATE.lastAgentError = WORKFLOW_STATE.lastAgentError || {};
-                    WORKFLOW_STATE.lastAgentError[agentKey] = error.message;
-                    WORKFLOW_STATE.discarded = true;
-                    throw error;
-                }
-            }
-        },
-
-        // ==================== 可选的增强：多智能体流水线 ====================
-
-        /**
-         * 顺序执行多个智能体，每个使用自己的角色卡配置和自定义API
-         * @param {Array<string>} agentChain - Agent键的有序数组
-         * @param {string} initialInput - 初始输入
-         * @param {Object} options - 全局选项，如 { silent: true }
-         * @returns {Promise<Array<{agent: string, output: string}>>}
-         */
-        runAgentPipeline: async function (agentChain, initialInput, options = {}) {
-            let currentInput = initialInput;
-            const results = [];
-
-            for (const agentKey of agentChain) {
-                if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
-                if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
-
-
-                const output = await Workflow.generateWithCustomAPI(agentKey, currentInput, {
-                    silent: options.silent ?? true,
-                    maxHistory: 0
-                });
-
-                results.push({agent: agentKey, output});
-                currentInput = output; // 将输出作为下一个的输入
-            }
-
             return results;
         },
 
@@ -23045,10 +22863,10 @@
                     }
 
                     // 保存目标当前的输出（剔除图片）作为“上次输出”
-                    WORKFLOW_STATE.reflowMap[target].previousOutput = this._stripImages(WORKFLOW_STATE.outputs[target] || '');
+                    WORKFLOW_STATE.reflowMap[target].previousOutput = this._stripImagePlaceholders(WORKFLOW_STATE.outputs[target] || '');
 
                     // 记录触发源的输出（剔除图片）
-                    let sourceOutput = this._stripImages(WORKFLOW_STATE.outputs[sourceKey] || '');
+                    let sourceOutput = this._stripImagePlaceholders(WORKFLOW_STATE.outputs[sourceKey] || '');
 
                     // ===== 新增：如果触发源有用户反馈，则附加到输出中 =====
                     if (WORKFLOW_STATE.reflowMap[sourceKey] && WORKFLOW_STATE.reflowMap[sourceKey].userFeedback) {
@@ -23633,6 +23451,66 @@
                         return generatedText;
                     }
 
+                    // ========== 豆包 (doubao) ==========
+                    else if (source === 'doubao') {
+                        // 构建请求体，兼容 OpenAI 格式
+                        const requestBody = {
+                            model: model,
+                            messages: [{ role: 'user', content: cleanMessage }],
+                            max_tokens: config.maxTokens,
+                            temperature: config.temperature,
+                            top_p: config.top_p,
+                            frequency_penalty: config.frequency_penalty,
+                            presence_penalty: config.presence_penalty,
+                            stop: config.stop,
+                        };
+                        // 如果有文件 ID，添加到 file_ids 字段
+                        if (fileIds.length > 0) {
+                            requestBody.file_ids = fileIds;
+                        }
+                        Object.keys(requestBody).forEach(k => requestBody[k] === undefined && delete requestBody[k]);
+
+                        console.log(`[callAgent][${agentKey}] 豆包请求体:`, {
+                            ...requestBody,
+                            messages: [{ role: 'user', content: requestBody.messages[0].content.substring(0, 200) + '...' }]
+                        });
+
+                        const response = await fetch(`${url}/chat/completions`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${key}`,
+                            },
+                            body: JSON.stringify(requestBody),
+                            signal: combinedSignal,
+                        });
+
+                        if (!response.ok) {
+                            const errText = await response.text();
+                            console.error(`[callAgent][${agentKey}] 错误响应:`, errText);
+                            throw new Error(`豆包错误 (${response.status}): ${errText}`);
+                        }
+                        const data = await response.json();
+                        console.log(`[callAgent][${agentKey}] 响应数据:`, {
+                            choices: data.choices ? data.choices.map(c => ({
+                                message: c.message ? { content_length: c.message.content?.length } : {},
+                                text_length: c.text?.length
+                            })) : '无choices'
+                        });
+
+                        let generatedText = data.choices?.[0]?.message?.content || data.choices?.[0]?.text;
+                        if (!generatedText) {
+                            console.error(`[callAgent][${agentKey}] 响应中无有效文本`, data);
+                            throw new Error('响应中无有效文本');
+                        }
+
+                        WORKFLOW_STATE.outputs[agentKey] = generatedText;
+                        AgentStateManager.setState(agentKey, 'completed');
+                        UI.updateAgentStatusButton(agentKey);
+
+                        return generatedText;
+                    }
+
                     // ========== Claude ==========
                     else if (source === 'claude') {
                         const requestBody = {
@@ -23683,77 +23561,37 @@
                         return generatedText;
                     }
 
-                    // ========== Gemini：支持原生和代理两种模式 ==========
+                    // ========== Gemini ==========
                     else if (source === 'gemini') {
-                        const isLocalProxy = url.includes('localhost') || url.includes('127.0.0.1');
-                        let generatedText;
+                        const requestBody = {
+                            contents: [{
+                                parts: [{ text: cleanMessage }]
+                            }]
+                        };
 
-                        if (isLocalProxy) {
-                            // 代理模式：使用 POST /api/gemini
-                            const proxyUrl = url + '/api/gemini';
+                        const response = await fetch(`${url}/v1beta/models/${model}:generateContent?key=${key}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(requestBody),
+                            signal: combinedSignal,
+                        });
 
-
-                            const requestBody = {
-                                contents: [{
-                                    parts: [{text: cleanMessage}]
-                                }]
-                            };
-
-
-                            const response = await fetch(proxyUrl, {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify(requestBody),
-                                signal: combinedSignal,
-                            });
-
-
-                            if (!response.ok) {
-                                const errText = await response.text();
-                                console.error(`[callAgent][${agentKey}] 代理错误响应:`, errText);
-                                throw new Error(`代理错误 (${response.status}): ${errText}`);
-                            }
-                            const data = await response.json();
-
-                            generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-                        } else {
-                            // 原生模式：直接调用 Google API
-
-
-                            const requestBody = {
-                                contents: [{
-                                    parts: [{text: cleanMessage}]
-                                }]
-                            };
-
-
-                            const response = await fetch(`${url}/v1beta/models/${model}:generateContent?key=${key}`, {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json'},
-                                body: JSON.stringify(requestBody),
-                                signal: combinedSignal,
-                            });
-
-
-                            if (!response.ok) {
-                                const errText = await response.text();
-                                console.error(`[callAgent][${agentKey}] 原生错误响应:`, errText);
-                                throw new Error(`Gemini 原生错误 (${response.status}): ${errText}`);
-                            }
-                            const data = await response.json();
-
-                            generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                        if (!response.ok) {
+                            const errText = await response.text();
+                            console.error(`[callAgent][${agentKey}] 错误响应:`, errText);
+                            throw new Error(`Gemini 错误 (${response.status}): ${errText}`);
                         }
-
+                        const data = await response.json();
+                        const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
                         if (!generatedText) {
-                            console.error(`[callAgent][${agentKey}] Gemini 响应中无有效文本`);
+                            console.error(`[callAgent][${agentKey}] Gemini 响应中无有效文本`, data);
                             throw new Error('Gemini 响应中无有效文本');
                         }
-
 
                         WORKFLOW_STATE.outputs[agentKey] = generatedText;
                         AgentStateManager.setState(agentKey, 'completed');
                         UI.updateAgentStatusButton(agentKey);
+
                         return generatedText;
                     }
 
@@ -26448,19 +26286,19 @@
         },
 
         /**
-         * 调用图像变化 API（图生图/变体），根据配置选择对应平台
+         * 调用图像变化 API（图生图/变体/编辑）
          * @param {Object} config - 图像API配置（来自 CONFIG.apiConfigs）
-         * @param {Blob} sourceBlob - 源图片 Blob
-         * @param {string} prompt - 编辑提示词（变体描述）
+         * @param {Blob} sourceBlob - 源图片 Blob（已通过 ID 获取）
+         * @param {Object} params - 合并后的参数（包含 prompt, denoising_strength 等）
          * @returns {Promise<string>} 生成图片的 Base64 数据（含 data URL 前缀）
          */
         async _callImageVariationAPI(config, sourceBlob, params) {
 
 
-            const {source, apiUrl, key, timeout = 3600000} = config;
+            const { source, apiUrl, key, timeout = 3600000 } = config;
             const url = apiUrl.replace(/\/+$/, '');
 
-            // 构建组合信号（用于中断）
+            // 构建组合信号
             const signals = [];
             if (WORKFLOW_STATE.abortController) {
                 signals.push(WORKFLOW_STATE.abortController.signal);
@@ -26468,22 +26306,16 @@
             signals.push(AbortSignal.timeout(timeout));
             const combinedSignal = AbortSignal.any(signals);
 
-
             // 将源图片转为 base64（data URL 格式），同时提取纯 base64
             const sourceDataUrl = await this._blobToBase64(sourceBlob);
             const sourceBase64 = sourceDataUrl.split(',')[1]; // 去掉 data:image/xxx;base64, 前缀
 
-
-            // 从 params 中提取 prompt 和其他参数
             const prompt = params.prompt || '';
-            const mergedParams = {...config, ...params}; // 合并，但注意 config 可能包含不需要的字段
+            const mergedParams = { ...config, ...params };
 
-            // ==================== SD WebUI (AUTOMATIC1111) ====================
+            // ----- SD WebUI -----
             if (source === 'sdwebui') {
-
                 const sdApiUrl = `${url}/sdapi/v1/img2img`;
-
-                // 构建标准 payload
                 const payload = {
                     init_images: [sourceDataUrl],
                     prompt: prompt,
@@ -26520,114 +26352,93 @@
                             }]
                         }
                     };
-
                 }
 
 
-                console.log('[ImageVariationAPI] payload 概览:', JSON.stringify({
-                    ...payload,
-                    init_images: ['[BASE64]'],
-                    ...(payload.alwayson_scripts && {alwayson_scripts: '[CONTROLNET]'})
-                }));
 
                 try {
                     const response = await fetch(sdApiUrl, {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
                         signal: combinedSignal,
                     });
-
                     if (!response.ok) {
                         const errText = await response.text();
                         throw new Error(`SD WebUI 错误 (${response.status}): ${errText}`);
                     }
-
                     const data = await response.json();
                     if (data.images && data.images[0]) {
-
                         return `data:image/png;base64,${data.images[0]}`;
-                    } else {
-                        throw new Error('SD WebUI 响应中没有图片数据');
                     }
+                    throw new Error('SD WebUI 响应中没有图片数据');
                 } catch (err) {
-                    console.error('[ImageVariationAPI] SD WebUI 调用失败:', err);
+                    console.error('[Workflow._callImageVariationAPI] SD WebUI 调用失败:', err);
                     throw err;
                 }
             }
 
-            // ==================== OpenAI (DALL-E 2) ====================
-            else if (source === 'openai' && config.model?.includes('dall-e-2')) {
-
-
+            // ----- OpenAI (DALL-E 2) / 兼容平台 -----
+            else if (source === 'openai' || source === 'flux' || source === 'siliconflow' || source === 'other') {
                 const useEdit = prompt && prompt.trim() !== '';
-
+                const endpoint = useEdit ? '/images/edits' : '/images/variations';
                 const formData = new FormData();
                 formData.append('image', sourceBlob, 'image.png');
                 formData.append('n', String(mergedParams.n || 1));
                 formData.append('size', mergedParams.size || '1024x1024');
-                formData.append('model', mergedParams.model || 'dall-e-2');
+                formData.append('model', mergedParams.model || config.model || 'dall-e-2');
 
                 if (useEdit) {
-
                     formData.append('prompt', prompt);
                     if (mergedParams.mask) {
-                        const maskBlob = await ImageStore.get(mergedParams.mask).catch(() => null);
-                        if (maskBlob) {
-                            formData.append('mask', maskBlob, 'mask.png');
+                        // 如果 mask 是 ID，则从 ImageStore 获取 Blob
+                        if (mergedParams.mask.startsWith('img_')) {
+                            const maskBlob = await ImageStore.get(mergedParams.mask).catch(() => null);
+                            if (maskBlob) {
+                                formData.append('mask', maskBlob, 'mask.png');
+                            } else {
+                                console.warn(`[Workflow._callImageVariationAPI] mask ID ${mergedParams.mask} 不存在，跳过`);
+                            }
+                        } else {
+                            formData.append('mask', mergedParams.mask, 'mask.png');
                         }
                     }
-                } else {
-
                 }
 
-                const endpoint = useEdit ? '/images/edits' : '/images/variations';
 
 
                 try {
                     const response = await fetch(`${url}${endpoint}`, {
                         method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${key}`,
-                        },
+                        headers: { 'Authorization': `Bearer ${key}` },
                         body: formData,
                         signal: combinedSignal,
                     });
-
                     if (!response.ok) {
                         const errText = await response.text();
-                        throw new Error(`OpenAI 错误 (${response.status}): ${errText}`);
+                        throw new Error(`${source} 错误 (${response.status}): ${errText}`);
                     }
-
                     const data = await response.json();
-
                     if (data.data && data.data[0]) {
                         if (data.data[0].b64_json) {
-
                             return `data:image/png;base64,${data.data[0].b64_json}`;
                         } else if (data.data[0].url) {
-
-                            const imgRes = await fetch(data.data[0].url, {signal: combinedSignal});
+                            const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         }
                     }
-                    throw new Error('OpenAI 响应中没有图片数据');
+                    throw new Error(`${source} 响应中没有图片数据`);
                 } catch (err) {
-                    console.error('[ImageVariationAPI] OpenAI 调用失败:', err);
+                    console.error(`[Workflow._callImageVariationAPI] ${source} 调用失败:`, err);
                     throw err;
                 }
             }
 
-            // ==================== Stability AI ====================
+            // ----- Stability AI -----
             else if (source === 'stability') {
-
-
                 const mode = mergedParams.mode || 'image-to-image';
-
                 let endpoint = '';
-                let payload;
-
                 const formData = new FormData();
                 formData.append('image', sourceBlob, 'image.png');
 
@@ -26640,9 +26451,13 @@
                     endpoint = '/v2beta/stable-image/edit/inpaint';
                     formData.append('prompt', prompt);
                     if (mergedParams.mask) {
-                        const maskBlob = await ImageStore.get(mergedParams.mask).catch(() => null);
-                        if (maskBlob) {
-                            formData.append('mask', maskBlob, 'mask.png');
+                        if (mergedParams.mask.startsWith('img_')) {
+                            const maskBlob = await ImageStore.get(mergedParams.mask).catch(() => null);
+                            if (maskBlob) {
+                                formData.append('mask', maskBlob, 'mask.png');
+                            }
+                        } else {
+                            formData.append('mask', mergedParams.mask, 'mask.png');
                         }
                     }
                 } else if (mode === 'search-and-replace') {
@@ -26652,9 +26467,13 @@
                 } else if (mode === 'erase') {
                     endpoint = '/v2beta/stable-image/edit/erase';
                     if (mergedParams.mask) {
-                        const maskBlob = await ImageStore.get(mergedParams.mask).catch(() => null);
-                        if (maskBlob) {
-                            formData.append('mask', maskBlob, 'mask.png');
+                        if (mergedParams.mask.startsWith('img_')) {
+                            const maskBlob = await ImageStore.get(mergedParams.mask).catch(() => null);
+                            if (maskBlob) {
+                                formData.append('mask', maskBlob, 'mask.png');
+                            }
+                        } else {
+                            formData.append('mask', mergedParams.mask, 'mask.png');
                         }
                     }
                 } else {
@@ -26667,6 +26486,7 @@
                 if (mergedParams.style_preset) formData.append('style_preset', mergedParams.style_preset);
 
 
+
                 try {
                     const response = await fetch(`${url}${endpoint}`, {
                         method: 'POST',
@@ -26677,73 +26497,20 @@
                         body: formData,
                         signal: combinedSignal,
                     });
-
                     if (!response.ok) {
                         const errText = await response.text();
                         throw new Error(`Stability AI 错误 (${response.status}): ${errText}`);
                     }
-
                     const blob = await response.blob();
-
                     return await this._blobToBase64(blob);
                 } catch (err) {
-                    console.error('[ImageVariationAPI] Stability AI 调用失败:', err);
+                    console.error('[Workflow._callImageVariationAPI] Stability AI 调用失败:', err);
                     throw err;
                 }
             }
 
-            // ==================== FLUX Redux ====================
-            else if (source === 'flux' || (source === 'other' && config.model?.includes('flux'))) {
-
-
-                const formData = new FormData();
-                formData.append('image', sourceBlob, 'image.png');
-                formData.append('n', String(mergedParams.n || 1));
-                formData.append('size', mergedParams.size || '1024x1024');
-                formData.append('model', mergedParams.model || 'black-forest-labs/FLUX-1-Redux-dev');
-
-                if (prompt && prompt.trim() !== '') {
-                    formData.append('prompt', prompt);
-                }
-
-
-                try {
-                    const response = await fetch(`${url}/openai/images/variations`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${key}`,
-                        },
-                        body: formData,
-                        signal: combinedSignal,
-                    });
-
-                    if (!response.ok) {
-                        const errText = await response.text();
-                        throw new Error(`FLUX Redux 错误 (${response.status}): ${errText}`);
-                    }
-
-                    const data = await response.json();
-
-                    if (data.data && data.data[0]) {
-                        if (data.data[0].b64_json) {
-                            return `data:image/png;base64,${data.data[0].b64_json}`;
-                        } else if (data.data[0].url) {
-                            const imgRes = await fetch(data.data[0].url, {signal: combinedSignal});
-                            const blob = await imgRes.blob();
-                            return await this._blobToBase64(blob);
-                        }
-                    }
-                    throw new Error('FLUX Redux 响应中没有图片数据');
-                } catch (err) {
-                    console.error('[ImageVariationAPI] FLUX Redux 调用失败:', err);
-                    throw err;
-                }
-            }
-
-            // ==================== Midjourney ====================
+            // ----- Midjourney -----
             else if (source === 'midjourney') {
-
-
                 const formData = new FormData();
                 formData.append('image', sourceBlob, 'image.png');
                 formData.append('prompt', prompt);
@@ -26753,23 +26520,19 @@
                 try {
                     const response = await fetch(url, {
                         method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${key}`,
-                        },
+                        headers: { 'Authorization': `Bearer ${key}` },
                         body: formData,
                         signal: combinedSignal,
                     });
-
                     if (!response.ok) {
                         const errText = await response.text();
                         throw new Error(`Midjourney 代理错误 (${response.status}): ${errText}`);
                     }
-
                     const contentType = response.headers.get('content-type');
                     if (contentType?.includes('application/json')) {
                         const data = await response.json();
                         if (data.image_url) {
-                            const imgRes = await fetch(data.image_url, {signal: combinedSignal});
+                            const imgRes = await fetch(data.image_url, { signal: combinedSignal });
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         } else if (data.image_data) {
@@ -26779,65 +26542,63 @@
                         const blob = await response.blob();
                         return await this._blobToBase64(blob);
                     }
-
                     throw new Error('无法解析 Midjourney 代理响应');
                 } catch (err) {
-                    console.error('[ImageVariationAPI] Midjourney 代理调用失败:', err);
+                    console.error('[Workflow._callImageVariationAPI] Midjourney 代理调用失败:', err);
                     throw err;
                 }
             }
 
-            // ==================== 通用 OpenAI 兼容接口 ====================
-            else if (source === 'other' || source === 'openai') {
-
-
+            // ----- Picsart 图生图（编辑）-----
+            else if (source === 'picsart') {
                 const formData = new FormData();
                 formData.append('image', sourceBlob, 'image.png');
+                formData.append('prompt', prompt);
                 formData.append('n', String(mergedParams.n || 1));
                 formData.append('size', mergedParams.size || '1024x1024');
-                if (mergedParams.model) formData.append('model', mergedParams.model);
 
-                if (prompt && prompt.trim() !== '') {
-                    formData.append('prompt', prompt);
+                if (mergedParams.mask) {
+                    if (mergedParams.mask.startsWith('img_')) {
+                        const maskBlob = await ImageStore.get(mergedParams.mask).catch(() => null);
+                        if (maskBlob) {
+                            formData.append('mask', maskBlob, 'mask.png');
+                        }
+                    } else {
+                        formData.append('mask', mergedParams.mask, 'mask.png');
+                    }
                 }
 
                 try {
-                    const response = await fetch(`${url}/images/variations`, {
+                    const response = await fetch(`${url}/images/edits`, {
                         method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${key}`,
-                        },
+                        headers: { 'Authorization': `Bearer ${key}` },
                         body: formData,
                         signal: combinedSignal,
                     });
-
                     if (!response.ok) {
                         const errText = await response.text();
-                        throw new Error(`通用 API 错误 (${response.status}): ${errText}`);
+                        throw new Error(`Picsart 错误 (${response.status}): ${errText}`);
                     }
-
                     const data = await response.json();
-
-                    if (data.data && data.data[0]) {
-                        if (data.data[0].b64_json) {
-                            return `data:image/png;base64,${data.data[0].b64_json}`;
-                        } else if (data.data[0].url) {
-                            const imgRes = await fetch(data.data[0].url, {signal: combinedSignal});
-                            const blob = await imgRes.blob();
-                            return await this._blobToBase64(blob);
-                        }
+                    if (data.data && data.data[0] && data.data[0].b64_json) {
+                        return `data:image/png;base64,${data.data[0].b64_json}`;
                     }
-                    throw new Error('通用 API 响应中没有图片数据');
+                    throw new Error('Picsart 响应中无图片数据');
                 } catch (err) {
-                    console.error('[ImageVariationAPI] 通用 API 调用失败:', err);
+                    console.error('[Workflow._callImageVariationAPI] Picsart 调用失败:', err);
                     throw err;
                 }
             }
 
-            // ==================== 不支持的平台 ====================
+            // ----- Sora 不支持图生图 -----
+            else if (source === 'sora') {
+                throw new Error('Sora 平台不支持图生图');
+            }
+
+            // ----- 不支持的平台 -----
             else {
-                const errorMsg = `不支持的图像平台: ${source}，当前支持的平台: sdwebui, openai (dall-e-2), stability, flux, midjourney, other`;
-                console.error('[ImageVariationAPI]', errorMsg);
+                const errorMsg = `不支持的图像平台: ${source}`;
+                console.error('[Workflow._callImageVariationAPI]', errorMsg);
                 throw new Error(errorMsg);
             }
         },
@@ -27292,309 +27053,6 @@
         },
 
         /**
-         * 执行预处理指令，调用 SD WebUI 的 ControlNet 预处理器生成控制图
-         * @param {string} preprocText - 预处理指令块内容
-         * @returns {Promise<Object>} 返回映射表，键为“保存为”字段指定的控制图ID，值为实际保存的图片ID
-         */
-        async _executePreprocessingSteps(preprocText) {
-
-
-            const lines = preprocText.split('\n');
-            let currentStep = null;
-            const steps = [];
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (trimmed.startsWith('步骤')) {
-                    if (currentStep) steps.push(currentStep);
-                    currentStep = {step: parseInt(trimmed.replace('步骤', ''))};
-                } else if (currentStep) {
-                    const colonIdx = trimmed.indexOf(':');
-                    if (colonIdx === -1) continue;
-                    const key = trimmed.substring(0, colonIdx).trim();
-                    const value = trimmed.substring(colonIdx + 1).trim();
-                    if (key === '类型') currentStep.type = value;
-                    else if (key === '源图') currentStep.sourceId = value;
-                    else if (key === '保存为') currentStep.saveAs = value;
-                }
-            }
-            if (currentStep) steps.push(currentStep);
-
-
-            steps.forEach((step, idx) => {
-
-            });
-
-            const imageConfig = this._getImageConfig();
-            if (!imageConfig || imageConfig.source !== 'sdwebui') {
-                console.error('[Preprocessing] 预处理需要 SD WebUI 图像配置（source: sdwebui）');
-                throw new Error('预处理需要 SD WebUI 图像配置（source: sdwebui）');
-            }
-            const apiUrl = imageConfig.apiUrl.replace(/\/+$/, '');
-
-
-            // 预处理器名称映射（可根据需要扩展）
-            const controlNetModuleMap = {
-                depth: 'depth_midas',
-                openpose: 'openpose_full',
-                canny: 'canny',
-                softedge: 'softedge_hed',
-                lineart: 'lineart_realistic'
-            };
-
-            const resultMap = {};
-            for (const step of steps) {
-
-
-                if (!step.type || !step.sourceId || !step.saveAs) {
-                    console.warn('[Preprocessing] 步骤缺少必要字段，跳过', step);
-                    continue;
-                }
-
-                // 从 ImageStore 获取源图 blob
-
-                const sourceBlob = await ImageStore.get(step.sourceId);
-                if (!sourceBlob) {
-                    console.error(`[Preprocessing] 源图 ${step.sourceId} 不存在`);
-                    throw new Error(`源图 ${step.sourceId} 不存在`);
-                }
-
-
-                // 转换为 data URL
-
-                const sourceBase64 = await this._blobToBase64(sourceBlob);
-
-
-                // 提取纯 base64（去掉 data URL 前缀）
-                const pureBase64 = sourceBase64.split(',')[1];
-                if (!pureBase64) {
-                    console.error(`[Preprocessing] 提取纯 base64 失败，sourceBase64: ${sourceBase64}`);
-                    throw new Error('提取纯 base64 失败');
-                }
-
-
-                // 构建组合信号
-                const signals = [];
-                if (WORKFLOW_STATE.abortController) {
-                    signals.push(WORKFLOW_STATE.abortController.signal);
-                }
-                signals.push(AbortSignal.timeout(imageConfig.timeout || 3600000));
-                const combinedSignal = AbortSignal.any(signals);
-
-
-                // 构建符合官方规范的 payload
-                const payload = {
-                    controlnet_module: controlNetModuleMap[step.type] || step.type,
-                    controlnet_input_images: [pureBase64],  // 必须为数组
-                    controlnet_processor_res: 512           // 可选，默认 -1
-                };
-
-
-                try {
-
-                    const startTime = Date.now();
-                    const response = await fetch(`${apiUrl}/controlnet/detect`, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(payload),
-                        signal: combinedSignal,  // 使用组合信号
-                    });
-                    const elapsed = Date.now() - startTime;
-
-
-                    if (!response.ok) {
-                        const errText = await response.text();
-                        console.error(`[Preprocessing] 响应错误: ${response.status} ${response.statusText}`, errText);
-                        throw new Error(`预处理失败 (${step.type}): ${errText}`);
-                    }
-
-                    const data = await response.json();
-
-
-                    // 兼容两种返回格式：旧版 { image: "base64..." } 或新版 { images: ["base64..."], info: "Success" }
-                    let resultBase64;
-                    if (data.image) {
-                        resultBase64 = data.image;
-
-                    } else if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-                        resultBase64 = data.images[0];
-
-                    } else {
-                        console.warn('[Preprocessing] 响应中未找到图片数据，原始数据:', data);
-                        throw new Error('响应中未包含图片数据');
-                    }
-
-
-                    if (!resultBase64) {
-                        throw new Error('响应中未包含图片数据');
-                    }
-
-                    // 使用指定的 saveAs 作为 ID 保存（如果已存在会覆盖）
-
-                    const savedId = await ImageStore.save(`data:image/png;base64,${resultBase64}`, 'png', step.saveAs);
-                    resultMap[step.saveAs] = savedId;
-                    UI.updateProgress(`  ✓ 生成控制图 ${step.saveAs}`);
-
-                } catch (err) {
-                    console.error('[Preprocessing] 请求或处理过程中发生异常:', err);
-                    throw err;
-                }
-            }
-
-
-            return resultMap;
-        },
-
-        /**
-         * 解析融合生图师输出的完整指令（包含预处理和融合两个块）
-         * @param {string} rawOutput - 融合生图师的原始输出文本
-         * @returns {Object} 包含 preprocText 和 fusionSteps 的对象，若某块缺失则对应字段为 null
-         */
-        _parseFusionInstruction(rawOutput) {
-
-
-            const result = {preprocText: null, fusionSteps: null};
-
-            // 提取预处理指令块
-            const preprocMatch = rawOutput.match(/===预处理指令===([\s\S]*?)(?===融合指令===|$)/);
-            if (preprocMatch) {
-                result.preprocText = preprocMatch[1].trim();
-
-
-            } else {
-
-            }
-
-            // 提取融合指令块
-            const fusionMatch = rawOutput.match(/===融合指令===([\s\S]*)/);
-            if (fusionMatch) {
-                const fusionText = fusionMatch[1].trim();
-
-
-                const steps = [];
-                const lines = fusionText.split('\n');
-                let currentStep = null;
-                let promptLines = [];
-                let collectingPrompt = false;
-                let lineNumber = 0;
-
-                for (let line of lines) {
-                    lineNumber++;
-                    const trimmed = line.trim();
-                    if (trimmed === '') {
-                        if (collectingPrompt && currentStep) {
-                            // 空行保留为提示词的一部分（可能表示段落分隔）
-                            promptLines.push('');
-                        }
-                        continue;
-                    }
-
-                    const stepMatch = trimmed.match(/^步骤(\d+)$/);
-                    if (stepMatch) {
-
-                        // 保存上一个步骤
-                        if (currentStep) {
-                            if (promptLines.length > 0) {
-                                currentStep.prompt = promptLines.join('\n').trim();
-
-                            }
-                            steps.push(currentStep);
-
-                        }
-                        const stepNum = parseInt(stepMatch[1]);
-                        currentStep = {
-                            step: stepNum,
-                            type: null,
-                            prompt: '',
-                            sourceRef: null,
-                            controlId: null,
-                            denoise: null
-                        };
-                        promptLines = [];
-                        collectingPrompt = false;
-
-                        continue;
-                    }
-
-                    if (!currentStep) {
-
-                        continue;
-                    }
-
-                    const colonIdx = trimmed.indexOf(':');
-                    if (colonIdx !== -1) {
-                        const field = trimmed.substring(0, colonIdx).trim();
-                        const value = trimmed.substring(colonIdx + 1).trim();
-
-
-                        if (field === '类型') {
-                            currentStep.type = value;
-                            collectingPrompt = false;
-
-                        } else if (field === '提示词') {
-                            collectingPrompt = true;
-                            if (value) {
-                                promptLines.push(value);
-
-                            }
-                        } else if (field === '源图') {  // 修改此处
-                            currentStep.sourceRef = value;
-                            collectingPrompt = false;
-
-                        } else if (field === '控制图') {
-                            currentStep.controlId = value;
-                            collectingPrompt = false;
-
-                        } else if (field === '重绘幅度') {
-                            currentStep.denoise = parseFloat(value);
-                            collectingPrompt = false;
-
-                        } else {
-
-                            if (collectingPrompt) {
-                                // 如果正在收集提示词，将整行加入
-                                promptLines.push(trimmed);
-
-                            }
-                        }
-                    } else {
-                        // 没有冒号的行，如果正在收集提示词则加入
-                        if (collectingPrompt) {
-                            promptLines.push(trimmed);
-
-                        } else {
-
-                        }
-                    }
-                }
-
-                // 处理最后一个步骤
-                if (currentStep) {
-                    if (promptLines.length > 0) {
-                        currentStep.prompt = promptLines.join('\n').trim();
-
-                    }
-                    steps.push(currentStep);
-
-                }
-
-                if (steps.length > 0) {
-                    result.fusionSteps = steps;
-
-                    steps.forEach((step, idx) => {
-
-                    });
-                } else {
-
-                }
-            } else {
-
-            }
-
-
-            return result;
-        },
-
-        /**
          * 调用 SD WebUI 图生图接口，使用单个 ControlNet 单元
          * @param {Blob} initBlob - 初始图片 Blob
          * @param {Blob} controlBlob - 控制图片 Blob
@@ -27783,117 +27241,6 @@
         },
 
         /**
-         * 调用 SD WebUI 图生图融合 API（支持 ControlNet 多参考图）
-         * @param {string} backgroundId - 背景图 ID
-         * @param {Array<string>} characterIds - 人物图 ID 数组
-         * @param {string} prompt - 融合提示词
-         * @param {Array} elementList - 完整元素列表（可用于提取位置描述）
-         * @returns {Promise<string>} 生成的图片 Base64
-         */
-        async _callFusionAPI(backgroundId, characterIds, prompt, elementList = []) {
-            // 获取 SD WebUI 配置
-            const imageConfig = this._getImageConfig();
-            if (!imageConfig || imageConfig.source !== 'sdwebui') {
-                throw new Error('融合生图需要 SD WebUI 图像配置（source: sdwebui）');
-            }
-            const apiUrl = imageConfig.apiUrl.replace(/\/+$/, '');
-            const sdApiUrl = `${apiUrl}/sdapi/v1/img2img`;
-
-            // 构建组合信号
-            const signals = [];
-            if (WORKFLOW_STATE.abortController) {
-                signals.push(WORKFLOW_STATE.abortController.signal);
-            }
-            signals.push(AbortSignal.timeout(imageConfig.timeout || 3600000));
-            const combinedSignal = AbortSignal.any(signals);
-
-
-            // 加载背景图
-            const bgBlob = await ImageStore.get(backgroundId);
-            if (!bgBlob) throw new Error(`背景图 ${backgroundId} 不存在`);
-            const bgBase64 = await this._blobToBase64(bgBlob);
-
-            // 加载所有人物图，准备作为控制图的数组
-            const controlImages = [];
-            for (const charId of characterIds) {
-                const charBlob = await ImageStore.get(charId);
-                if (charBlob) {
-                    const charBase64 = await this._blobToBase64(charBlob);
-                    controlImages.push(charBase64);
-                }
-            }
-
-            // 如果没有人图，则直接返回背景图？或者报错
-            if (controlImages.length === 0) {
-                throw new Error('没有可用的控制图（人物图）');
-            }
-
-            // 单 ControlNet 单元，image 字段为数组
-            const controlNetUnit = {
-                enabled: true,
-                module: 'reference_only',  // 根据实际需求可改为 'reference_adain+attn' 等
-                model: 'control_v11p_sd15_reference [some_hash]', // 请替换为实际模型名称
-                image: controlImages,      // 关键：传入数组，SD WebUI 会自动融合处理
-                weight: 1.0,
-                resize_mode: 1,            // 1 = "缩放适应"
-                lowvram: true,             // 960 4G 必须开启
-                processor_res: 512,
-                threshold_a: 1,
-                threshold_b: 1,
-                guidance_start: 0.0,
-                guidance_end: 1.0,
-                control_mode: 0,           // 0 = "均衡"
-            };
-
-            const payload = {
-                init_images: [bgBase64],
-                prompt: prompt,
-                negative_prompt: imageConfig.negative_prompt || 'nsfw, low quality, blurry',
-                steps: imageConfig.steps || 30,
-                cfg_scale: imageConfig.cfg_scale || 7,
-                width: imageConfig.width || 512,
-                height: imageConfig.height || 512,
-                denoising_strength: 0.4,   // 融合程度，可配置
-                sampler_name: imageConfig.sampler_name || 'DPM++ 2M Karras',
-                batch_size: 1,
-                n_iter: 1,
-                seed: -1,
-                override_settings: {
-                    sd_model_checkpoint: imageConfig.model || 'v1-5-pruned-emaonly.safetensors'
-                },
-                alwayson_scripts: {
-                    controlnet: {
-                        args: [controlNetUnit]  // 现在只有一个单元
-                    }
-                }
-            };
-
-            try {
-                const response = await fetch(sdApiUrl, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload),
-                    signal: combinedSignal,  // 使用组合信号
-                });
-
-                if (!response.ok) {
-                    const errText = await response.text();
-                    throw new Error(`SD WebUI 错误 (${response.status}): ${errText}`);
-                }
-
-                const data = await response.json();
-                if (data.images && data.images[0]) {
-                    return data.images[0]; // Base64
-                } else {
-                    throw new Error('响应中无图片数据');
-                }
-            } catch (err) {
-                console.error('[FusionAPI] 调用失败:', err);
-                throw err;
-            }
-        },
-
-        /**
          * 将 Blob 转换为 Base64 字符串（data URL 格式）
          * @param {Blob} blob
          * @returns {Promise<string>}
@@ -27910,107 +27257,24 @@
             });
         },
 
-        _splitIntoParagraphs(text) {
-            return text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
-        },
-
-        _stripImages(content) {  // ← 新增
-            if (!content) return content;
-            return content.replace(/!\[.*?\]\(.*?\)/g, '');
-        },
-
-        // 根据模型名称映射到友好类型
-        _mapModelToType(modelName) {
-            if (!modelName) return null;
-            const lower = modelName.toLowerCase();
-            if (lower.includes('stable-diffusion')) return 'stable-diffusion';
-            if (lower.includes('dall-e') || lower.includes('dalle')) return 'dall-e-3';
-            if (lower.includes('midjourney')) return 'midjourney';
-            if (lower.includes('flux')) return 'flux';
-            return null;
-        },
-
-        // 解析生图师输出
-        _parseImageGeneratorOutput(output) {
-            const tasks = [];
-            const lines = output.split('\n');
-            let inInstructionBlock = false;
-            let currentTask = null;
-            let promptLines = [];
-
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                const trimmed = line.trim();
-
-                if (trimmed === '===图片生成指令===') {
-                    inInstructionBlock = true;
-                    continue;
-                }
-
-                if (!inInstructionBlock) continue;
-
-                // 1. 尝试匹配段落格式：段落1、段落1-2、段落1：、段落1-2：
-                const paraMatch = trimmed.match(/^段落(\d+)(?:-(\d+))?[：:]\s*$/);
-                if (paraMatch) {
-                    // 保存上一个任务
-                    if (currentTask) {
-                        currentTask.prompt = promptLines.join('\n').trim();
-                        tasks.push(currentTask);
-                    }
-                    const start = parseInt(paraMatch[1]);
-                    const end = paraMatch[2] ? parseInt(paraMatch[2]) : start;
-                    currentTask = {start, end, prompt: '', element: null};
-                    promptLines = [];
-                }
-                // 2. 尝试匹配元素格式：以冒号结尾且不是段落格式，视为元素名称行
-                else if (/^[^段落][^：:]*[：:]\s*$/.test(trimmed)) {
-                    const elementName = trimmed.replace(/[：:]\s*$/, '').trim();
-                    // 保存上一个任务
-                    if (currentTask) {
-                        currentTask.prompt = promptLines.join('\n').trim();
-                        tasks.push(currentTask);
-                    }
-                    // 新任务：元素模式，无段落范围，默认放在章节末尾（-1）
-                    currentTask = {start: -1, end: -1, prompt: '', element: elementName};
-                    promptLines = [];
-                } else if (currentTask) {
-                    // 收集提示词行
-                    promptLines.push(line);
-                } else {
-                    // 在指令块内但未匹配到任何标记的行，忽略
-                }
-            }
-
-            // 处理最后一个任务
-            if (currentTask) {
-                currentTask.prompt = promptLines.join('\n').trim();
-                tasks.push(currentTask);
-            }
-
-            // 如果没有任何任务，将整个输出作为提示词，默认放在章节末尾
-            if (tasks.length === 0) {
-                tasks.push({start: -1, end: -1, prompt: output.trim(), element: null});
-            }
-
-            return tasks;
-        },
-
         /**
-         * 调用图像生成 API，使用指定的参数（覆盖默认配置）
+         * 调用图像生成 API（文生图）
          * @param {Object} params - 图像生成参数，必须包含 prompt，其他字段根据平台而定
          * @returns {Promise<string>} 生成的图片 Base64 数据（含 data URL 前缀）
          */
         async _callImageAPI(params) {
-
+            console.log(`[Workflow._callImageAPI] 开始调用，参数:`, {
+                prompt: params.prompt ? params.prompt.substring(0, 50) + '...' : '无',
+                source: params.source,
+                model: params.model,
+                size: params.size
+            });
 
             const config = this._getImageConfig(); // 获取全局唯一图像配置
 
-
             // 合并参数：params 中的字段优先于 config
-            const mergedParams = {...config, ...params};
-
-
-            const {source, apiUrl, key, model, timeout = 3600000} = mergedParams;
+            const mergedParams = { ...config, ...params };
+            const { source, apiUrl, key, model, timeout = 3600000 } = mergedParams;
             const url = apiUrl.replace(/\/+$/, '');
 
             // 构建组合信号
@@ -28021,11 +27285,9 @@
             signals.push(AbortSignal.timeout(timeout));
             const combinedSignal = AbortSignal.any(signals);
 
-
-            // 根据 source 调用对应平台的 API
             try {
-                if (source === 'openai') {
-                    // OpenAI DALL·E
+                // ----- OpenAI / 兼容平台 -----
+                if (source === 'openai' || source === 'deepseek' || source === 'siliconflow' || source === 'qwen' || source === 'glm' || source === 'mistral' || source === 'groq' || source === 'inference' || source === 'openrouter' || source === '4sapi') {
                     const headers = {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${key}`
@@ -28036,7 +27298,7 @@
                         n: mergedParams.n || 1,
                         size: mergedParams.size || '1024x1024',
                         quality: mergedParams.quality || 'standard',
-                        response_format: mergedParams.response_format || 'url',
+                        response_format: 'b64_json'
                     });
 
 
@@ -28044,34 +27306,23 @@
                         method: 'POST',
                         headers,
                         body,
-                        signal: combinedSignal,
+                        signal: combinedSignal
                     });
-
                     if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error(`[Workflow._callImageAPI] OpenAI 响应错误:`, errorText);
-                        throw new Error(`OpenAI 错误 (${response.status}): ${errorText}`);
+                        const errText = await response.text();
+                        throw new Error(`${source} 错误 (${response.status}): ${errText}`);
                     }
                     const data = await response.json();
-
-
-                    if (data.data && data.data[0] && data.data[0].url) {
-                        const imageUrl = data.data[0].url;
-
-                        const imgRes = await fetch(imageUrl, {signal: combinedSignal});
-                        const blob = await imgRes.blob();
-                        const base64 = await this._blobToBase64(blob);
-
-                        return base64;
-                    } else if (data.data && data.data[0] && data.data[0].b64_json) {
+                    if (data.data && data.data[0] && data.data[0].b64_json) {
                         const base64 = `data:image/png;base64,${data.data[0].b64_json}`;
 
                         return base64;
-                    } else {
-                        throw new Error('OpenAI 响应中没有图片数据');
                     }
-                } else if (source === 'sdwebui') {
-                    // Stable Diffusion WebUI
+                    throw new Error('响应中无图片数据');
+                }
+
+                // ----- SD WebUI -----
+                else if (source === 'sdwebui') {
                     const sdApiUrl = `${url}/sdapi/v1/txt2img`;
                     const payload = {
                         prompt: mergedParams.prompt,
@@ -28097,32 +27348,30 @@
 
                     const response = await fetch(sdApiUrl, {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
-                        signal: combinedSignal,
+                        signal: combinedSignal
                     });
-
                     if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`SD WebUI 错误 (${response.status}): ${errorText}`);
+                        const errText = await response.text();
+                        throw new Error(`SD WebUI 错误 (${response.status}): ${errText}`);
                     }
                     const data = await response.json();
-
-
                     if (data.images && data.images[0]) {
                         const base64Image = data.images[0];
                         return `data:image/png;base64,${base64Image}`;
-                    } else {
-                        throw new Error('SD WebUI 响应中没有图片数据');
                     }
-                } else if (source === 'stability') {
-                    // Stability AI
+                    throw new Error('SD WebUI 响应中无图片数据');
+                }
+
+                // ----- Stability AI -----
+                else if (source === 'stability') {
                     const headers = {
                         'Authorization': `Bearer ${key}`,
                         'Content-Type': 'application/json',
                     };
                     const body = JSON.stringify({
-                        text_prompts: [{text: mergedParams.prompt, weight: 1}],
+                        text_prompts: [{ text: mergedParams.prompt, weight: 1 }],
                         cfg_scale: mergedParams.cfg_scale || 7,
                         height: mergedParams.height || 512,
                         width: mergedParams.width || 512,
@@ -28131,27 +27380,25 @@
                     });
 
 
-                    const response = await fetch(`${url}/generation/${mergedParams.model || model}/text-to-image`, {
+                    const response = await fetch(`${url}/generation/${model}/text-to-image`, {
                         method: 'POST',
                         headers,
                         body,
-                        signal: combinedSignal,
+                        signal: combinedSignal
                     });
-
                     if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`Stability AI 错误 (${response.status}): ${errorText}`);
+                        const errText = await response.text();
+                        throw new Error(`Stability AI 错误 (${response.status}): ${errText}`);
                     }
                     const data = await response.json();
-
-
                     if (data.artifacts && data.artifacts[0] && data.artifacts[0].base64) {
                         return `data:image/png;base64,${data.artifacts[0].base64}`;
-                    } else {
-                        throw new Error('Stability AI 响应中没有图片数据');
                     }
-                } else if (source === 'midjourney') {
-                    // Midjourney 异步轮询
+                    throw new Error('Stability AI 响应中无图片数据');
+                }
+
+                // ----- Midjourney（异步轮询） -----
+                else if (source === 'midjourney') {
                     const submitRes = await fetch(`${url}/mj/submit`, {
                         method: 'POST',
                         headers: {
@@ -28162,14 +27409,13 @@
                             prompt: mergedParams.prompt,
                             model: mergedParams.model || 'midjourney-v7'
                         }),
-                        signal: combinedSignal,
+                        signal: combinedSignal
                     });
-
                     if (!submitRes.ok) {
-                        const errorText = await submitRes.text();
-                        throw new Error(`Midjourney 提交失败: ${errorText}`);
+                        const errText = await submitRes.text();
+                        throw new Error(`Midjourney 提交失败: ${errText}`);
                     }
-                    const {taskId} = await submitRes.json();
+                    const { taskId } = await submitRes.json();
 
 
                     const maxAttempts = 30;
@@ -28177,19 +27423,14 @@
                     for (let i = 0; i < maxAttempts; i++) {
                         await this.sleep(pollInterval);
                         const resultRes = await fetch(`${url}/mj/task/${taskId}`, {
-                            headers: {'Authorization': `Bearer ${key}`},
+                            headers: { 'Authorization': `Bearer ${key}` },
                             signal: combinedSignal,
                         });
-                        if (!resultRes.ok) {
-                            console.warn(`[Workflow._callImageAPI] 轮询响应非 OK，继续...`);
-                            continue;
-                        }
+                        if (!resultRes.ok) continue;
                         const data = await resultRes.json();
-
-
                         if (data.status === 'success') {
                             const imageUrl = data.imageUrl;
-                            const imgRes = await fetch(imageUrl);
+                            const imgRes = await fetch(imageUrl, { signal: combinedSignal });
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         } else if (data.status === 'failed') {
@@ -28197,8 +27438,10 @@
                         }
                     }
                     throw new Error('Midjourney 生成超时');
-                } else if (source === 'flux') {
-                    // Flux (兼容 OpenAI)
+                }
+
+                // ----- Flux（兼容 OpenAI） -----
+                else if (source === 'flux') {
                     const headers = {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${key}`,
@@ -28217,35 +27460,35 @@
                         body,
                         signal: combinedSignal,
                     });
-
                     if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`Flux 错误 (${response.status}): ${errorText}`);
+                        const errText = await response.text();
+                        throw new Error(`Flux 错误 (${response.status}): ${errText}`);
                     }
                     const data = await response.json();
-
-
                     if (data.data && data.data[0] && data.data[0].b64_json) {
                         return `data:image/png;base64,${data.data[0].b64_json}`;
                     } else if (data.data && data.data[0] && data.data[0].url) {
                         console.warn(`[Workflow._callImageAPI] Flux 返回了 URL，将下载并转换`);
-                        const imgRes = await fetch(data.data[0].url);
+                        const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
                         const blob = await imgRes.blob();
                         return await this._blobToBase64(blob);
-                    } else {
-                        throw new Error('Flux 响应中没有图片数据');
                     }
-                } else if (source === 'siliconflow') {
+                    throw new Error('Flux 响应中无图片数据');
+                }
+
+                // ----- Picsart -----
+                else if (source === 'picsart') {
                     const headers = {
-                        'Content-Type': 'application/json',
                         'Authorization': `Bearer ${key}`,
+                        'Content-Type': 'application/json'
                     };
                     const body = JSON.stringify({
-                        model: mergedParams.model || model,
+                        model: mergedParams.model || 'Picsart-AI',
                         prompt: mergedParams.prompt,
                         n: mergedParams.n || 1,
                         size: mergedParams.size || '1024x1024',
-                        response_format: mergedParams.response_format || 'b64_json',
+                        negative_prompt: mergedParams.negative_prompt || '',
+                        response_format: 'b64_json'
                     });
 
 
@@ -28253,23 +27496,27 @@
                         method: 'POST',
                         headers,
                         body,
-                        signal: combinedSignal,
+                        signal: combinedSignal
                     });
-
                     if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`SiliconFlow 错误 (${response.status}): ${errorText}`);
+                        const errText = await response.text();
+                        throw new Error(`Picsart 错误 (${response.status}): ${errText}`);
                     }
                     const data = await response.json();
-
-
                     if (data.data && data.data[0] && data.data[0].b64_json) {
                         return `data:image/png;base64,${data.data[0].b64_json}`;
-                    } else {
-                        throw new Error('SiliconFlow 响应中没有图片数据');
                     }
-                } else if (source === 'other') {
-                    // 通用 OpenAI 兼容接口
+                    throw new Error('Picsart 响应中无图片数据');
+                }
+
+                // ----- Sora（视频生成，不支持图像）-----
+                else if (source === 'sora') {
+                    // Sora 只支持视频，尝试视频生成？但系统目前无视频存储，所以抛出错误
+                    throw new Error('Sora 平台仅支持视频生成，不支持图像生成。如需视频功能，请使用其他服务。');
+                }
+
+                // ----- other / 自定义平台（兼容 OpenAI 格式）-----
+                else if (source === 'other') {
                     const headers = {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${key}`,
@@ -28279,7 +27526,7 @@
                         prompt: mergedParams.prompt,
                         n: mergedParams.n || 1,
                         size: mergedParams.size || '1024x1024',
-                        response_format: mergedParams.response_format || 'b64_json',
+                        response_format: 'b64_json',
                     });
 
 
@@ -28289,31 +27536,27 @@
                         body,
                         signal: combinedSignal,
                     });
-
                     if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`Other API 错误 (${response.status}): ${errorText}`);
+                        const errText = await response.text();
+                        throw new Error(`Other API 错误 (${response.status}): ${errText}`);
                     }
                     const data = await response.json();
-
-
                     if (data.data && data.data[0] && data.data[0].b64_json) {
                         return `data:image/png;base64,${data.data[0].b64_json}`;
                     } else if (data.data && data.data[0] && data.data[0].url) {
-                        const imgRes = await fetch(data.data[0].url);
+                        const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
                         const blob = await imgRes.blob();
                         return await this._blobToBase64(blob);
-                    } else {
-                        throw new Error('无法识别的响应格式');
                     }
-                } else {
+                    throw new Error('无法识别的响应格式');
+                }
+
+                else {
                     throw new Error(`不支持的图像平台: ${source}`);
                 }
             } catch (err) {
                 console.error(`[Workflow._callImageAPI] 调用失败:`, err);
                 throw err;
-            } finally {
-
             }
         },
 
@@ -29135,82 +28378,150 @@
             return collected;
         },
 
-        // 在 Workflow 对象内添加以下方法
-        async _uploadFile(apiConfig, fileBlob, purpose = 'assistants') {
-            const {source, apiUrl, key, timeout = 3600000} = apiConfig;
+        /**
+         * 上传文件到指定平台（仅支持代码中已定义且有明确上传能力的平台）
+         * @param {Object} config - API配置对象（包含 source, apiUrl, key 等）
+         * @param {Blob} fileBlob - 要上传的文件 Blob
+         * @param {string} purpose - 上传目的（如 'assistants', 'file-extract', 'ocr' 等，部分平台忽略）
+         * @param {Object} options - 可选参数（如 fileName, mimeType）
+         * @param {AbortSignal} signal - 中断信号（可选）
+         * @returns {Promise<{fileId: string, fileName?: string}>} 返回远程文件标识（ID 或 URI）
+         */
+        async _uploadFile(config, fileBlob, purpose = 'assistants', options = {}, signal = null) {
+            const { source, apiUrl, key } = config;
             const url = apiUrl.replace(/\/+$/, '');
-            const signals = [];
-            if (WORKFLOW_STATE.abortController) signals.push(WORKFLOW_STATE.abortController.signal);
-            signals.push(AbortSignal.timeout(timeout));
-            const combinedSignal = AbortSignal.any(signals);
+            const fileName = options.fileName || fileBlob.name || 'uploaded_file';
+            const mimeType = options.mimeType || fileBlob.type || 'application/octet-stream';
 
-            // 构建 FormData
-            const formData = new FormData();
-            formData.append('purpose', purpose);
-            formData.append('file', fileBlob, fileBlob.name); // 保留原文件名
+            const timeout = config.timeout || 3600000;
+            const timeoutSignal = AbortSignal.timeout(timeout);
+            const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
 
 
-            // 根据 source 选择上传端点
-            let uploadUrl;
-            let headers = {
-                'Authorization': `Bearer ${key}`
-            };
 
-            if (source === 'openai' || source === 'deepseek' || source === 'siliconflow' || source === 'qwen' || source === 'other') {
-                // OpenAI 兼容格式：使用 /files
-                uploadUrl = `${url}/files`;
+            // 定义 OpenAI 兼容平台列表（支持 /files 上传，返回 id）
+            const openaiCompatible = [
+                'openai', 'deepseek', 'siliconflow', 'qwen', 'glm', 'mistral',
+                'groq', 'inference', 'openrouter', '4sapi', 'other'
+            ];
 
-            } else if (source === 'claude') {
-                // Claude 使用 /files
-                uploadUrl = `${url}/files`;
-                // Claude 的认证头可能不同，但多数代理仍用 Bearer
+            // ---------- 1. OpenAI 兼容平台 ----------
+            if (openaiCompatible.includes(source)) {
+                const uploadUrl = `${url}/files`;
 
-            } else if (source === 'gemini') {
-                // Gemini 使用 /upload/v1beta/files
-                uploadUrl = `${url}/upload/v1beta/files`;
-                // Gemini 需要将 API key 放在 URL 参数中
-                uploadUrl += `?key=${key}`;
-                delete headers.Authorization; // 移除 Bearer 头
-
-            } else {
-                throw new Error(`[Workflow._uploadFile] 不支持的平台文件上传: ${source}`);
-            }
-
-            try {
-
-                const startTime = Date.now();
+                const formData = new FormData();
+                formData.append('file', fileBlob, fileName);
+                formData.append('purpose', purpose);
                 const response = await fetch(uploadUrl, {
                     method: 'POST',
-                    headers: source === 'gemini' ? {} : headers, // Gemini 不用额外头
+                    headers: { 'Authorization': `Bearer ${key}` },
                     body: formData,
                     signal: combinedSignal,
                 });
-                const elapsed = Date.now() - startTime;
-
-
                 if (!response.ok) {
                     const errText = await response.text();
-                    console.error(`[Workflow._uploadFile] 上传失败: ${response.status} ${response.statusText}`, errText);
-                    throw new Error(`文件上传失败 (${response.status}): ${errText}`);
+                    throw new Error(`OpenAI 兼容平台文件上传失败 (${response.status}): ${errText}`);
                 }
-
                 const data = await response.json();
+                if (!data.id) throw new Error('上传响应中无文件 ID');
+                return { fileId: data.id, fileName };
+            }
 
+            // ---------- 2. Claude ----------
+            else if (source === 'claude') {
+                const uploadUrl = `${url}/files`;
 
-                // 不同平台返回的文件ID字段可能不同，标准化处理
-                let fileId = data.id || data.file?.id || data.file_id;
-                if (!fileId) {
-                    console.error('[Workflow._uploadFile] 响应中未找到文件ID', data);
-                    throw new Error('上传响应中无文件ID');
+                const formData = new FormData();
+                formData.append('file', fileBlob, fileName);
+                formData.append('purpose', purpose);
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    headers: { 'x-api-key': key },
+                    body: formData,
+                    signal: combinedSignal,
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Claude 文件上传失败 (${response.status}): ${errText}`);
                 }
+                const data = await response.json();
+                if (!data.id) throw new Error('Claude 响应中无文件 ID');
+                return { fileId: data.id, fileName };
+            }
+
+            // ---------- 3. Gemini ----------
+            else if (source === 'gemini') {
+                const uploadUrl = `${url}/upload/v1beta/files?key=${key}`;
 
 
-                return {fileId, fileName: fileBlob.name};
-            } catch (err) {
-                console.error('[Workflow._uploadFile] 上传过程中发生异常:', err);
-                throw err;
-            } finally {
+                // 构造 multipart/related 请求体
+                const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+                const headers = {
+                    'Content-Type': `multipart/related; boundary=${boundary}`,
+                    'X-Goog-Upload-Protocol': 'multipart',
+                };
+                const metadata = JSON.stringify({ file: { displayName: fileName } });
+                const fileBuffer = await fileBlob.arrayBuffer();
+                const encoder = new TextEncoder();
+                const crlf = '\r\n';
+                const boundaryBytes = encoder.encode(`--${boundary}${crlf}`);
+                const metadataPart = encoder.encode(
+                    `Content-Type: application/json; charset=UTF-8${crlf}${crlf}${metadata}${crlf}`
+                );
+                const filePart = encoder.encode(
+                    `--${boundary}${crlf}Content-Type: ${mimeType}${crlf}${crlf}`
+                );
+                const fileEnd = encoder.encode(`${crlf}--${boundary}--${crlf}`);
+                const totalLength = boundaryBytes.length + metadataPart.length + filePart.length + fileBuffer.byteLength + fileEnd.length;
+                const body = new Uint8Array(totalLength);
+                let offset = 0;
+                body.set(boundaryBytes, offset); offset += boundaryBytes.length;
+                body.set(metadataPart, offset); offset += metadataPart.length;
+                body.set(filePart, offset); offset += filePart.length;
+                body.set(new Uint8Array(fileBuffer), offset); offset += fileBuffer.byteLength;
+                body.set(fileEnd, offset);
 
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    headers: headers,
+                    body: body,
+                    signal: combinedSignal,
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Gemini 文件上传失败 (${response.status}): ${errText}`);
+                }
+                const data = await response.json();
+                if (!data.file || !data.file.uri) throw new Error('Gemini 响应中无文件 URI');
+                return { fileId: data.file.uri, fileName };
+            }
+
+            // ---------- 4. 豆包 (Doubao) ----------
+            else if (source === 'doubao') {
+                const uploadUrl = `${url}/v1/files`;
+
+                const formData = new FormData();
+                formData.append('file', fileBlob, fileName);
+                if (purpose) formData.append('purpose', purpose);
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${key}` },
+                    body: formData,
+                    signal: combinedSignal,
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`豆包文件上传失败 (${response.status}): ${errText}`);
+                }
+                const data = await response.json();
+                const fileId = data.id || data.file_id;
+                if (!fileId) throw new Error('豆包响应中无文件 ID');
+                return { fileId, fileName };
+            }
+
+            // ---------- 5. 其他平台（如 wenxin, huggingface 等）不支持文件上传 ----------
+            else {
+                throw new Error(`[Workflow._uploadFile] 平台 ${source} 不支持文件上传功能`);
             }
         },
 
@@ -29261,13 +28572,12 @@
         },
 
         /**
-         * 音乐生成 API 调用（新版，使用 params 对象）
+         * 音乐生成 API 调用
          */
         async _callMusicGeneration(source, url, key, params, signal) {
 
 
             if (source === 'elevenlabs') {
-                // ElevenLabs 音乐生成（假设存在 /music-generations）
                 const endpoint = `${url}/music-generations`;
                 const body = {
                     text: params.prompt,
@@ -29276,6 +28586,7 @@
                     top_k: params.top_k || 40,
                     ...params
                 };
+
                 const response = await fetch(endpoint, {
                     method: 'POST',
                     headers: {
@@ -29285,51 +28596,450 @@
                     body: JSON.stringify(body),
                     signal,
                 });
-                if (!response.ok) throw new Error(`ElevenLabs 音乐生成失败: ${await response.text()}`);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`ElevenLabs 音乐生成失败: ${errText}`);
+                }
                 return await response.blob();
-            } else if (source === 'stableaudio') {
-                // Stable Audio
+            }
+
+            else if (source === 'stableaudio') {
                 const endpoint = `${url}/v2beta/audio/stable-audio-2/text-to-audio`;
                 const formData = new FormData();
                 formData.append('prompt', params.prompt);
                 formData.append('duration', params.duration || 30);
                 formData.append('output_format', params.output_format || 'mp3');
+
                 const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: {'Authorization': `Bearer ${key}`},
+                    headers: { 'Authorization': `Bearer ${key}` },
                     body: formData,
                     signal,
                 });
-                if (!response.ok) throw new Error(`Stable Audio 生成失败: ${await response.text()}`);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Stable Audio 生成失败: ${errText}`);
+                }
                 return await response.blob();
-            } else if (source === 'huggingface') {
+            }
+
+            else if (source === 'huggingface') {
                 const model = params.model || 'facebook/musicgen-small';
                 const endpoint = `https://api-inference.huggingface.co/models/${model}`;
+
                 const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: {'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json'},
-                    body: JSON.stringify({inputs: params.prompt}),
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ inputs: params.prompt }),
                     signal,
                 });
-                if (!response.ok) throw new Error(`Hugging Face 错误: ${await response.text()}`);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Hugging Face 错误: ${errText}`);
+                }
                 return await response.blob();
-            } else {
-                // 通用自定义平台（假设返回音频 blob）
+            }
+
+            else if (source === 'minimax' || source === 'minimax-music') {
+                // MiniMax 音乐生成
+                const groupId = params.group_id || '';
+                const headers = {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json'
+                };
+                const requestBody = {
+                    model: params.model || 'music-2.5+',
+                    prompt: params.prompt || '',
+                    lyrics: params.lyrics || '',
+                    audio_setting: {
+                        sample_rate: params.sample_rate || 44100,
+                        bitrate: params.bitrate || 256000,
+                        format: params.format || 'mp3'
+                    }
+                };
+
+                // 如果有参考音频 ID
+                if (params.reference_audio_id) {
+                    const audioBlob = await AudioStore.get(params.reference_audio_id);
+                    if (audioBlob) {
+                        const base64Audio = await this._blobToBase64(audioBlob);
+                        requestBody.reference_audio = base64Audio.split(',')[1];
+                    }
+                }
+
+                const response = await fetch(`${url}/music_generation?GroupId=${groupId}`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(requestBody),
+                    signal
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`MiniMax 错误 (${response.status}): ${errText}`);
+                }
+
+                const data = await response.json();
+                if (data.data && data.data.audio) {
+                    const audioBuffer = Buffer.from(data.data.audio, 'hex');
+                    return new Blob([audioBuffer], { type: 'audio/mpeg' });
+                }
+                throw new Error('MiniMax 响应中无音频数据');
+            }
+
+            else if (source === 'mureka') {
+                const headers = {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json'
+                };
+                const requestBody = {
+                    prompt: params.prompt,
+                    lyrics: params.lyrics,
+                    model: params.model || 'mureka-v8',
+                    duration: params.duration || 120,
+                    genre: params.genre || 'pop',
+                    mood: params.mood || 'upbeat',
+                    vocal: params.vocal !== false,
+                    stem_separation: params.stem_separation || false,
+                    output_format: params.format || 'mp3'
+                };
+
+                if (params.reference_audio_id) {
+                    const audioBlob = await AudioStore.get(params.reference_audio_id);
+                    if (audioBlob) {
+                        const base64Audio = await this._blobToBase64(audioBlob);
+                        requestBody.reference_audio = base64Audio;
+                    }
+                }
+
+                const response = await fetch(`${url}/mureka/music/generate`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(requestBody),
+                    signal
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Mureka 错误 (${response.status}): ${errText}`);
+                }
+
+                const data = await response.json();
+                if (data.audio_url) {
+                    const audioRes = await fetch(data.audio_url, { signal });
+                    return await audioRes.blob();
+                }
+                throw new Error('Mureka 响应中无音频数据');
+            }
+
+            else if (source === 'mubert') {
+                const customerId = params.customer_id || '';
+                const headers = {
+                    'customer-id': customerId,
+                    'access-token': key,
+                    'Content-Type': 'application/json'
+                };
+
+                // 获取标签
+                const tagsResponse = await fetch(`${url}/api/v3/public/tags`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({ text: params.prompt, pat: key }),
+                    signal
+                });
+                if (!tagsResponse.ok) throw new Error(`Mubert 标签获取失败: ${await tagsResponse.text()}`);
+                const tagsData = await tagsResponse.json();
+                const tags = tagsData.data?.tags?.map(t => t.value) || [];
+
+                // 生成音乐
+                const generateBody = {
+                    playlist_index: params.playlist_index || '1.0.0',
+                    duration: params.duration || 60,
+                    bitrate: params.bitrate || 128,
+                    format: params.format || 'mp3',
+                    intensity: params.intensity || 'medium',
+                    mode: params.mode || 'track',
+                    tags: tags.slice(0, 3)
+                };
+
+                const response = await fetch(`${url}/api/v3/public/tracks`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(generateBody),
+                    signal
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Mubert 生成错误 (${response.status}): ${errText}`);
+                }
+
+                const data = await response.json();
+                if (data.data?.tasks?.[0]?.download_link) {
+                    const audioRes = await fetch(data.data.tasks[0].download_link, { signal });
+                    return await audioRes.blob();
+                }
+                throw new Error('Mubert 响应中无音频数据');
+            }
+
+            else if (source === 'aiva') {
+                const headers = {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json'
+                };
+                const requestBody = {
+                    style_preset: params.style || 'cinematic',
+                    mood: params.mood || 'epic',
+                    tempo: params.tempo || 120,
+                    key_signature: params.key || 'C',
+                    duration: params.duration || 120,
+                    instrumentation: params.instrumentation || ['piano', 'strings'],
+                    output_format: params.format || 'mp3'
+                };
+
+                if (params.influence_audio_id) {
+                    const audioBlob = await AudioStore.get(params.influence_audio_id);
+                    if (audioBlob) {
+                        const base64Audio = await this._blobToBase64(audioBlob);
+                        requestBody.influence_track = base64Audio;
+                    }
+                }
+
+                const response = await fetch(`${url}/compositions`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(requestBody),
+                    signal
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`AIVA 错误 (${response.status}): ${errText}`);
+                }
+
+                const data = await response.json();
+                if (data.audio_url) {
+                    const audioRes = await fetch(data.audio_url, { signal });
+                    return await audioRes.blob();
+                }
+                throw new Error('AIVA 响应中无音频数据');
+            }
+
+            else if (source === 'wondera') {
+                const headers = {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json'
+                };
+                const requestBody = {
+                    text: params.prompt,
+                    genre: params.genre || 'pop',
+                    bpm: params.bpm || 120,
+                    vocal_gender: params.vocal_gender || 'female',
+                    mood: params.mood || 'upbeat',
+                    duration: params.duration || 60,
+                    format: params.format || 'mp3'
+                };
+
+                const response = await fetch(`${url}/generate`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(requestBody),
+                    signal
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Wondera 错误 (${response.status}): ${errText}`);
+                }
+
+                const data = await response.json();
+                if (data.id) {
+                    // 轮询结果
+                    const taskId = data.id;
+                    const maxAttempts = 30;
+                    for (let i = 0; i < maxAttempts; i++) {
+                        await this.sleep(2000);
+                        const statusRes = await fetch(`${url}/tasks/${taskId}`, {
+                            headers: { 'Authorization': `Bearer ${key}` },
+                            signal
+                        });
+                        if (statusRes.ok) {
+                            const statusData = await statusRes.json();
+                            if (statusData.status === 'completed' && statusData.audio_url) {
+                                const audioRes = await fetch(statusData.audio_url, { signal });
+                                return await audioRes.blob();
+                            }
+                        }
+                    }
+                    throw new Error('Wondera 生成超时');
+                }
+                throw new Error('Wondera 响应中无任务 ID');
+            }
+
+            else if (source === 'riffusion') {
+                let endpoint = '/riff';
+                let requestBody;
+
+                if (params.topic && !params.prompts) {
+                    endpoint = '/topic';
+                    requestBody = { topic: params.topic };
+                } else {
+                    requestBody = {
+                        prompts: params.prompts || [{ text: params.prompt || '' }],
+                        lyrics: params.lyrics || '',
+                        seed: params.seed,
+                        variations: params.variations
+                    };
+                }
+
+                const headers = {
+                    'Api-Key': key,
+                    'Content-Type': 'application/json'
+                };
+
+                const response = await fetch(`${url}${endpoint}`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(requestBody),
+                    signal
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Riffusion 错误 (${response.status}): ${errText}`);
+                }
+
+                const data = await response.json();
+                if (data.audio_b64) {
+                    const audioBuffer = Buffer.from(data.audio_b64, 'base64');
+                    return new Blob([audioBuffer], { type: 'audio/wav' });
+                }
+                throw new Error('Riffusion 响应中无音频数据');
+            }
+
+            else if (source === 'audiocraft') {
+                if (url.includes('replicate.com')) {
+                    // Replicate API
+                    const headers = {
+                        'Authorization': `Token ${key}`,
+                        'Content-Type': 'application/json'
+                    };
+                    const requestBody = {
+                        version: "meta/musicgen:7a76a82589b232707230f000aef37f75b5deccf4b5b0e3b5e1e0f2e2e2e2e2e",
+                        input: {
+                            prompt: params.prompt,
+                            model_version: params.model?.replace('facebook/', '') || 'musicgen-large',
+                            duration: params.duration || 8,
+                            temperature: params.temperature || 1.0,
+                            top_k: params.top_k || 250,
+                            top_p: params.top_p || 0.0,
+                            cfg_coef: params.cfg_scale || 3.0
+                        }
+                    };
+
+                    if (params.melody_audio_id) {
+                        const audioBlob = await AudioStore.get(params.melody_audio_id);
+                        if (audioBlob) {
+                            const base64Audio = await this._blobToBase64(audioBlob);
+                            requestBody.input.input_audio = base64Audio;
+                            requestBody.input.continuation = true;
+                        }
+                    }
+
+                    const response = await fetch(`${url}/predictions`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify(requestBody),
+                        signal
+                    });
+
+                    if (!response.ok) {
+                        const errText = await response.text();
+                        throw new Error(`Replicate 错误 (${response.status}): ${errText}`);
+                    }
+
+                    const data = await response.json();
+                    const maxAttempts = 60;
+                    for (let i = 0; i < maxAttempts; i++) {
+                        await this.sleep(2000);
+                        const pollRes = await fetch(`${url}/predictions/${data.id}`, {
+                            headers: { 'Authorization': `Token ${key}` },
+                            signal
+                        });
+                        if (pollRes.ok) {
+                            const pollData = await pollRes.json();
+                            if (pollData.status === 'succeeded' && pollData.output) {
+                                const audioRes = await fetch(pollData.output, { signal });
+                                return await audioRes.blob();
+                            } else if (pollData.status === 'failed') {
+                                throw new Error('AudioCraft 生成失败');
+                            }
+                        }
+                    }
+                    throw new Error('AudioCraft 生成超时');
+                } else {
+                    // 本地部署
+                    const response = await fetch(`${url}/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            prompt: params.prompt,
+                            duration: params.duration || 10,
+                            temperature: params.temperature || 1.0,
+                            top_k: params.top_k || 250,
+                            top_p: params.top_p || 0.0,
+                            cfg_coef: params.cfg_scale || 3.0
+                        }),
+                        signal
+                    });
+                    if (!response.ok) {
+                        const errText = await response.text();
+                        throw new Error(`本地 AudioCraft 错误: ${errText}`);
+                    }
+                    return await response.blob();
+                }
+            }
+
+            else if (source === 'openai-tts') {
+                throw new Error('OpenAI TTS 不支持音乐生成，请使用语音克隆模式');
+            }
+
+            else if (source === 'azure-tts' || source === 'google-tts') {
+                throw new Error(`${source} 不支持音乐生成，请使用语音克隆模式`);
+            }
+
+            // 其他未实现平台
+            else if (source === 'minimax-speech' || source === 'edge-tts' || source === 'lalal' || source === 'custom') {
+                throw new Error(`音乐生成平台 ${source} 不支持音乐生成，请检查配置`);
+            }
+
+            else if (source === 'other') {
+                // other 平台：用户自定义，直接转发请求，期望返回音频 blob
+
                 const response = await fetch(url, {
                     method: 'POST',
-                    headers: {'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json'},
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
                     body: JSON.stringify(params),
                     signal,
                 });
-                if (!response.ok) throw new Error(`自定义音乐 API 错误: ${await response.text()}`);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`自定义音乐 API 错误: ${errText}`);
+                }
                 return await response.blob();
+            }
+
+            else {
+                throw new Error(`不支持的音频平台: ${source}`);
             }
         },
 
         /**
-         * 语音克隆 API 调用（新版）
-         */
+        * 语音克隆 API 调用
+        */
         async _callVoiceCloning(source, url, key, params, signal) {
+
+
             if (source === 'elevenlabs') {
                 // 步骤1：创建克隆语音（如果未提供 voiceId）
                 let voiceId = params.voiceId;
@@ -29340,7 +29050,7 @@
                     formData.append('description', params.description || 'Cloned voice');
                     const cloneRes = await fetch(`${url}/voices/add`, {
                         method: 'POST',
-                        headers: {'xi-api-key': key},
+                        headers: { 'xi-api-key': key },
                         body: formData,
                         signal,
                     });
@@ -29361,40 +29071,313 @@
                         use_speaker_boost: params.use_speaker_boost ?? true,
                     },
                 };
+
                 const ttsRes = await fetch(`${url}/text-to-speech/${voiceId}`, {
                     method: 'POST',
-                    headers: {'xi-api-key': key, 'Content-Type': 'application/json'},
+                    headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
                     body: JSON.stringify(ttsBody),
                     signal,
                 });
                 if (!ttsRes.ok) throw new Error(`语音合成失败: ${await ttsRes.text()}`);
                 return await ttsRes.blob();
-            } else {
-                // 其他平台占位，需用户自行实现
-                throw new Error(`语音克隆平台 ${source} 未完全实现，请使用 ElevenLabs 或自定义接口`);
+            }
+
+            else if (source === 'minimax' || source === 'minimax-speech') {
+                // MiniMax 语音合成（支持克隆）
+                const groupId = params.group_id || '';
+                let voiceId = params.voice_id;
+
+                // 如果有样本音频，先克隆
+                if (params.voice_sample_id && !voiceId) {
+                    const sampleBlob = await AudioStore.get(params.voice_sample_id);
+                    if (sampleBlob) {
+                        const formData = new FormData();
+                        formData.append('file', sampleBlob, 'sample.mp3');
+                        formData.append('voice_id', `voice_${Date.now()}`);
+
+                        const cloneRes = await fetch(`${url}/voice_clone?GroupId=${groupId}`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${key}` },
+                            body: formData,
+                            signal
+                        });
+                        if (cloneRes.ok) {
+                            const cloneData = await cloneRes.json();
+                            voiceId = cloneData.voice_id;
+                        }
+                    }
+                }
+
+                const headers = {
+                    'Authorization': `Bearer ${key}`,
+                    'Content-Type': 'application/json'
+                };
+                const requestBody = {
+                    model: params.model || 'speech-2.8-hd',
+                    text: params.text,
+                    voice_id: voiceId || 'male-qn-qingse',
+                    speed: params.speed || 1.0,
+                    pitch: params.pitch || 0,
+                    volume: params.volume || 1.0,
+                    emotion: params.emotion || 'neutral',
+                    language: params.language || 'zh-CN',
+                    audio_format: params.format || 'mp3',
+                    sample_rate: params.sample_rate || 32000
+                };
+
+                const response = await fetch(`${url}/t2a_v2?GroupId=${groupId}`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(requestBody),
+                    signal
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`MiniMax TTS 错误 (${response.status}): ${errText}`);
+                }
+
+                const data = await response.json();
+                if (data.audio_url) {
+                    const audioRes = await fetch(data.audio_url, { signal });
+                    return await audioRes.blob();
+                }
+                throw new Error('MiniMax 响应中无音频数据');
+            }
+
+            else if (source === 'azure-tts') {
+                if (!params.voiceId) throw new Error('Azure TTS 需要提供 voiceId');
+                const region = params.region || 'eastus';
+                const endpoint = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+                const ssml = `<speak version='1.0' xml:lang='${params.lang || 'zh-CN'}'><voice name='${params.voiceId}'>${params.text}</voice></speak>`;
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Ocp-Apim-Subscription-Key': key,
+                        'Content-Type': 'application/ssml+xml',
+                        'X-Microsoft-OutputFormat': params.outputFormat || 'audio-16khz-128kbitrate-mono-mp3'
+                    },
+                    body: ssml,
+                    signal
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Azure TTS 错误: ${errText}`);
+                }
+                return await response.blob();
+            }
+
+            else if (source === 'google-tts') {
+                if (!params.voiceId) throw new Error('Google TTS 需要提供 voiceId');
+                const endpoint = `${url}/text:synthesize?key=${key}`;
+                const body = {
+                    input: { text: params.text },
+                    voice: { languageCode: params.languageCode || 'zh-CN', name: params.voiceId },
+                    audioConfig: { audioEncoding: params.audioEncoding || 'MP3' }
+                };
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Google TTS 错误: ${errText}`);
+                }
+                const data = await response.json();
+                if (data.audioContent) {
+                    const base64 = data.audioContent;
+                    return this._base64ToBlob(base64, 'audio/mp3');
+                }
+                throw new Error('Google TTS 响应中无音频数据');
+            }
+
+            else if (source === 'huggingface') {
+                const model = params.model || 'facebook/tts_transformer';
+                const endpoint = `https://api-inference.huggingface.co/models/${model}`;
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ inputs: params.text }),
+                    signal
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Hugging Face 错误: ${errText}`);
+                }
+                return await response.blob();
+            }
+
+            else if (source === 'openai-tts') {
+                const endpoint = `${url}/audio/speech`;
+                const body = {
+                    model: params.model || 'tts-1',
+                    input: params.text,
+                    voice: params.voiceId || 'alloy',
+                    response_format: params.response_format || 'mp3'
+                };
+
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`OpenAI TTS 错误: ${errText}`);
+                }
+                return await response.blob();
+            }
+
+            else if (source === 'edge-tts') {
+                const proxyUrl = params.proxy_url || url;
+                const voice = params.voiceId || 'zh-CN-XiaoxiaoNeural';
+                const rate = params.rate || '+0%';
+                const volume = params.volume || '+0%';
+                const pitch = params.pitch || '+0Hz';
+
+                const ssml = `
+                    <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis"
+                        xmlns:mstts="https://www.w3.org/2001/mstts"
+                        xml:lang="${voice.split('-')[0]}-${voice.split('-')[1]}">
+                        <voice name="${voice}">
+                            <prosody rate="${rate}" volume="${volume}" pitch="${pitch}">
+                                ${params.text}
+                            </prosody>
+                        </voice>
+                    </speak>
+                `;
+
+                const response = await fetch(proxyUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/ssml+xml' },
+                    body: ssml,
+                    signal
+                });
+                if (!response.ok) throw new Error(`Edge TTS 错误: ${await response.text()}`);
+                return await response.blob();
+            }
+
+            else if (source === 'lalal' || source === 'riffusion' || source === 'audiocraft' || source === 'mureka' || source === 'mubert' || source === 'aiva' || source === 'wondera' || source === 'minimax-music' || source === 'stableaudio' || source === 'custom') {
+                throw new Error(`语音克隆平台 ${source} 不支持语音克隆，请使用 elevenlabs、azure-tts、google-tts 等`);
+            }
+
+            else if (source === 'other') {
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params),
+                    signal,
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`自定义语音克隆 API 错误: ${errText}`);
+                }
+                return await response.blob();
+            }
+
+            else {
+                throw new Error(`不支持的音频平台: ${source}`);
             }
         },
 
         /**
-         * 音频编辑 API 调用（新版）
+         * 音频编辑 API 调用
          */
         async _callAudioEditing(source, url, key, params, signal) {
+
+
             if (source === 'stableaudio') {
-                // Stable Audio 编辑（假设存在）
                 const endpoint = `${url}/v2beta/audio/stable-audio-2/audio-to-audio`;
                 const formData = new FormData();
                 formData.append('audio_file', params.sourceAudioBlob, 'input.wav');
                 formData.append('prompt', params.prompt || '');
+
                 const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: {'Authorization': `Bearer ${key}`},
+                    headers: { 'Authorization': `Bearer ${key}` },
                     body: formData,
                     signal,
                 });
-                if (!response.ok) throw new Error(`Stable Audio 编辑失败: ${await response.text()}`);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Stable Audio 编辑失败: ${errText}`);
+                }
                 return await response.blob();
-            } else {
-                throw new Error(`音频编辑平台 ${source} 暂未实现，请使用 Stable Audio 或自定义接口`);
+            }
+
+            else if (source === 'lalal') {
+                // LALAL.AI 音频分离
+                if (!params.source_audio_id) throw new Error('LALAL.AI 需要源音频 ID');
+                const audioBlob = await AudioStore.get(params.source_audio_id);
+                if (!audioBlob) throw new Error(`音频 ${params.source_audio_id} 不存在`);
+
+                const formData = new FormData();
+                formData.append('file', audioBlob, 'audio.mp3');
+                formData.append('stem', params.stem || 'vocals,drums,bass,other');
+                formData.append('noise_reduction', String(params.noise_reduction || false));
+                formData.append('enhanced', String(params.enhanced || true));
+
+                const response = await fetch(`${url}/split`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${key}` },
+                    body: formData,
+                    signal
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`LALAL.AI 错误 (${response.status}): ${errText}`);
+                }
+
+                const data = await response.json();
+                // 返回多个分轨，需要合并？此处简化：只返回第一个分轨
+                if (data.result?.stems?.length > 0) {
+                    const stemRes = await fetch(data.result.stems[0].url, { signal });
+                    return await stemRes.blob();
+                }
+                throw new Error('LALAL.AI 响应中无音频数据');
+            }
+
+            else if (source === 'elevenlabs') {
+                throw new Error('ElevenLabs 暂不支持音频编辑');
+            }
+
+            else if (source === 'huggingface') {
+                throw new Error('Hugging Face 音频编辑请使用 specific 模型并通过 other 自定义');
+            }
+
+            else if (source === 'openai-tts' || source === 'azure-tts' || source === 'google-tts') {
+                throw new Error(`${source} 不支持音频编辑`);
+            }
+
+            else if (source === 'minimax' || source === 'minimax-music' || source === 'minimax-speech' || source === 'mureka' || source === 'mubert' || source === 'aiva' || source === 'wondera' || source === 'edge-tts' || source === 'riffusion' || source === 'audiocraft' || source === 'custom') {
+                throw new Error(`音频编辑平台 ${source} 尚未实现，请使用 other 自定义`);
+            }
+
+            else if (source === 'other') {
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(params),
+                    signal,
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`自定义音频编辑 API 错误: ${errText}`);
+                }
+                return await response.blob();
+            }
+
+            else {
+                throw new Error(`不支持的音频平台: ${source}`);
             }
         },
 
