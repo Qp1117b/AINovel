@@ -15226,7 +15226,6 @@
             });
         }
 
-        // ==================== 修改后的 ConfigEditor._renderApiProperties 方法 ====================
         _renderApiProperties(apiId) {
             console.debug(`[ConfigEditor._renderApiProperties] 渲染 API 属性: ${apiId}`);
 
@@ -15402,12 +15401,15 @@
                     updateField('source', newSource);
                 }
 
-                // 自动填充默认 URL（如果当前 URL 为空或与之前的默认不匹配）
+                // 自动填充默认 URL（如果当前 URL 为空）
                 const urlInput = panel.querySelector('#api-url');
                 if (urlInput && defaultApiUrls[newSource] && !urlInput.value.trim()) {
                     urlInput.value = defaultApiUrls[newSource];
                     updateField('apiUrl', defaultApiUrls[newSource]);
                 }
+
+                // 主动触发 source 的 change 事件，确保后续处理（如重新渲染额外字段）执行
+                sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
             };
 
             // 默认 API URL 映射
@@ -15557,10 +15559,10 @@
                 const currentType = typeSelect.value;
                 updateField('mode', newMode);
 
-                // 更新平台下拉框
+                // 更新平台下拉框（自动触发 source 的 change 事件）
                 updateSourceOptions(currentType, newMode);
 
-                // 重新渲染额外字段（因为某些模式可能有专用参数）
+                // 重新渲染额外字段（由于上面 updateSourceOptions 会触发 source change，此句可省略，但保留无害）
                 renderExtraFields();
             });
 
