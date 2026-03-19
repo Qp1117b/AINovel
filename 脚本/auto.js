@@ -445,15 +445,23 @@
 
 
     function validateConfig(json) {
-
+        console.debug('[validateConfig] ========== 开始校验配置 ==========');
+        console.debug('[validateConfig] 配置概览:',
+            `version=${json.version}, description=${json.description}, mode=${json.mode}`);
+        console.debug('[validateConfig] agents 数量:', json.agents ? Object.keys(json.agents).length : 0);
+        console.debug('[validateConfig] workflowStages 数量:', json.workflowStages ? json.workflowStages.length : 0);
 
         const errors = [];
 
         // 辅助函数：添加错误
-        const addError = (msg) => errors.push(msg);
+        const addError = (msg) => {
+            console.warn('[validateConfig] 校验错误:', msg);
+            errors.push(msg);
+        };
 
         // ---------- 1. 校验全局数值配置 ----------
         (function validateGlobal() {
+            console.debug('[validateGlobal] 校验全局数值...');
 
             if (json.maxStateBooks === undefined) addError('缺少必填字段 maxStateBooks');
             else {
@@ -496,17 +504,17 @@
             } else if (!['normal', 'datafication', 'interactive'].includes(json.mode)) {
                 addError('mode 必须是 "normal"、"datafication" 或 "interactive" 之一');
             }
-
-
         })();
 
         // ---------- 2. 校验 apiConfigs ----------
         let imageConfigCount = 0;
         let hasValidApiConfigs = true;
         const audioModes = ['music-generation', 'voice-cloning', 'audio-editing'];
-        const imageModes = new Set();
+        const imageModes = new Set();          // 记录已出现的图像 mode
+        const audioModeSet = new Set();        // 记录已出现的音频 mode，用于唯一性校验
 
         (function validateApiConfigBase() {
+            console.debug('[validateApiConfigBase] 开始校验 apiConfigs...');
 
             if (!json.apiConfigs) {
                 addError('缺少必填字段 apiConfigs（必须存在，可为空对象 {}）');
@@ -521,6 +529,7 @@
 
             const apiConfigs = json.apiConfigs;
             for (const [id, config] of Object.entries(apiConfigs)) {
+                console.debug(`[validateApiConfigBase] 校验配置: id=${id}, type=${config.type}, source=${config.source}`);
 
                 if (id.trim() === '') {
                     addError(`apiConfigs 中存在空字符串作为 ID，不允许`);
@@ -532,22 +541,35 @@
                     continue;
                 }
 
+                // 公共必填字段，但 key 和 model 允许为空字符串或缺失
                 const requiredFields = ['source', 'apiUrl', 'key', 'model'];
                 for (const field of requiredFields) {
-                    if (config.type === 'image' && config.source === 'sdwebui' && field === 'key') {
+                    // key 和 model 允许为空（缺失或空字符串均不报错）
+                    if (field === 'key' || field === 'model') {
+                        // 如果字段存在但类型不是字符串，则报错
+                        if (field in config && typeof config[field] !== 'string') {
+                            addError(`apiConfigs.${id} 的字段 ${field} 必须是字符串，当前类型为 ${typeof config[field]}`);
+                        }
+                        // 字段缺失或为空字符串，视为允许，不报错
                         continue;
                     }
+                    // 其他字段 (source, apiUrl) 必须存在且非空字符串
                     if (!config[field] || typeof config[field] !== 'string' || config[field].trim() === '') {
                         addError(`apiConfigs.${id} 缺少必填字段 ${field} 或字段为空`);
                     }
                 }
 
+                // 文本类型：必须包含 mode 字段，且值必须为 "txt-txt"
                 if (config.type === 'text') {
-                    if (!('mode' in config) || typeof config.mode !== 'string') {
-                        addError(`apiConfigs.${id} 缺少必填字段 mode 或 mode 类型错误（当 type 为 text 时）`);
+                    console.debug(`[validateApiConfigBase] 文本类型 ${id} 校验 mode 字段`);
+                    if (!config.mode) {
+                        addError(`apiConfigs.${id} 缺少必填字段 mode（当 type 为 text 时）`);
+                    } else if (config.mode !== 'txt-txt') {
+                        addError(`apiConfigs.${id} mode 必须是 "txt-txt"（当前为 "${config.mode}"）`);
                     }
                 }
 
+                // 图像类型：必须包含 mode，且 mode 值有效，且同一 mode 只能出现一次
                 if (config.type === 'image') {
                     if (!config.mode) {
                         addError(`apiConfigs.${id} 缺少必填字段 mode（当 type 为 image 时）`);
@@ -560,22 +582,25 @@
                     }
                 }
 
+                // 音频类型：必须包含 mode，且 mode 值有效，且同一 mode 只能出现一次
                 if (config.type === 'audio') {
                     if (!config.mode) {
                         addError(`apiConfigs.${id} 缺少必填字段 mode（当 type 为 audio 时）`);
                     } else if (!audioModes.includes(config.mode)) {
                         addError(`apiConfigs.${id} mode 必须是 "${audioModes.join('", "')}" 之一`);
-                    } else if (audioModes.has(config.mode)) {
+                    } else if (audioModeSet.has(config.mode)) {
                         addError(`apiConfigs 中 mode 为 "${config.mode}" 的 audio 配置只能有一个`);
                     } else {
-                        audioModes.add(config.mode);
+                        audioModeSet.add(config.mode);
                     }
                 }
 
+                // URL 格式校验
                 if (config.apiUrl && !config.apiUrl.match(/^https?:\/\//)) {
                     addError(`apiConfigs.${id} apiUrl 必须以 http:// 或 https:// 开头`);
                 }
 
+                // 可选字段类型校验
                 if (config.timeout !== undefined && (typeof config.timeout !== 'number' || config.timeout <= 0))
                     addError(`apiConfigs.${id} timeout 必须为正整数`);
                 if (config.maxTokens !== undefined && (typeof config.maxTokens !== 'number' || config.maxTokens <= 0))
@@ -599,7 +624,6 @@
 
                 if (config.type === 'image') imageConfigCount++;
             }
-
         })();
 
         // ---------- 3. 收集所有阶段ID ----------
@@ -607,6 +631,7 @@
         const stageMap = {};
         if (json.workflowStages && Array.isArray(json.workflowStages)) {
             json.workflowStages.forEach((stage, index) => {
+                console.debug(`[validateConfig] 校验阶段: index=${index}, id=${stage.id}, name=${stage.name}`);
                 if (!stage.id || typeof stage.id !== 'string' || stage.id.trim() === '') {
                     addError(`workflowStages[${index}] 缺少必填字段 id 或 id 为空`);
                 } else {
@@ -645,6 +670,7 @@
         const roleCount = {};
 
         (function validateAgents() {
+            console.debug('[validateAgents] 开始校验 agents...');
 
             if (!json.agents || typeof json.agents !== 'object') {
                 addError('配置缺少 agents 对象或 agents 无效');
@@ -652,7 +678,7 @@
             }
 
             for (const [key, agent] of Object.entries(json.agents)) {
-
+                console.debug(`[validateAgents] 校验 Agent: key=${key}, name=${agent.name}, role=${agent.role}`);
 
                 const requiredFields = [
                     'name', 'displayName', 'hover', 'order', 'required',
@@ -672,7 +698,6 @@
                 if (typeof agent.hover !== 'string') addError(`Agent ${key} hover 应为字符串`);
                 if (typeof agent.order !== 'number') addError(`Agent ${key} order 应为数字`);
                 if (typeof agent.required !== 'boolean') addError(`Agent ${key} required 应为布尔值`);
-                // 移除了 agent.parallel 的校验
                 if (!Array.isArray(agent.inputs)) addError(`Agent ${key} inputs 应为数组`);
                 if (typeof agent.inputTemplate !== 'string') addError(`Agent ${key} inputTemplate 应为字符串`);
                 if (!Array.isArray(agent.inputMode)) addError(`Agent ${key} inputMode 应为数组`);
@@ -845,8 +870,6 @@
                     roleCount[trimmed] = (roleCount[trimmed] || 0) + 1;
                 }
             }
-
-
         })();
 
         // ---------- 6. 校验 workflowStages 中的 agents 列表 ----------
@@ -863,7 +886,7 @@
 
         // ---------- 7. 图像配置数量唯一性校验 ----------
         (function validateImageConfigCount() {
-
+            console.debug('[validateImageConfigCount] 校验图像配置数量...');
             const hasImageGenerator = roleCount['imageGenerator'] > 0;
             if (hasImageGenerator) {
                 if (imageConfigCount !== 1) {
@@ -874,12 +897,11 @@
                     addError(`最多只能有一个 type 为 "image" 的 API 配置，当前有 ${imageConfigCount} 个`);
                 }
             }
-
         })();
 
         // ---------- 8. 角色唯一性校验 ----------
         (function validateRoleUniqueness() {
-
+            console.debug('[validateRoleUniqueness] 校验角色唯一性...');
             const uniqueRoles = [
                 'finalChapter',
                 'optimizer',
@@ -902,15 +924,14 @@
                     addError(`role "${role}" 出现 ${roleCount[role]} 次，必须唯一`);
                 }
             }
-
         })();
 
         if (errors.length > 0) {
             console.warn('[validateConfig] 校验失败，错误详情:', errors);
         } else {
-
+            console.debug('[validateConfig] 校验通过');
         }
-        return {valid: errors.length === 0, errors};
+        return { valid: errors.length === 0, errors };
     }
 
 
@@ -15205,8 +15226,9 @@
             });
         }
 
+        // ==================== 修改后的 ConfigEditor._renderApiProperties 方法 ====================
         _renderApiProperties(apiId) {
-
+            console.debug(`[ConfigEditor._renderApiProperties] 渲染 API 属性: ${apiId}`);
 
             const api = this.config.apiConfigs[apiId];
             if (!api) {
@@ -15237,6 +15259,11 @@
                 <option value="image" ${api.type === 'image' ? 'selected' : ''}>image</option>
                 <option value="audio" ${api.type === 'audio' ? 'selected' : ''}>audio</option>
             </select>
+        </div>
+        <!-- 新增：模式选择，紧接类型下方 -->
+        <div class="field-group" style="margin-bottom:16px;" id="api-mode-group">
+            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">模式 (mode)</label>
+            <select id="api-mode" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;"></select>
         </div>
         <div class="field-group" style="margin-bottom:16px;">
             <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">平台 (source)</label>
@@ -15296,26 +15323,94 @@
 
             // ==================== 辅助函数 ====================
             const updateField = (field, value) => {
-
+                console.debug(`[ConfigEditor._renderApiProperties] 更新字段 ${field}=${value} (id=${apiId})`);
                 this.config.apiConfigs[apiId][field] = value;
                 if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
             };
 
-            // ---------- 更新 source 下拉选项 ----------
-            const typeSelect = basicCard.querySelector('#api-type');
-            const sourceSelect = basicCard.querySelector('#api-source');
-            const updateSourceOptions = (type) => {
-                const sources = {
-                    text: ['openai', 'claude', 'gemini', 'deepseek', 'wenxin', 'qwen', 'glm', 'mistral', 'siliconflow', 'huggingface', 'groq', 'inference', 'openrouter', '4sapi', 'other'],
-                    image: ['openai', 'stability', 'midjourney', 'sora', 'flux', 'picsart', 'siliconflow', 'sdwebui', 'other'],
-                    audio: ['elevenlabs', 'stableaudio', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'custom', 'other']
-                };
-                const availableSources = sources[type] || [];
-                sourceSelect.innerHTML = availableSources.map(s => `<option value="${s}" ${api.source === s ? 'selected' : ''}>${s}</option>`).join('');
+            // 定义模式到平台的映射（根据现有平台支持情况）
+            const modeSourceMap = {
+                'text': {
+                    'txt-txt': ['openai', 'claude', 'gemini', 'deepseek', 'wenxin', 'qwen', 'glm', 'mistral', 'siliconflow', 'huggingface', 'groq', 'inference', 'openrouter', '4sapi', 'other']
+                },
+                'image': {
+                    'txt2img': ['openai', 'stability', 'midjourney', 'sora', 'flux', 'picsart', 'siliconflow', 'sdwebui', 'other'],
+                    'img2img': ['openai', 'stability', 'midjourney', 'flux', 'sdwebui', 'other'],
+                    'fusion': ['sdwebui', 'stability', 'flux', 'other']
+                },
+                'audio': {
+                    'music-generation': ['elevenlabs', 'stableaudio', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'custom', 'other'],
+                    'voice-cloning': ['elevenlabs', 'azure-tts', 'google-tts', 'custom'],
+                    'audio-editing': ['stableaudio', 'custom', 'other']
+                }
             };
-            updateSourceOptions(api.type);
 
-            // ---------- 默认 API URL 映射 ----------
+            // 根据类型和模式获取平台列表
+            const getSourcesForMode = (type, mode) => {
+                if (!mode) {
+                    // 如果模式为空，返回类型对应的所有平台（降级）
+                    const allByType = {
+                        text: ['openai', 'claude', 'gemini', 'deepseek', 'wenxin', 'qwen', 'glm', 'mistral', 'siliconflow', 'huggingface', 'groq', 'inference', 'openrouter', '4sapi', 'other'],
+                        image: ['openai', 'stability', 'midjourney', 'sora', 'flux', 'picsart', 'siliconflow', 'sdwebui', 'other'],
+                        audio: ['elevenlabs', 'stableaudio', 'huggingface', 'openai-tts', 'azure-tts', 'google-tts', 'custom', 'other']
+                    };
+                    return allByType[type] || [];
+                }
+                return modeSourceMap[type]?.[mode] || modeSourceMap[type]?.[Object.keys(modeSourceMap[type] || {})[0]] || [];
+            };
+
+            // 更新模式下拉框选项
+            const updateModeOptions = (type) => {
+                const modeSelect = panel.querySelector('#api-mode');
+                if (!modeSelect) return;
+
+                let modeOptions = [];
+                if (type === 'text') {
+                    modeOptions = ['txt-txt'];
+                } else if (type === 'image') {
+                    modeOptions = ['txt2img', 'img2img', 'fusion'];
+                } else if (type === 'audio') {
+                    modeOptions = ['music-generation', 'voice-cloning', 'audio-editing'];
+                } else {
+                    modeOptions = [];
+                }
+
+                let currentMode = api.mode;
+                if (!currentMode || !modeOptions.includes(currentMode)) {
+                    currentMode = modeOptions[0] || '';
+                }
+
+                modeSelect.innerHTML = modeOptions.map(m => `<option value="${m}" ${currentMode === m ? 'selected' : ''}>${m}</option>`).join('');
+                // 如果当前 API 的 mode 与下拉框选中不一致，更新配置
+                if (api.mode !== currentMode) {
+                    updateField('mode', currentMode);
+                }
+            };
+
+            // 更新平台下拉框选项
+            const updateSourceOptions = (type, mode) => {
+                const sourceSelect = panel.querySelector('#api-source');
+                if (!sourceSelect) return;
+
+                const sources = getSourcesForMode(type, mode);
+                const currentSource = api.source;
+                let newSource = sources.includes(currentSource) ? currentSource : (sources[0] || '');
+
+                sourceSelect.innerHTML = sources.map(s => `<option value="${s}" ${newSource === s ? 'selected' : ''}>${s}</option>`).join('');
+
+                if (api.source !== newSource) {
+                    updateField('source', newSource);
+                }
+
+                // 自动填充默认 URL（如果当前 URL 为空或与之前的默认不匹配）
+                const urlInput = panel.querySelector('#api-url');
+                if (urlInput && defaultApiUrls[newSource] && !urlInput.value.trim()) {
+                    urlInput.value = defaultApiUrls[newSource];
+                    updateField('apiUrl', defaultApiUrls[newSource]);
+                }
+            };
+
+            // 默认 API URL 映射
             const defaultApiUrls = {
                 // 文本平台
                 'openai': 'https://api.openai.com/v1',
@@ -15350,20 +15445,33 @@
                 'custom': '',
             };
 
-            // ---------- 获取模型列表按钮逻辑 ----------
-            const fetchBtn = basicCard.querySelector('#fetch-models-btn');
+            // 获取 DOM 元素
+            const typeSelect = basicCard.querySelector('#api-type');
+            const modeSelect = basicCard.querySelector('#api-mode');
+            const sourceSelect = basicCard.querySelector('#api-source');
+            const urlInput = basicCard.querySelector('#api-url');
+            const keyInput = basicCard.querySelector('#api-key');
+            const timeoutInput = basicCard.querySelector('#api-timeout');
             const modelInput = basicCard.querySelector('#api-model');
+            const fetchBtn = basicCard.querySelector('#fetch-models-btn');
             const modelSelectContainer = basicCard.querySelector('#model-select-container');
             const modelSelect = basicCard.querySelector('#model-select');
             const backToManual = basicCard.querySelector('#back-to-manual');
             const modelTip = basicCard.querySelector('#model-tip');
 
+            // 初始化模式下拉框
+            updateModeOptions(api.type);
+
+            // 初始化平台下拉框（基于当前类型和模式）
+            updateSourceOptions(api.type, api.mode);
+
+            // ---------- 获取模型列表按钮逻辑 ----------
             fetchBtn.addEventListener('click', async () => {
                 const currentConfig = {
                     type: typeSelect.value,
                     source: sourceSelect.value,
-                    apiUrl: basicCard.querySelector('#api-url').value,
-                    key: basicCard.querySelector('#api-key').value,
+                    apiUrl: urlInput.value,
+                    key: keyInput.value,
                 };
 
                 if (!currentConfig.apiUrl || !currentConfig.key) {
@@ -15430,80 +15538,63 @@
                     }
                 }
                 updateField('type', newType);
-                updateSourceOptions(newType);
 
-                // ===== 新增：根据新的类型和当前选择的 source 自动填充 apiUrl =====
-                const currentSource = sourceSelect.value;
-                const apiUrlInput = basicCard.querySelector('#api-url');
-                if (apiUrlInput && defaultApiUrls[currentSource]) {
-                    apiUrlInput.value = defaultApiUrls[currentSource];
-                    updateField('apiUrl', defaultApiUrls[currentSource]);
-                }
-                // ===== 结束新增 =====
+                // 更新模式下拉框
+                updateModeOptions(newType);
+                const newMode = modeSelect.value;
+                updateField('mode', newMode);
 
+                // 更新平台下拉框
+                updateSourceOptions(newType, newMode);
+
+                // 重新渲染额外字段
                 renderExtraFields();
             });
 
-            // 平台改变 - 始终填充默认 apiUrl
+            // 模式改变
+            modeSelect.addEventListener('change', e => {
+                const newMode = e.target.value;
+                const currentType = typeSelect.value;
+                updateField('mode', newMode);
+
+                // 更新平台下拉框
+                updateSourceOptions(currentType, newMode);
+
+                // 重新渲染额外字段（因为某些模式可能有专用参数）
+                renderExtraFields();
+            });
+
+            // 平台改变
             sourceSelect.addEventListener('change', e => {
                 const newSource = e.target.value;
                 updateField('source', newSource);
-                const apiUrlInput = basicCard.querySelector('#api-url');
-                if (apiUrlInput && defaultApiUrls[newSource]) {
-                    apiUrlInput.value = defaultApiUrls[newSource];
+                // 自动填充默认 URL
+                if (urlInput && defaultApiUrls[newSource] && !urlInput.value.trim()) {
+                    urlInput.value = defaultApiUrls[newSource];
                     updateField('apiUrl', defaultApiUrls[newSource]);
                 }
+                // 重新渲染额外字段（可能影响一些平台特有的参数）
                 renderExtraFields();
             });
 
-            // 初始化时根据当前 source 自动填充 apiUrl（如果为空）
-            const initialSource = sourceSelect.value;
-            const apiUrlInput = basicCard.querySelector('#api-url');
-            if (apiUrlInput && defaultApiUrls[initialSource] && !apiUrlInput.value.trim()) {
-                apiUrlInput.value = defaultApiUrls[initialSource];
-                updateField('apiUrl', defaultApiUrls[initialSource]);
-            }
-
             // URL 和密钥输入事件
-            basicCard.querySelector('#api-url').addEventListener('input', e => updateField('apiUrl', e.target.value));
-            basicCard.querySelector('#api-key').addEventListener('input', e => updateField('key', e.target.value));
-            basicCard.querySelector('#api-timeout')?.addEventListener('input', e => updateField('timeout', parseInt(e.target.value) || 3600000));
+            urlInput.addEventListener('input', e => updateField('apiUrl', e.target.value));
+            keyInput.addEventListener('input', e => updateField('key', e.target.value));
+            timeoutInput?.addEventListener('input', e => updateField('timeout', parseInt(e.target.value) || 3600000));
 
-            // ---------- 渲染额外字段 ----------
+            // ---------- 渲染额外字段（根据类型和模式）----------
             const renderExtraFields = () => {
                 const extraContainer = panel.querySelector('#api-extra-fields');
                 const currentType = typeSelect.value;
                 const currentSource = sourceSelect.value;
+                const currentMode = modeSelect.value;
                 let extraHTML = '';
 
                 if (currentType === 'image') {
-                    const unavailableModes = (() => {
-                        const set = new Set();
-                        const entries = Object.entries(this.config.apiConfigs || {});
-                        for (const [id, cfg] of entries) {
-                            if (id === apiId) continue;
-                            if (cfg.type === 'image' && cfg.mode) {
-                                set.add(cfg.mode);
-                            }
-                        }
-                        return set;
-                    })();
-                    const imageModes = ['txt2img', 'img2img', 'fusion'];
-                    const modeOptions = imageModes.map(mode => {
-                        const disabled = (unavailableModes.has(mode) && mode !== api.mode) ? 'disabled' : '';
-                        const title = unavailableModes.has(mode) && mode !== api.mode ? '已有其他图像配置，不可更改' : '';
-                        return `<option value="${mode}" ${api.mode === mode ? 'selected' : ''} ${disabled} title="${title}">${mode}</option>`;
-                    }).join('');
+                    // 图像特有参数，不再包含 mode
                     const samplers = ['DPM++ 2M Karras', 'DPM++ SDE Karras', 'DPM++ 2M SDE', 'Euler a', 'Euler', 'LMS', 'Heun', 'DPM2', 'DPM2 a', 'DPM++ 2S a', 'DPM++ 2M SDE Karras', 'DPM++ 2M SDE Exponential', 'DPM++ 3M SDE', 'DPM++ 3M SDE Karras', 'DPM++ 3M SDE Exponential'];
                     extraHTML = `
                 <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🖼️ 图像参数</div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">模式 (mode)</label>
-                    <select id="api-image-mode" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                        ${modeOptions}
-                    </select>
-                    ${unavailableModes.size > 0 ? '<div style="color:#ffaa00; font-size:12px; margin-top:4px;">⚠️ 已存在其他图像配置，无法修改 mode</div>' : ''}
-                </div>
                 <div class="field-group" style="margin-bottom:16px;">
                     <label class="field-label">尺寸 (size)</label>
                     <input type="text" id="api-size" class="field-input" value="${api.size || '1024x1024'}" placeholder="如 1024x1024" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
@@ -15549,31 +15640,9 @@
                 </div>
             `;
                 } else if (currentType === 'audio') {
-                    const unavailableModes = (() => {
-                        const set = new Set();
-                        const entries = Object.entries(this.config.apiConfigs || {});
-                        for (const [id, cfg] of entries) {
-                            if (id === apiId) continue;
-                            if (cfg.type === 'audio' && cfg.mode) {
-                                set.add(cfg.mode);
-                            }
-                        }
-                        return set;
-                    })();
-                    const audioModes = ['music-generation', 'voice-cloning', 'audio-editing'];
-                    const modeOptions = audioModes.map(mode => {
-                        const disabled = (unavailableModes.has(mode) && mode !== api.mode) ? 'disabled' : '';
-                        const title = unavailableModes.has(mode) && mode !== api.mode ? '该模式已存在其他配置' : '';
-                        return `<option value="${mode}" ${api.mode === mode ? 'selected' : ''} ${disabled} title="${title}">${mode}</option>`;
-                    }).join('');
+                    // 音频特有参数，不再包含 mode
                     extraHTML = `
                 <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🎵 音频参数</div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label">模式 (mode)</label>
-                    <select id="api-audio-mode" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                        ${modeOptions}
-                    </select>
-                </div>
             `;
                     if (currentSource === 'elevenlabs') {
                         extraHTML += `
@@ -15667,10 +15736,8 @@
                 }
                 extraContainer.innerHTML = extraHTML;
 
-                // 绑定额外字段的事件
+                // 绑定额外字段的事件（原有逻辑）
                 if (currentType === 'image') {
-                    const modeSelect = panel.querySelector('#api-image-mode');
-                    if (modeSelect) modeSelect.addEventListener('change', e => updateField('mode', e.target.value));
                     const sizeInput = panel.querySelector('#api-size');
                     if (sizeInput) sizeInput.addEventListener('input', e => updateField('size', e.target.value));
                     const stepsInput = panel.querySelector('#api-steps');
@@ -15692,8 +15759,6 @@
                     const tilingCheck = panel.querySelector('#api-tiling');
                     if (tilingCheck) tilingCheck.addEventListener('change', e => updateField('tiling', e.target.checked));
                 } else if (currentType === 'audio') {
-                    const modeSelect = panel.querySelector('#api-audio-mode');
-                    if (modeSelect) modeSelect.addEventListener('change', e => updateField('mode', e.target.value));
                     const voiceIdInput = panel.querySelector('#api-voiceId');
                     if (voiceIdInput) voiceIdInput.addEventListener('input', e => updateField('voiceId', e.target.value));
                     const stabilityInput = panel.querySelector('#api-stability');
@@ -15762,10 +15827,10 @@
                 const currentConfig = {
                     type: typeSelect.value,
                     source: sourceSelect.value,
-                    apiUrl: basicCard.querySelector('#api-url').value,
-                    key: basicCard.querySelector('#api-key').value,
+                    apiUrl: urlInput.value,
+                    key: keyInput.value,
                     model: modelInput.value,
-                    timeout: parseInt(basicCard.querySelector('#api-timeout')?.value) || 3600000,
+                    timeout: parseInt(timeoutInput?.value) || 3600000,
                 };
 
                 const result = await testAPIConnection(currentConfig);
