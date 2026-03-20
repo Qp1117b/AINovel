@@ -179,7 +179,7 @@
         startTime: null,
         currentChapter: 1,
         shouldStop: false,
-        tokenStats: {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0},
+        tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
         discarded: false,
         discardedChapter: null,
         userInputCache: '',
@@ -223,7 +223,7 @@
         currentInteractionResult: null,   // 暂存本章的互动结果
     };
 
-    let HISTORY_CACHE = {chapters: [], lastUpdate: null};
+    let HISTORY_CACHE = { chapters: [], lastUpdate: null };
 
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
@@ -419,14 +419,14 @@
             const catId = match[1];
             const catName = match[2].trim();
 
-            return {catId, catName, definition: content};
+            return { catId, catName, definition: content };
         }
         // 否则，尝试匹配任何 **名称** 格式，使用 uid 作为 catId
         match = firstLine.match(/^\*\*([^*]+)\*\*.*$/);
         if (match && uid !== undefined) {
             const catName = match[1].trim();
 
-            return {catId: String(uid), catName, definition: content};
+            return { catId: String(uid), catName, definition: content };
         }
 
         return null;
@@ -1033,7 +1033,7 @@
             CONFIG.categoryGroups = json.categoryGroups;
         }
 
-        WORKFLOW_STATE.currentConfigFile = {name: fileName, size: fileSize};
+        WORKFLOW_STATE.currentConfigFile = { name: fileName, size: fileSize };
 
         // 重置预选状态，使用新配置的 categories 生成全 null 的 selectionState
         const newSelection = {};
@@ -1054,7 +1054,7 @@
             startTime: null,
             currentChapter: 1,
             shouldStop: false,
-            tokenStats: {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0},
+            tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
             discarded: false,
             discardedChapter: null,
             userInputCache: '',
@@ -1150,7 +1150,7 @@
                 }
                 // 新增：创建 galProjects 存储
                 if (!db.objectStoreNames.contains('galProjects')) {
-                    db.createObjectStore('galProjects', {keyPath: 'id'});
+                    db.createObjectStore('galProjects', { keyPath: 'id' });
 
                 }
             };
@@ -1168,14 +1168,14 @@
             db = await openDB();
         } catch (err) {
             console.error('[loadFromIndexedDB] 打开数据库失败，返回默认空章节', err);
-            return {chapters: []};
+            return { chapters: [] };
         }
         return new Promise((resolve, reject) => {
             const transaction = db.transaction(STORE_NAME, 'readonly');
             const store = transaction.objectStore(STORE_NAME);
             const request = store.get(DB_KEY);
             request.onsuccess = () => {
-                const result = request.result || {chapters: []};
+                const result = request.result || { chapters: [] };
 
                 resolve(result);
             };
@@ -1263,7 +1263,7 @@
 
             } catch (e) {
                 console.error('[Storage] 初始化失败，使用空缓存', e);
-                HISTORY_CACHE = {chapters: [], lastUpdate: Date.now()};
+                HISTORY_CACHE = { chapters: [], lastUpdate: Date.now() };
             }
         },
 
@@ -1284,7 +1284,7 @@
             // 将写入操作加入队列
             this._writeQueue = this._writeQueue.then(() => {
                 console.time('IndexedDB写入');
-                return saveToIndexedDB({chapters: HISTORY_CACHE.chapters})
+                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
                     .then(() => {
                         console.timeEnd('IndexedDB写入');
 
@@ -1468,7 +1468,7 @@
 
             this._writeQueue = this._writeQueue.then(() => {
                 console.time('IndexedDB写入');
-                return saveToIndexedDB({chapters: HISTORY_CACHE.chapters})
+                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
                     .then(() => {
                         console.timeEnd('IndexedDB写入');
 
@@ -1498,7 +1498,7 @@
 
             this._writeQueue = this._writeQueue.then(() => {
                 console.time('IndexedDB写入');
-                return saveToIndexedDB({chapters: []})
+                return saveToIndexedDB({ chapters: [] })
                     .then(() => {
                         console.timeEnd('IndexedDB写入');
 
@@ -1521,7 +1521,7 @@
             try {
                 return JSON.parse(localStorage.getItem(CONFIG.SETTINGS_KEY) || '{"profile":"standard"}');
             } catch (_) {
-                return {profile: 'standard'};
+                return { profile: 'standard' };
             }
         },
 
@@ -1616,7 +1616,7 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction('galProjects', 'readwrite');
                 const store = transaction.objectStore('galProjects');
-                const request = store.put({id, data});
+                const request = store.put({ id, data });
                 request.onsuccess = () => resolve();
                 request.onerror = () => reject(request.error);
                 transaction.oncomplete = () => db.close();
@@ -1658,7 +1658,7 @@
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
+                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
                     }
                 };
             });
@@ -1700,7 +1700,7 @@
             const target = this.cache.get(key);
 
             if (target) {
-                return {targetChapterNum: target};
+                return { targetChapterNum: target };
             }
             return null;
         },
@@ -1874,7 +1874,7 @@
                     req.onerror = (e) => {
                         const error = e.target.error;
                         console.error('[MappingManager.importAll] 导入失败', error);
-                        errors.push({mapping: m, error: error.message});
+                        errors.push({ mapping: m, error: error.message });
                     };
                 });
                 transaction.oncomplete = () => {
@@ -2090,11 +2090,11 @@
                             console.warn(`[DEBUG][loadAllStateTemplates] ⚠️ 在 ${bookName} 的模板中检测到重复的类别编号 ${id}，可能模板已损坏`);
                         }
                         seenCatIds.add(id);
-                        categoryMap[id] = {name, definition};
+                        categoryMap[id] = { name, definition };
 
                     }
 
-                    templates.push({bookIndex, templateContent: content, categoryMap});
+                    templates.push({ bookIndex, templateContent: content, categoryMap });
                 } else {
 
                     break;
@@ -2144,8 +2144,8 @@
 
         // 字段映射表
         const fieldMappings = [
-            {flat: 'enabled', path: 'enabled', transform: v => v === undefined ? entry.enabled : v},
-            {flat: 'content', path: 'content', transform: v => v === undefined ? entry.content : v},
+            { flat: 'enabled', path: 'enabled', transform: v => v === undefined ? entry.enabled : v },
+            { flat: 'content', path: 'content', transform: v => v === undefined ? entry.content : v },
 
             // 触发策略
             {
@@ -2170,7 +2170,7 @@
             },
 
             // 概率（0-100 -> 0-1）
-            {flat: 'probability', path: 'probability', transform: v => v !== undefined ? v / 100 : entry.probability},
+            { flat: 'probability', path: 'probability', transform: v => v !== undefined ? v / 100 : entry.probability },
 
             // 位置
             {
@@ -2190,8 +2190,8 @@
                     return map[v] || entry.position.type;
                 }
             },
-            {flat: 'depth', path: 'position.depth', transform: v => v !== undefined ? v : entry.position.depth},
-            {flat: 'order', path: 'position.order', transform: v => v !== undefined ? v : entry.position.order},
+            { flat: 'depth', path: 'position.depth', transform: v => v !== undefined ? v : entry.position.depth },
+            { flat: 'order', path: 'position.order', transform: v => v !== undefined ? v : entry.position.order },
 
             // 递归控制
             {
@@ -2267,7 +2267,7 @@
         if (positionType === 'at_depth') {
             const posFlat = flatConfig.position;
             if (posFlat) {
-                const roleMap = {'6': 'system', '7': 'assistant', '8': 'user'};
+                const roleMap = { '6': 'system', '7': 'assistant', '8': 'user' };
                 const role = roleMap[posFlat] || 'system';
                 setNestedValue(entry, 'position.role', role);
             }
@@ -2275,7 +2275,7 @@
 
         // 处理 characterFilter
         if (flatConfig.characterFilter && typeof flatConfig.characterFilter === 'object') {
-            const currentFilter = getNestedValue(entry, 'characterFilter') || {isExclude: false, names: [], tags: []};
+            const currentFilter = getNestedValue(entry, 'characterFilter') || { isExclude: false, names: [], tags: [] };
             const newFilter = deepMerge(currentFilter, flatConfig.characterFilter);
             setNestedValue(entry, 'characterFilter', newFilter);
         }
@@ -2517,7 +2517,7 @@
             }
 
             if (!actionsByBook[bookName]) {
-                actionsByBook[bookName] = {create: [], update: [], delete: []};
+                actionsByBook[bookName] = { create: [], update: [], delete: [] };
             }
 
             if (action.content.trim() === 'delete') {
@@ -2559,7 +2559,7 @@
                     continue;
                 }
 
-                const {catId, catName, definition} = parsed;
+                const { catId, catName, definition } = parsed;
                 let config = action.convertedConfig || {};
                 delete config.uid;
                 delete config.id;
@@ -2603,14 +2603,14 @@
                             strategy: {
                                 type: 'selective',
                                 keys: [],
-                                keys_secondary: {logic: 'and_any', keys: []},
+                                keys_secondary: { logic: 'and_any', keys: [] },
                                 scan_depth: 0
                             },
-                            position: {type: 'before_character_definition', role: 'system', depth: 0, order: 0},
+                            position: { type: 'before_character_definition', role: 'system', depth: 0, order: 0 },
                             probability: 1.0,
-                            recursion: {prevent_incoming: false, prevent_outgoing: false, delay_until: null},
-                            effect: {sticky: null, cooldown: null, delay: null},
-                            characterFilter: {isExclude: false, names: [], tags: []},
+                            recursion: { prevent_incoming: false, prevent_outgoing: false, delay_until: null },
+                            effect: { sticky: null, cooldown: null, delay: null },
+                            characterFilter: { isExclude: false, names: [], tags: [] },
                             matchPersonaDescription: false,
                             matchCharacterDescription: false,
                             matchCharacterPersonality: false,
@@ -2653,7 +2653,7 @@
             // 如果这本书有任何修改，统一保存
             if (modified) {
 
-                await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                 UI.updateProgress(`  ✓ ${bookName} 已更新`);
             } else {
 
@@ -2695,10 +2695,10 @@
                 }
             }
 
-            return Array.isArray(worldbook) ? entries : {...worldbook, entries, settings: worldbook.settings || {}};
-        }, {render: 'immediate'});
+            return Array.isArray(worldbook) ? entries : { ...worldbook, entries, settings: worldbook.settings || {} };
+        }, { render: 'immediate' });
 
-        return {successIds, errorIds};
+        return { successIds, errorIds };
     }
 
     // ==================== 清空状态书 ====================
@@ -2755,7 +2755,7 @@
             }
 
             // 保存更新后的世界书
-            await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+            await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
             UI.updateProgress(`  ✓ 已重置 ${bookName} (${stateEntries.length} 个条目)`);
         }
 
@@ -2850,7 +2850,7 @@
             }
 
             // 返回更新后的全局世界书列表，供上层函数使用
-            return {success: true, globalBooks: updatedGlobalBooks};
+            return { success: true, globalBooks: updatedGlobalBooks };
         } catch (e) {
             UI.updateProgress(`  ✗ 激活失败: ${e.message}`, true);
             console.error(`[DEBUG][createAndActivateStateBook] 激活世界书失败: ${e.message}`, e);
@@ -2968,7 +2968,7 @@
         // 按 num 排序子节点
         Object.values(childrenMap).forEach(list => list.sort((a, b) => a.num - b.num));
 
-        return {childrenMap, chapterMap};
+        return { childrenMap, chapterMap };
     }
 
     /**
@@ -3156,7 +3156,7 @@
                 const last = [...(context.chat || [])].reverse().find(m => !m.is_user);
                 if (last) text = last.mes;
             }
-            return {mes: text, name: context.name2 || 'Assistant', is_user: false, extra: result?.extra || {}};
+            return { mes: text, name: context.name2 || 'Assistant', is_user: false, extra: result?.extra || {} };
         },
 
         async getWorldbook(name) {
@@ -4015,7 +4015,7 @@
                             !hasAnyTemplate ? '所有状态书均缺少模板条目（状态模板-N）' : null
                 };
             } catch (e) {
-                return {exists: false, error: `读取状态书失败: ${e.message}`};
+                return { exists: false, error: `读取状态书失败: ${e.message}` };
             }
         },
 
@@ -4035,7 +4035,7 @@
 
                 // 检查设定书是否在激活列表中
                 if (!globalBooks.includes(CONFIG.SETTING_BOOK_NAME)) {
-                    return {exists: false, error: '设定书未激活'};
+                    return { exists: false, error: '设定书未激活' };
                 }
 
                 // 如果激活，再读取内容
@@ -4048,7 +4048,7 @@
                     error: entries.length === 0 ? '设定书为空' : null
                 };
             } catch (e) {
-                return {exists: false, error: `读取设定书失败: ${e.message}`};
+                return { exists: false, error: `读取设定书失败: ${e.message}` };
             }
         },
 
@@ -4185,7 +4185,7 @@
                     preventDuplicates: true,
                 };
                 const userOptions = opts || {};
-                const options = {...defaultOptions, ...userOptions};
+                const options = { ...defaultOptions, ...userOptions };
                 toastr[type](formattedMsg, safeTitle, options);
             } else {
                 console[type === 'error' ? 'error' : type === 'warning' ? 'warn' : 'log'](`[${type.toUpperCase()}]`, safeTitle, safeMsg);
@@ -4327,7 +4327,7 @@
                         throw new Error('createWorldbook API 不可用');
                     }
                     // 写入条目（snapshot.books[bookName] 已是完整的嵌套结构）
-                    await API.updateWorldbook(bookName, () => snapshot.books[bookName], {render: 'immediate'});
+                    await API.updateWorldbook(bookName, () => snapshot.books[bookName], { render: 'immediate' });
                 } catch (e) {
                     UI.updateProgress(`    ✗ 重建失败: ${e.message}`, true);
                 }
@@ -4375,7 +4375,7 @@
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
+                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
                     }
                 };
             });
@@ -4422,7 +4422,7 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction(this.STORE_NAME, 'readwrite');
                 const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.put({id, blob});
+                const request = store.put({ id, blob });
                 request.onsuccess = () => {
 
                     resolve(id);
@@ -4583,7 +4583,7 @@
 
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
+                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
                     }
                 };
             });
@@ -4610,7 +4610,7 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction(this.STORE_NAME, 'readwrite');
                 const store = transaction.objectStore(this.STORE_NAME);
-                const entry = {id, text, format, timestamp: Date.now()};
+                const entry = { id, text, format, timestamp: Date.now() };
 
                 const request = store.put(entry);
                 request.onsuccess = () => {
@@ -4739,7 +4739,7 @@
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
                     if (!db.objectStoreNames.contains(this.STORE_NAME)) {
-                        db.createObjectStore(this.STORE_NAME, {keyPath: 'id'});
+                        db.createObjectStore(this.STORE_NAME, { keyPath: 'id' });
                     }
                 };
             });
@@ -4762,7 +4762,7 @@
             return new Promise((resolve, reject) => {
                 const transaction = db.transaction(this.STORE_NAME, 'readwrite');
                 const store = transaction.objectStore(this.STORE_NAME);
-                const request = store.put({id, blob: audioBlob, timestamp: Date.now()});
+                const request = store.put({ id, blob: audioBlob, timestamp: Date.now() });
                 request.onsuccess = () => {
 
                     resolve(id);
@@ -5783,142 +5783,170 @@
 
         /* ==================== 响应式设计 ==================== */
 
-        /* 平板端 */
-        @media (max-width: 1400px) {
-            .nc-panel-body {
-                grid-template-columns: 260px 1fr 1fr;
-                grid-template-rows: auto auto;
+        /* ════════════════════════════════════════════════════════
+           响应式布局系统
+           断点策略：
+             ≥ 1400px  桌面大屏（四栏默认布局）
+             1200-1399 桌面标准（三栏）
+             1024-1199 笔记本/大平板（双栏）
+              768-1023 平板竖屏（单栏滚动）
+              480-767  手机横屏/大手机（单栏紧凑）
+              < 480    手机竖屏（极致精简）
+        ════════════════════════════════════════════════════════ */
+
+        /* ── 1. 桌面标准 ≤ 1399px：三栏，最后一栏独占一行 ─── */
+        @media (max-width: 1399px) {
+            .nc-panel {
+                width: min(1300px, 98vw);
             }
-            .nc-panel-body > .nc-card:last-child {
-                grid-column: 1 / -1;
+            .nc-panel-body {
+                grid-template-columns: 220px 1fr 1fr 280px;
+                gap: 12px;
             }
         }
 
-        @media (max-width: 1200px) {
-            .nc-panel-body {
-                grid-template-columns: 1fr 1fr;
-                grid-template-rows: auto auto;
+        /* ── 2. 笔记本 ≤ 1199px：双栏，右侧卡片组叠放 ─────── */
+        @media (max-width: 1199px) {
+            .nc-panel {
+                width: min(1000px, 98vw);
+                height: min(860px, 95vh);
             }
+            .nc-panel-body {
+                grid-template-columns: 200px 1fr 260px;
+                grid-template-rows: 1fr auto;
+                gap: 10px;
+            }
+            /* 第4张卡（进度/输入）跨到第二行 */
             .nc-panel-body > .nc-card:last-child {
                 grid-column: 1 / -1;
+                max-height: 220px;
+            }
+            .nc-panel-title-sub {
+                display: none;
             }
         }
 
-        /* 手机端 */
-        @media (max-width: 768px) {
-            .nc-overlay { padding: 5px; }
+        /* ── 3. 大平板 ≤ 1023px：单栏滚动，tab标签切换 ────── */
+        @media (max-width: 1023px) {
+            /* ---- 主面板 ---- */
             .nc-panel {
                 width: 100vw;
+                height: 100dvh;
                 height: 100vh;
                 max-height: 100vh;
                 border-radius: 0;
-                padding: 15px;
-            }
-            .nc-panel-header {
-                padding-bottom: 10px;
-                margin-bottom: 10px;
-            }
-            .nc-panel-title-icon { font-size: 22px; }
-            .nc-panel-title-text { font-size: 16px; }
-            .nc-panel-body {
-                grid-template-columns: 1fr;
-                grid-template-rows: none;
-                gap: 10px;
-                overflow-y: auto;
-            }
-            .nc-panel-body > .nc-card:last-child {
-                grid-column: auto;
-            }
-            .nc-card {
-                padding: 10px;
-                max-height: none;
-            }
-            .nc-panel-footer {
-                flex-direction: column;
-                gap: 10px;
-                padding-top: 10px;
-                margin-top: 10px;
-            }
-            .nc-panel-footer > div {
-                width: 100%;
-                justify-content: center;
-            }
-            .nc-btn { padding: 10px 16px; font-size: 12px; }
-            .nc-grid-3 { grid-template-columns: repeat(2, 1fr); }
-            #nc-float-btn {
-                bottom: 70px;
-                right: 10px;
-                padding: 10px 16px;
-                font-size: 12px;
-            }
-            .nc-token-display {
-                padding: 8px 12px;
-                gap: 10px;
-            }
-            .nc-token-value { font-size: 18px; }
-        }
-
-        /* 小屏手机 */
-        @media (max-width: 380px) {
-            .nc-panel { padding: 10px; }
-            .nc-panel-title-text { font-size: 14px; }
-            .nc-tree-header { padding: 6px 8px; }
-            .nc-tree-title { font-size: 11px; }
-            .nc-tree-desc { font-size: 9px; }
-            .nc-agent-checkbox { padding: 4px 6px; font-size: 10px; }
-            .nc-agent-status-btn { padding: 4px 8px; font-size: 10px; }
-        }
-
-        /* ==================== 移动端深度适配 ==================== */
-
-        /* 平板及以下 (最大 1024px) */
-        @media (max-width: 1024px) {
-            /* 主面板改为单列布局，方便滚动 */
-            .nc-panel-body {
-                grid-template-columns: 1fr !important;
-                gap: 12px;
-                overflow-y: auto !important;
-                max-height: calc(100vh - 140px);
-            }
-            /* 所有卡片占满宽度 */
-            .nc-panel-body > .nc-card {
-                width: 100%;
-                max-width: 100%;
-            }
-            /* 固定头部和底部，避免滚动混乱 */
-            .nc-panel {
+                padding: 14px 16px;
                 display: flex;
                 flex-direction: column;
-                height: 100vh;
-                max-height: none;
-                padding: 12px;
             }
-            .nc-panel-header,
-            .nc-panel-footer {
+            .nc-overlay {
+                padding: 0;
+                align-items: stretch;
+            }
+            .nc-panel-header {
+                padding-bottom: 12px;
+                margin-bottom: 12px;
                 flex-shrink: 0;
             }
-            /* 增大标题字号 */
-            .nc-panel-title-text {
-                font-size: 18px;
+            .nc-panel-footer {
+                flex-shrink: 0;
+                padding-top: 10px;
+                margin-top: 0;
             }
-            /* 树形菜单默认全部折叠，点击头部展开 */
-            .nc-tree-children {
-                display: none !important;
+
+            /* ---- 主体改为选项卡式单栏 ---- */
+            .nc-panel-body {
+                display: flex;
+                flex-direction: column;
+                gap: 0;
+                flex: 1;
+                min-height: 0;
+                overflow: hidden;
+                position: relative;
             }
-            .nc-tree-header.expanded + .nc-tree-children {
-                display: block !important;
+
+            /* 所有卡片默认隐藏，激活的显示 */
+            .nc-panel-body > .nc-card {
+                display: none;
+                flex: 1;
+                min-height: 0;
+                border-radius: 0 0 12px 12px;
+                border-top: none;
             }
-            /* 增大点击区域 */
+            .nc-panel-body > .nc-card.nc-tab-active {
+                display: flex;
+            }
+
+            /* 选项卡导航条 */
+            .nc-tab-bar {
+                display: flex !important;
+                flex-shrink: 0;
+                background: rgba(0,0,0,.25);
+                border-radius: 10px 10px 0 0;
+                border: 1px solid rgba(255,255,255,.08);
+                border-bottom: none;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+            }
+            .nc-tab-bar::-webkit-scrollbar { display: none; }
+            .nc-tab-btn {
+                flex: 1;
+                min-width: 64px;
+                padding: 10px 8px;
+                font-size: 11px;
+                font-weight: 600;
+                color: #888;
+                background: none;
+                border: none;
+                border-bottom: 2px solid transparent;
+                cursor: pointer;
+                text-align: center;
+                white-space: nowrap;
+                transition: color .2s, border-color .2s;
+            }
+            .nc-tab-btn.nc-tab-active {
+                color: #667eea;
+                border-bottom-color: #667eea;
+            }
+            .nc-tab-btn:hover:not(.nc-tab-active) {
+                color: #aaa;
+            }
+
+            /* ---- 字号/间距收紧 ---- */
+            .nc-panel-title-text  { font-size: 17px; }
+            .nc-panel-title-icon  { font-size: 24px; }
+            .nc-panel-title-sub   { display: none; }
+            .nc-card              { padding: 12px; }
+
+            /* ---- 底部按钮栏 ---- */
+            .nc-panel-footer {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .nc-panel-footer > div {
+                flex: 1 1 auto;
+                min-width: 120px;
+                justify-content: center;
+            }
+
+            /* ---- 树形菜单触摸优化 ---- */
             .nc-tree-header,
-            .nc-tree-child-item,
-            .nc-agent-checkbox,
-            .nc-btn,
-            .nc-workflow-agent-btn {
-                min-height: 48px;
-                padding: 12px 10px;
-                font-size: 14px;
+            .nc-tree-child-item {
+                min-height: 44px;
+                padding: 10px 12px;
             }
-            /* 工作流预览按钮自适应 */
+            .nc-tree-children { display: none; }
+            .nc-tree-header.expanded + .nc-tree-children { display: block; }
+
+            /* ---- Agent 复选框 ---- */
+            .nc-agent-checkbox {
+                min-height: 44px;
+                font-size: 13px;
+                padding: 10px 12px;
+            }
+
+            /* ---- 工作流按钮 ---- */
             .nc-workflow-agents {
                 display: flex;
                 flex-wrap: wrap;
@@ -5926,118 +5954,1086 @@
             }
             .nc-workflow-agent-btn {
                 flex: 1 1 calc(50% - 6px);
-                text-align: center;
+                font-size: 12px;
+                padding: 10px 6px;
                 white-space: normal;
                 word-break: break-word;
-                padding: 10px 4px;
-                font-size: 13px;
+                text-align: center;
             }
-            /* 输入框更大 */
+
+            /* ---- 用户输入框 ---- */
             #nc-user-input {
-                min-height: 120px;
-                font-size: 16px;
+                min-height: 80px;
+                max-height: 120px;
+                font-size: 15px;
             }
-            /* Token 统计紧凑 */
+
+            /* ---- Token 统计 ---- */
             .nc-token-display {
                 flex-wrap: wrap;
                 gap: 8px;
                 padding: 8px 12px;
             }
-            .nc-token-main {
-                flex: 1 0 auto;
+            .nc-token-main { flex: 1 0 auto; }
+            .nc-token-last { display: none; }
+
+            /* ---- 模态框 ---- */
+            .nc-modal {
+                width: 96vw;
+                max-width: 96vw;
+                max-height: 90dvh;
+                max-height: 90vh;
+                padding: 18px;
             }
-            /* 历史章节列表优化 */
+            .nc-modal-body { max-height: 60dvh; max-height: 60vh; }
+
+            /* ---- 历史面板 ---- */
+            .nc-history-panel {
+                width: 96vw;
+                padding: 18px;
+            }
+
+            /* ---- 历史章节列表 ---- */
             .nc-chapter-item {
-                flex-direction: column;
-                align-items: flex-start;
+                flex-wrap: wrap;
                 gap: 8px;
             }
-            .nc-chapter-item .chapter-checkbox {
-                align-self: flex-start;
-            }
-            .nc-chapter-item > div:first-child {
-                width: 100%;
-            }
-            .nc-chapter-item > div:last-child {
-                width: 100%;
-                display: flex;
-                flex-wrap: wrap;
-                gap: 6px;
-            }
-            .nc-chapter-item button {
-                flex: 1 0 auto;
-            }
-            /* 模态框占满屏幕 */
-            .nc-modal {
-                width: 95vw;
-                max-width: 95vw;
-                padding: 15px;
-            }
-            /* 浮动按钮位置优化 */
+            .nc-chapter-item > div:first-child { width: 100%; }
+            .nc-chapter-item button            { flex: 1 1 auto; }
+
+            /* ---- 浮动按钮 ---- */
             #nc-float-btn {
-                bottom: 30px !important;
-                font-size: 14px;
+                bottom: 24px !important;
+                right: 16px;
+                font-size: 13px;
                 padding: 12px 18px;
             }
-        }
 
-        /* 手机小屏 (最大 600px) 进一步精简 */
-        @media (max-width: 600px) {
-            /* 隐藏一些次要描述文字 */
-            .nc-tree-desc,
-            .nc-card-title-sub,
-            .nc-token-last,
-            .nc-mode-label {
-                display: none !important;
+            /* ---- 配置编辑器面板 ---- */
+            .nc-config-editor-layout {
+                flex-direction: column !important;
             }
-            /* Agent 复选框调整为单列 */
-            .nc-grid-2 {
-                grid-template-columns: 1fr !important;
+            .nc-config-editor-left {
+                width: 100% !important;
+                height: 220px;
+                border-right: none !important;
+                border-bottom: 1px solid rgba(255,255,255,.1);
+                overflow-y: auto;
             }
-            /* 按钮文字缩小一点 */
-            .nc-btn {
-                font-size: 12px;
-                padding: 8px 10px;
+            .nc-config-editor-right {
+                flex: 1;
+                overflow-y: auto;
             }
-            /* 工作流按钮改为一列 */
-            .nc-workflow-agent-btn {
-                flex: 1 1 100%;
-            }
-            /* 历史面板操作按钮堆叠 */
-            .nc-chapter-item > div:last-child {
-                flex-direction: column;
-            }
-            .nc-chapter-item button {
-                width: 100%;
-            }
-            /* 减小内边距 */
-            .nc-panel {
-                padding: 8px;
-            }
-            .nc-card {
-                padding: 8px;
-            }
-        }
 
-        /* 极小屏 (最大 400px) 进一步压缩 */
-        @media (max-width: 400px) {
-            .nc-panel-title-text {
-                font-size: 16px;
+            /* ---- Galgame 制作器 ---- */
+            .nc-gal-layout {
+                flex-direction: column !important;
             }
-            .nc-panel-title-icon {
-                font-size: 24px;
+            .nc-gal-sidebar {
+                width: 100% !important;
+                height: 160px;
+                overflow-y: auto;
+                border-right: none !important;
+                border-bottom: 1px solid rgba(255,255,255,.1);
             }
-            .nc-tree-title {
-                font-size: 12px;
+            .nc-gal-properties {
+                width: 100% !important;
+                height: 180px;
+                overflow-y: auto;
+                border-left: none !important;
+                border-top: 1px solid rgba(255,255,255,.1);
             }
-            .nc-agent-checkbox {
+
+            /* ---- 文件管理器标签 ---- */
+            .nc-flex--tab-bar {
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+            .nc-flex--tab-bar > .nc-btn {
+                flex: 1 1 calc(33% - 4px);
+                padding: 8px 4px;
                 font-size: 11px;
             }
-            #nc-user-input {
-                min-height: 100px;
-                font-size: 14px;
+
+            /* ---- 来源头部 grid 改为纯列 ---- */
+            .nc-grid--source-header {
+                display: none !important;
+            }
+            .nc-card--source-card {
+                gap: 8px;
             }
         }
+
+        /* ── 4. 手机横屏/大手机 ≤ 767px ────────────────────── */
+        @media (max-width: 767px) {
+            /* ---- 面板 ---- */
+            .nc-panel { padding: 10px 12px; }
+            .nc-panel-header {
+                padding-bottom: 8px;
+                margin-bottom: 8px;
+            }
+            .nc-panel-footer { gap: 6px; }
+            .nc-panel-footer > div { min-width: 90px; }
+
+            /* ---- 选项卡文字极简 ---- */
+            .nc-tab-btn { font-size: 10px; padding: 9px 6px; min-width: 52px; }
+
+            /* ---- 卡片 ---- */
+            .nc-card { padding: 10px; }
+            .nc-card-title { font-size: 12px; }
+
+            /* ---- 按钮 ---- */
+            .nc-btn    { font-size: 12px; padding: 9px 14px; }
+            .nc-btn-sm { font-size: 11px; padding: 7px 12px; }
+            .nc-btn-xs { font-size: 10px; padding: 4px 8px; }
+
+            /* ---- Agent 工作流：单列 ---- */
+            .nc-workflow-agent-btn { flex: 1 1 100%; }
+            .nc-agent-status-btn   { font-size: 10px; padding: 6px 8px; }
+
+            /* ---- Agent grid：单列 ---- */
+            .nc-grid-2 { grid-template-columns: 1fr !important; }
+
+            /* ---- 隐藏次要元素 ---- */
+            .nc-tree-desc,
+            .nc-panel-title-sub,
+            .nc-mode-label { display: none !important; }
+
+            /* ---- 标题 ---- */
+            .nc-panel-title-text { font-size: 15px; }
+            .nc-panel-title-icon { font-size: 22px; }
+
+            /* ---- Token ---- */
+            .nc-token-value { font-size: 17px; }
+            .nc-token-label { font-size: 10px; }
+
+            /* ---- 历史章节操作按钮：换行堆叠 ---- */
+            .nc-chapter-item > div:last-child {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+                width: 100%;
+            }
+            .nc-chapter-item button { flex: 1 1 calc(50% - 4px); min-width: 60px; }
+
+            /* ---- 模态框 ---- */
+            .nc-modal {
+                width: 100vw;
+                max-width: 100vw;
+                border-radius: 16px 16px 0 0;
+                padding: 16px;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                max-height: 88dvh;
+                max-height: 88vh;
+            }
+            .nc-modal-overlay {
+                align-items: flex-end;
+                padding: 0;
+            }
+            .nc-modal-body  { max-height: 55dvh; max-height: 55vh; }
+            .nc-modal-footer { gap: 8px; flex-wrap: wrap; }
+            .nc-modal-footer .nc-btn,
+            .nc-modal-footer .nc-modal-copy-btn,
+            .nc-modal-footer .nc-modal-close-btn {
+                flex: 1 1 auto;
+                min-width: 80px;
+            }
+
+            /* ---- 历史面板 ---- */
+            .nc-history-panel {
+                width: 100vw;
+                border-radius: 16px 16px 0 0;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                max-height: 92dvh;
+                max-height: 92vh;
+                padding: 14px;
+            }
+            .nc-history-overlay {
+                align-items: flex-end;
+                padding: 0;
+            }
+
+            /* ---- 输入框 ---- */
+            #nc-user-input { min-height: 70px; max-height: 100px; font-size: 14px; }
+
+            /* ---- 浮动按钮 ---- */
+            #nc-float-btn {
+                bottom: 16px !important;
+                right: 12px;
+                padding: 10px 14px;
+                font-size: 12px;
+                border-radius: 20px;
+            }
+
+            /* ---- 文件管理器标签：2列 ---- */
+            .nc-flex--tab-bar > .nc-btn {
+                flex: 1 1 calc(50% - 4px);
+            }
+
+            /* ---- 图片库画廊：2列 ---- */
+            .nc-flex--gallery {
+                gap: 10px;
+                justify-content: space-evenly;
+            }
+            .nc-flex-item--image-card {
+                width: calc(50% - 10px);
+            }
+
+            /* ---- 属性面板标签字号 ---- */
+            .nc-field-label--md { font-size: 12px; }
+            .nc-prop-title--lg  { font-size: 14px; }
+        }
+
+        /* ── 5. 手机竖屏 ≤ 479px：极致精简 ─────────────────── */
+        @media (max-width: 479px) {
+            /* ---- 面板 ---- */
+            .nc-panel { padding: 8px 10px; }
+            .nc-panel-header { padding-bottom: 6px; margin-bottom: 6px; }
+            .nc-panel-title-text { font-size: 13px; }
+            .nc-panel-title-icon { font-size: 20px; }
+
+            /* ---- 选项卡：允许横滑 ---- */
+            .nc-tab-bar { border-radius: 8px 8px 0 0; }
+            .nc-tab-btn { font-size: 9px; padding: 8px 4px; min-width: 44px; }
+
+            /* ---- 底部 ---- */
+            .nc-panel-footer { flex-direction: column; gap: 6px; }
+            .nc-panel-footer > div {
+                width: 100%;
+                justify-content: center;
+            }
+            /* 中断按钮始终全宽 */
+            #nc-stop-btn { width: 100%; }
+
+            /* ---- 按钮 ---- */
+            .nc-btn    { font-size: 11px; padding: 8px 10px; }
+            .nc-btn-sm { font-size: 10px; padding: 6px 10px; }
+            .nc-btn-xs { font-size: 9px;  padding: 3px 6px; }
+
+            /* ---- 树形菜单 ---- */
+            .nc-tree-title { font-size: 11px; }
+            .nc-tree-header { padding: 8px 10px; min-height: 40px; }
+
+            /* ---- Agent ---- */
+            .nc-agent-checkbox    { font-size: 11px; padding: 8px 10px; min-height: 40px; }
+            .nc-agent-status-btn  { font-size: 9px;  padding: 4px 6px; }
+            .nc-required-badge    { display: none; }
+
+            /* ---- 卡片 ---- */
+            .nc-card      { padding: 8px; }
+            .nc-card-title { font-size: 11px; margin-bottom: 8px; }
+
+            /* ---- 输入框 ---- */
+            #nc-user-input { min-height: 60px; max-height: 80px; font-size: 13px; }
+
+            /* ---- Token ---- */
+            .nc-token-display { padding: 6px 10px; gap: 6px; }
+            .nc-token-value   { font-size: 16px; }
+            .nc-token-main    { gap: 3px; }
+
+            /* ---- 模态框 ---- */
+            .nc-modal { padding: 14px; }
+            .nc-modal-body { padding: 8px; max-height: 60dvh; max-height: 60vh; }
+
+            /* ---- 历史面板按钮：单列 ---- */
+            .nc-chapter-item button { flex: 1 1 100%; }
+            .nc-hist-btn--view,
+            .nc-hist-btn--status,
+            .nc-hist-btn--rollback,
+            .nc-hist-btn--delete,
+            .nc-hist-btn--branch {
+                width: 100%;
+                justify-content: center;
+            }
+
+            /* ---- 图片库：单列 ---- */
+            .nc-flex-item--image-card { width: 100%; }
+
+            /* ---- 来源卡片输入框 ---- */
+            .nc-source-input--main,
+            .nc-source-input--flex { font-size: 12px; padding: 8px 10px; }
+            .nc-source-select--flex { font-size: 12px; padding: 8px; }
+
+            /* ---- 属性面板 ---- */
+            .nc-field-input--md,
+            .nc-field-input--sm { font-size: 12px; padding: 7px 10px; }
+            .nc-prop-title--lg  { font-size: 13px; }
+            .nc-prop-title--sm  { font-size: 12px; }
+
+            /* ---- 浮动按钮 ---- */
+            #nc-float-btn {
+                bottom: 12px !important;
+                right: 8px;
+                padding: 9px 12px;
+                font-size: 11px;
+            }
+        }
+
+        /* ── 6. 横屏手机补丁（高度 < 500px）────────────────── */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .nc-panel {
+                padding: 6px 12px;
+            }
+            .nc-panel-header { padding-bottom: 6px; margin-bottom: 6px; }
+            .nc-panel-title-sub { display: none; }
+            #nc-user-input  { min-height: 50px; max-height: 60px; }
+            .nc-modal       { max-height: 96dvh; max-height: 96vh; border-radius: 12px; }
+            .nc-modal-body  { max-height: 60dvh; max-height: 60vh; }
+            .nc-history-panel { max-height: 96dvh; max-height: 96vh; border-radius: 12px; }
+            #nc-float-btn   { bottom: 8px !important; right: 8px; }
+        }
+
+        /* ── 7. 触摸设备通用优化（无悬停） ─────────────────── */
+        @media (hover: none) and (pointer: coarse) {
+            /* 加大所有可点击元素的最小点击区域 */
+            .nc-btn,
+            .nc-btn-sm,
+            .nc-modal-copy-btn,
+            .nc-modal-close-btn {
+                min-height: 44px;
+            }
+            .nc-btn-xs { min-height: 36px; }
+
+            /* 取消 hover transform，避免点击时跳动 */
+            .nc-btn-primary:not(:disabled):hover {
+                transform: none;
+                filter: none;
+            }
+            .nc-tree-header:hover { background: rgba(255,255,255,.05); }
+
+            /* 滚动容器添加惯性滚动 */
+            .nc-scroll,
+            .nc-card-content,
+            .nc-modal-body,
+            .nc-history-panel,
+            .nc-panel-body,
+            #nc-progress-content {
+                -webkit-overflow-scrolling: touch;
+                overscroll-behavior: contain;
+            }
+
+            /* 输入框放大，避免系统自动缩放（iOS） */
+            input[type="text"],
+            input[type="number"],
+            input[type="password"],
+            textarea,
+            select {
+                font-size: max(16px, 1em);
+            }
+
+            /* 浮动按钮加大 */
+            #nc-float-btn { min-height: 44px; }
+        }
+
+        /* ── 8. 高分屏（Retina）轻微锐化阴影 ───────────────── */
+        @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 2dppx) {
+            .nc-panel {
+                box-shadow: 0 20px 60px rgba(0,0,0,.6), 0 0 0 0.5px rgba(255,255,255,.12);
+            }
+            .nc-modal {
+                box-shadow: 0 16px 50px rgba(0,0,0,.55), 0 0 0 0.5px rgba(255,255,255,.1);
+            }
+        }
+
+
+
+        /* ── 按钮色彩主题 ──────────────────────────────── */
+        /* 工具栏琥珀色实色按钮（检测配置） */
+        .nc-btn--amber-solid { background: #ffaa00; border-color: #ffaa00; color: white; }
+        /* 紫色渐变按钮（确认/编辑模式） */
+        .nc-btn--grad-purple { background:linear-gradient(135deg,#667eea,#764ba2); }
+        /* 紫渐变行动按钮（互动复制/跳过） */
+        .nc-btn--grad-purple-action { background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 8px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+        /* 带阴影紫渐变按钮（查看源码） */
+        .nc-btn--grad-purple-shadow { background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); }
+        /* 红色渐变按钮（取消/关闭） */
+        .nc-btn--grad-red { background:linear-gradient(135deg,#dc3545,#c82333); }
+        /* 青色渐变按钮（自动生成ID） */
+        .nc-btn--grad-teal { background:linear-gradient(135deg,#4ecdc4,#44a3aa); }
+        /* 带阴影青渐变按钮（查看预览） */
+        .nc-btn--grad-teal-shadow { background: linear-gradient(135deg, #4ecdc4, #44a3aa); color: white; border: none; box-shadow: 0 4px 12px rgba(78, 205, 196, 0.4); }
+        /* 绿色按钮（Galgame新建/自动布局） */
+        .nc-btn--green { background: #10b981; }
+        /* 工具栏绿色实色按钮（应用配置） */
+        .nc-btn--green-solid { background: #10b981; border-color: #10b981; color: white; }
+        /* 橙色按钮（Galgame导出/导入） */
+        .nc-btn--orange { background: #f39c12; }
+        /* 工具栏橙色实色按钮（导出/导入配置） */
+        .nc-btn--orange-solid { background: #f39c12; border-color: #f39c12; color: white; }
+        /* 紫色按钮（保存/加载） */
+        .nc-btn--purple { background: #667eea; }
+        /* 紫色实色按钮（数据化全选/反选/翻页） */
+        .nc-btn--purple-solid { background: #667eea; color: white; border: none; }
+        /* 红色按钮（Galgame打包/危险操作） */
+        .nc-btn--red { background: #dc3545; }
+        /* 青色按钮（Galgame播放模式） */
+        .nc-btn--teal { background: #4ecdc4; }
+        /* Token重置按钮内边距 */
+        .nc-btn--token-reset { padding:3px 8px; }
+
+        /* ── 历史面板章节操作按钮 ──────────────────────────────── */
+        /* 历史面板「从此分支」按钮 */
+        .nc-hist-btn--branch { background:linear-gradient(135deg,#8e44ad,#6c3483); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer; }
+        /* 历史面板删除按钮 */
+        .nc-hist-btn--delete { background:linear-gradient(135deg,#dc3545,#c82333); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer; }
+        /* 历史面板回滚按钮 */
+        .nc-hist-btn--rollback { background:linear-gradient(135deg,#f39c12,#e67e22); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer; }
+        /* 历史面板查看状态按钮 */
+        .nc-hist-btn--status { background:linear-gradient(135deg,#4ecdc4,#44a3aa); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer; }
+        /* 历史面板查看按钮 */
+        .nc-hist-btn--view { background:linear-gradient(135deg,#667eea,#764ba2); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer; }
+
+        /* ── 历史面板工具栏按钮 ──────────────────────────────── */
+        /* 历史工具栏深红按钮（关闭） */
+        .nc-hist-toolbar-btn--crimson { background:linear-gradient(135deg,#dc3545,#c82333); border:none; color:white; border-radius:20px; padding:6px 16px; }
+        /* 历史工具栏紫色按钮（全选分支/刷新） */
+        .nc-hist-toolbar-btn--purple { background:linear-gradient(135deg,#667eea,#764ba2); border:none; color:white; border-radius:20px; padding:6px 16px; }
+        /* 历史工具栏红色按钮（删除选中） */
+        .nc-hist-toolbar-btn--red { background:linear-gradient(135deg,#ff6b6b,#ee5a6f); border:none; color:white; border-radius:20px; padding:6px 16px; }
+        /* 历史工具栏青色按钮（导出/导入备份） */
+        .nc-hist-toolbar-btn--teal { background:linear-gradient(135deg,#4ecdc4,#44a3aa); border:none; color:white; border-radius:20px; padding:6px 16px; }
+
+        /* ── 配置编辑器操作按钮 ──────────────────────────────── */
+        /* 配置编辑器全宽绿色按钮（管理Agent） */
+        .nc-cfgedit-btn--add-full { background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; width:100%; }
+        /* 配置编辑器中绿色添加按钮（添加回流条件/输入源） */
+        .nc-cfgedit-btn--add-md { background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:6px 16px; font-size:13px; font-weight:600; cursor:pointer; }
+        /* 配置编辑器小绿色添加按钮（添加选项） */
+        .nc-cfgedit-btn--add-sm { background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:4px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+        /* 获取模型列表按钮 */
+        .nc-cfgedit-btn--fetch-model { white-space:nowrap; background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; }
+        /* 阶段删除红色按钮 */
+        .nc-cfgedit-btn--stage-delete { background:linear-gradient(135deg, #dc3545, #c82333); border:none; color:white; border-radius:20px; padding:6px 16px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; }
+        /* 阶段插入紫色按钮（前/后插入阶段） */
+        .nc-cfgedit-btn--stage-insert { background:linear-gradient(135deg, #667eea, #764ba2); border:none; color:white; border-radius:20px; padding:6px 16px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px; }
+        /* 测试API连通性按钮（全宽） */
+        .nc-cfgedit-btn--test-api { background:linear-gradient(135deg, #667eea, #764ba2); border:none; color:white; border-radius:20px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer; width:100%; }
+
+        /* ── 内联图标/功能按钮 ──────────────────────────────── */
+        /* API重新测试图标按钮 */
+        .nc-icon-btn--retest { background:none; border:none; color:#667eea; cursor:pointer; font-size:11px; }
+        /* 选择关联Agent按钮 */
+        .nc-icon-btn--select-agents { background:#667eea; border:none; color:white; border-radius:6px; padding:6px 12px; font-size:11px; cursor:pointer; }
+        /* 清空输入工具栏按钮（红色边框） */
+        .nc-toolbar-btn--clear { color:#ff6b6b; border-color:rgba(255,107,107,.3); }
+
+        /* ── Galgame 制作器专用 ──────────────────────────────── */
+        /* Galgame添加变量按钮 */
+        .nc-gal-btn--add-var { margin-top:5px; width:100%; padding:4px; background:#10b981; border:none; border-radius:4px; color:white; cursor:pointer; }
+        /* Galgame删除连线按钮 */
+        .nc-gal-btn--delete-edge { background:#dc3545; color:white; border:none; padding:5px; width:100%; border-radius:4px; }
+        /* Galgame删除节点按钮 */
+        .nc-gal-btn--delete-node { margin-top:10px; width:100%; padding:5px; background:#dc3545; border:none; border-radius:4px; color:white; cursor:pointer; }
+        /* Galgame编辑模式按钮 */
+        .nc-gal-btn--edit-mode { background: linear-gradient(135deg,#667eea,#764ba2); }
+        /* Galgame从历史导入章节按钮 */
+        .nc-gal-btn--import-chapter { margin-top:5px; width:100%; padding:4px; background:#667eea; border:none; border-radius:4px; color:white; cursor:pointer; }
+        /* Galgame32px正方形删除图标按钮 */
+        .nc-gal-btn--remove-32 { background:#dc3545; border:none; color:white; border-radius:4px; width:32px; height:32px; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        /* Galgame36px正方形删除图标按钮 */
+        .nc-gal-btn--remove-36 { background:#dc3545; border:none; color:white; border-radius:4px; width:36px; height:36px; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        /* Galgame快照条目添加按钮 */
+        .nc-gal-btn--snapshot-add { background:#10b981; border:none; color:white; border-radius:3px; cursor:pointer; padding:3px 8px; font-size:11px; }
+        /* Galgame变量删除按钮 */
+        .nc-gal-btn--var-delete { background:#dc3545; border:none; color:white; border-radius:3px; cursor:pointer; font-size:10px; }
+        /* Galgame节点基础输入框（节点ID只读） */
+        .nc-gal-input--base { width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px; }
+        /* Galgame节点脚本等宽输入框 */
+        .nc-gal-input--mono { width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px; font-family:monospace; }
+        /* Galgame快照变量名输入框 */
+        .nc-gal-input--snapshot-var { flex:1; padding:3px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:3px; }
+        /* Galgame变量初始值小输入框 */
+        .nc-gal-input--var-val { width:80px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:3px; font-size:10px; }
+        /* Galgame项目列表紫渐变图标方块（40×40） */
+        .nc-gal-project-icon { width:40px; height:40px; background:linear-gradient(135deg,#667eea,#764ba2); border-radius:8px; display:flex; align-items:center; justify-content:center; color:white; }
+
+        /* ── 状态/徽章/横幅 ──────────────────────────────── */
+        /* 信息提示横幅（配置模式说明） */
+        .nc-banner--info { background: rgba(102, 126, 234, 0.3); color: #667eea; padding: 4px 8px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; text-align: center; border: 1px solid #667eea; }
+        /* 红色警告胶囊横幅 */
+        .nc-banner--warning-red { background: linear-gradient(90deg, #ff6b6b, #c92a2a); color: white; padding: 8px 16px; border-radius: 30px; margin-bottom: 12px; font-weight: 600; text-align: center; box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4); display: inline-block; width: auto; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(4px); }
+        /* Agent关联标签芯片 */
+        .nc-tag--agent { background:#667eea; color:white; border-radius:4px; padding:2px 6px; font-size:10px; }
+
+        /* ── 状态颜色文字 ──────────────────────────────── */
+        /* 危险红色文字（API不可用 ❌） */
+        .nc-text--danger { color:#dc3545; }
+        /* 加粗红色（✗/❌ 标记替换） */
+        .nc-text--danger-bold { color: #dc3545; font-weight: bold; }
+        /* 成功绿色文字（API可用 ✅） */
+        .nc-text--success { color:#28a745; }
+        /* 加粗绿色（✓ 标记替换） */
+        .nc-text--success-bold { color: #28a745; font-weight: bold; }
+        /* 警告黄色文字（未测试 ⏳） */
+        .nc-text--warn-yellow { color:#ffc107; }
+
+        /* ── 通用颜色工具 ──────────────────────────────── */
+        /* 错误红色文字 */
+        .nc-color--error { color:#ff6b6b; }
+        /* 可点击红色图标（删除Agent ✖） */
+        .nc-color--error-btn { color:#ff6b6b; cursor:pointer; }
+        /* 中号可点击红色图标（删除选项 ✖） */
+        .nc-color--error-btn-md { color:#ff6b6b; cursor:pointer; font-size:14px; }
+        /* 居中红色错误信息（编辑器实例丢失） */
+        .nc-color--error-center { color:#ff6b6b; text-align:center; padding:20px; }
+        /* 红色错误提示信息（角色卡缺失等） */
+        .nc-color--error-msg { color:#ff6b6b; font-size:13px; margin-bottom:6px; }
+        /* 带内边距红色错误信息（预览渲染失败） */
+        .nc-color--error-padded { color:#ff6b6b; padding:20px; }
+        /* 带内边距红色错误（加载失败，紧凑写法） */
+        .nc-color--error-padded2 { color:#ff6b6b; padding:20px; }
+        /* 红色错误标题 */
+        .nc-color--error-title { color:#ff6b6b; font-weight:600; margin-bottom:6px; }
+        /* 加粗红色错误标题（配置错误） */
+        .nc-color--error-title-bold { color:#ff6b6b; font-weight:bold; margin-bottom:5px; }
+        /* 灰色辅助文字 */
+        .nc-color--muted { color:#aaa; }
+        /* 居中灰色占位文字（未选中节点等） */
+        .nc-color--muted-center { color:#aaa; text-align:center; }
+        /* 带下边距灰色文字（文件名提示） */
+        .nc-color--muted-mb5 { color:#aaa; margin-bottom:5px; }
+        /* 中号灰色说明文字（修改后自动更新引用） */
+        .nc-color--muted-md { color:#aaa; font-size:14px; }
+        /* 大内边距居中灰色占位（属性面板空状态） */
+        .nc-color--muted-placeholder { color:#aaa; text-align:center; padding:30px; }
+        /* 小号灰色辅助文字（图片/音频空状态） */
+        .nc-color--muted-sm { color:#aaa; font-size:12px; }
+        /* 超小号灰色辅助文字（节点序号等） */
+        .nc-color--muted-xs { color:#aaa; font-size:10px; }
+        /* 主题紫色文字 */
+        .nc-color--primary { color:#667eea; }
+        /* 加粗主题紫色文字（文件ID/音频库标题） */
+        .nc-color--primary-bold { color:#667eea; font-weight:600; }
+        /* 下划线加粗紫色链接（查看错误详情） */
+        .nc-color--primary-link { color:#667eea; text-decoration:underline; font-weight:bold; }
+        /* 小号紫色可点击链接（返回手动输入） */
+        .nc-color--primary-link-sm { color:#667eea; font-size:12px; cursor:pointer; }
+        /* 中灰中等字重标签（关键词列表标题） */
+        .nc-color--subtle-label { color:#ccc; font-weight:500; font-size:14px; }
+        /* 可点击青色图标（编辑Agent ✎） */
+        .nc-color--teal-btn { color:#4ecdc4; cursor:pointer; }
+        /* 青色返回链接（返回阶段） */
+        .nc-color--teal-link { color:#4ecdc4; cursor:pointer; font-size:14px; }
+        /* 树形目录折叠箭头（主题紫，固定16px宽） */
+        .nc-tree-arrow { color:#667eea; width:16px; display:inline-block; }
+
+        /* ── 标题样式 ──────────────────────────────── */
+        /* 灰色h4标题（资源库） */
+        .nc-heading--muted-h4 { margin:0 0 10px; color:#aaa; }
+        /* 主题色h3小标题带下边距（连线属性） */
+        .nc-heading--primary-h3 { color:#667eea; margin:0 0 10px; }
+        /* 主题色h4标题（变量监视器/节点属性） */
+        .nc-heading--primary-h4 { margin:0 0 10px; color:#667eea; }
+        /* 超大警告图标（⚠️） */
+        .nc-icon--warn-xl { font-size:40px; margin-bottom:5px; }
+        /* 半透明小号模态框副标题 */
+        .nc-modal-subtitle { margin:0; opacity:.6; font-size:12px; }
+        /* 灰色模态框副标题 */
+        .nc-modal-subtitle--gray { margin:8px 0 0; font-size:12px; color:#aaa; }
+        /* 错误红色模态框标题 */
+        .nc-modal-title--error { margin:0; font-size:18px; color:#ff6b6b; }
+        /* 主题色模态框标题 */
+        .nc-modal-title--primary { margin:0; color:#667eea; }
+        /* 主题色模态框标题（紧凑写法） */
+        .nc-modal-title--primary-c { margin:0; color:#667eea; }
+        /* 大号主题色模态框标题 */
+        .nc-modal-title--primary-lg { margin:0; color:#667eea; font-size:20px; }
+        /* 大号主题色模态框标题（紧凑写法） */
+        .nc-modal-title--primary-lg-c { margin:0; color:#667eea; font-size:20px; }
+        /* 区块大号标题（小说数据化） */
+        .nc-section-title--lg { margin:0 0 6px; font-size:20px; }
+        /* 区块大号标题（历史管理，紧凑） */
+        .nc-section-title--lg-c { margin:0 0 6px; font-size:20px; }
+        /* 工具栏大标题（Galgame制作器/配置编辑器） */
+        .nc-toolbar-title { font-size: 18px; font-weight: 600; color: #667eea; }
+
+        /* ── 属性面板区块标题 ──────────────────────────────── */
+        /* 大号属性面板区块标题（API/Agent属性） */
+        .nc-prop-title--lg { color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px; }
+        /* 无下划线大号属性标题（输入源/内联） */
+        .nc-prop-title--lg-inline { color:#667eea; font-size:16px; font-weight:600; border-bottom:none; padding-bottom:0; }
+        /* 小号属性面板区块标题（阶段/分类/全局属性） */
+        .nc-prop-title--sm { color:#667eea; font-size:14px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px; }
+        /* 无下划线小号属性标题（选项列表/内联） */
+        .nc-prop-title--sm-inline { color:#667eea; font-size:14px; font-weight:600; border-bottom:none; padding-bottom:0; }
+
+        /* ── 属性面板字段标签 ──────────────────────────────── */
+        /* 基础字段标签（文件ID/上传） */
+        .nc-field-label--base { display:block; margin-bottom:5px; color:#aaa; }
+        /* 基础字段标签（打回建议，紧凑） */
+        .nc-field-label--base-c { display:block; margin-bottom:5px; color:#aaa; }
+        /* 中号字段标签（API/Agent属性） */
+        .nc-field-label--md { display:block; color:#aaa; font-size:14px; margin-bottom:4px; }
+        /* 小号字段标签（阶段/分类/全局属性） */
+        .nc-field-label--sm { display:block; color:#aaa; font-size:12px; margin-bottom:4px; }
+        /* 小号字段标签（历史章节编辑，紧凑） */
+        .nc-field-label--sm-c { display:block; margin-bottom:4px; color:#aaa; font-size:12px; }
+
+        /* ── 属性面板输入框 ──────────────────────────────── */
+        /* 颜色选择器输入框（阶段颜色） */
+        .nc-field-input--color { width:100%; height:40px; background:#0f172a; border:1px solid #3a3a5a; border-radius:8px; padding:2px; }
+        /* 中号深色输入框（API/Agent属性） */
+        .nc-field-input--md { width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px; }
+        /* 弹性宽中号深色输入框（API模型名称） */
+        .nc-field-input--md-flex { flex:1; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px; }
+        /* 等宽中号深色输入框（停止词/logit-bias textarea） */
+        .nc-field-input--md-mono { width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px; font-family:monospace; line-height:1.5; }
+        /* 大内边距等宽中号深色输入框（inputTemplate/description） */
+        .nc-field-input--md-mono-lg { width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:12px 14px; font-size:14px; font-family:monospace; line-height:1.5; }
+        /* 小号深色输入框（阶段/分类/全局属性） */
+        .nc-field-input--sm { width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px; }
+        /* 等宽小号深色输入框（阶段描述 textarea） */
+        .nc-field-input--sm-mono { width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px; font-family:monospace; }
+        /* 连线类型下拉框（较浅背景） */
+        .nc-field-select--edge { width:100%; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; padding:5px; }
+
+        /* ── 输入源编辑区控件 ──────────────────────────────── */
+        /* 弹性宽输入源文字输入框 */
+        .nc-source-input--flex { flex:1; background:#1e1e2f; color:#eaeaea; border:1px solid #667eea; border-radius:4px; padding:8px 12px; font-size:14px; }
+        /* 输入源来源文本输入框 */
+        .nc-source-input--main { width:100%; background:#1e1e2f; color:#eaeaea; border:1px solid #667eea; border-radius:6px; padding:10px 12px; font-size:14px; }
+        /* 输入源类型小宽度输入框 */
+        .nc-source-input--type { width:80px; background:#1e1e2f; color:#eaeaea; border:1px solid #667eea; border-radius:6px; padding:10px; font-size:14px; }
+        /* 源码预览面板（显示状态，深色背景） */
+        .nc-source-pane { display:block; flex:1; overflow:auto; background:#0f172a; box-sizing:border-box; }
+        /* 弹性宽输入源模式下拉框 */
+        .nc-source-select--flex { flex:1; background:#1e1e2f; color:#eaeaea; border:1px solid #667eea; border-radius:6px; padding:10px; font-size:14px; }
+
+        /* ── 选项列表输入框 ──────────────────────────────── */
+        /* 选项名称/描述/图标小输入框 */
+        .nc-opt-input--sm { width:100%; background:#1e1e2f; color:#eaeaea; border:1px solid #3a3a5a; border-radius:6px; padding:6px 8px; font-size:12px; margin-bottom:4px; }
+
+        /* ── 通用对话框表单控件 ──────────────────────────────── */
+        /* Agent键名编辑输入框（200px固定宽） */
+        .nc-modal-input--agent-key { width:200px; background:#0f172a; color:#eaeaea; border:1px solid #667eea; border-radius:6px; padding:8px 12px; font-size:16px; font-weight:600; }
+        /* 通用模态框输入框（自定义文件ID等） */
+        .nc-modal-input--base { width:100%; padding:8px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px; font-size:13px; }
+        /* 深色半透明模态框输入框（章节标题编辑） */
+        .nc-modal-input--dark { width:100%; padding:8px; background:rgba(0,0,0,0.4); color:#eaeaea; border:1px solid #667eea; border-radius:5px; font-size:13px; }
+        /* 分页页码输入框（50px） */
+        .nc-modal-input--page { width:50px; text-align:center; background:rgba(0,0,0,0.4); color:#eaeaea; border:1px solid #667eea; border-radius:4px; padding:4px; }
+        /* 模态框状态书选择下拉框 */
+        .nc-modal-select--book { margin-left:10px; padding:4px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px; }
+        /* 通用模态框文件选择下拉框 */
+        .nc-modal-select--file { width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px; }
+        /* 通用模态框多行输入框（打回建议） */
+        .nc-modal-textarea--base { width:100%; padding:8px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px; font-size:13px; min-height:100px; }
+        /* 章节内容编辑大文本框 */
+        .nc-modal-textarea--chapter { width:100%; min-height:250px; padding:10px; background:rgba(0,0,0,0.4); color:#eaeaea; border:1px solid #667eea; border-radius:5px; font-family:Consolas,monospace; font-size:12px; line-height:1.5; }
+
+        /* ── checkbox / radio 控件 ──────────────────────────────── */
+        /* 章节列表复选框（16×16） */
+        .nc-checkbox--base { width: 16px; height: 16px; cursor: pointer; }
+        /* 主题色中号复选框（图像/流式参数） */
+        .nc-checkbox--purple-md { accent-color:#667eea; width:16px; height:16px; }
+        /* 中号复选框标签（API参数/Agent必需） */
+        .nc-checkbox-label--md { display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer; }
+        /* 小号复选框标签（执行模式单选） */
+        .nc-checkbox-label--sm { display:flex; align-items:center; gap:6px; color:#ccc; font-size:13px; cursor:pointer; }
+        /* 超小号复选框标签（Galgame网格对齐） */
+        .nc-checkbox-label--xs { display: flex; align-items: center; gap: 4px; color: #ccc; font-size: 12px; }
+        /* 主题色 radio 按钮（执行模式） */
+        .nc-radio--purple { accent-color:#667eea; }
+
+        /* ── flex 行布局 ──────────────────────────────── */
+        /* 输入区行动栏（按钮行，上边距8） */
+        .nc-flex--action-bar { display: flex; margin-top: 8px; gap: 8px; align-items: center; flex-wrap: wrap; }
+        /* 居中换行按钮组（历史工具栏） */
+        .nc-flex--btn-group-center { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-bottom:8px; }
+        /* 章节列表行（可点击，下边距8） */
+        .nc-flex--chapter-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer; }
+        /* 章节查看按钮行（源码/预览，上边距10） */
+        .nc-flex--chapter-view-btns { margin-top:10px; display:flex; gap:12px; justify-content:center; }
+        /* flex复选框组行布局（API参数） */
+        .nc-flex--checkbox-group { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px; }
+        /* flex列布局，间距10，占满高度（卡片内容配置区） */
+        .nc-flex--col-10-full { display:flex; flex-direction:column; gap:10px; height:100%; }
+        /* flex列布局，间距10（音频/文件列表，带空格） */
+        .nc-flex--col-10-sp { display: flex; flex-direction: column; gap: 10px; }
+        /* flex列布局，占满高度，溢出隐藏（Agent选择面板） */
+        .nc-flex--col-full { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+        /* flex列布局，占满剩余高度，溢出隐藏（卡片内容区） */
+        .nc-flex--col-grow-overflow { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+        /* flex列布局，60vh高度（源码/预览模态框内容区） */
+        .nc-flex--col-modal-60vh { display: flex; flex-direction: column; padding:0; height:60vh; overflow:hidden; }
+        /* flex行，间距10，水平居中（模态框底部） */
+        .nc-flex--footer-10-center { display:flex; gap:10px; justify-content:center; }
+        /* flex行，间距10，水平居中（紧凑） */
+        .nc-flex--footer-10-center-c { display:flex; gap:10px; justify-content:center; }
+        /* flex行，间距10，居中换行（模态框底部，带空格） */
+        .nc-flex--footer-10-wrap-sp { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        /* flex行，间距8，居中换行（章节选择底部） */
+        .nc-flex--footer-8-wrap { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+        /* 图片库画廊弹性换行居中 */
+        .nc-flex--gallery { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
+        /* 信息提示行（超小灰字，换行） */
+        .nc-flex--info-hint-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:5px; font-size:11px; color:#888; }
+        /* 模态框标题行两端对齐 */
+        .nc-flex--modal-header { display: flex; align-items: center; justify-content: space-between; }
+        /* flex行，间距10，垂直居中 */
+        .nc-flex--row-10-middle { display:flex; align-items:center; gap:10px; }
+        /* flex行，间距15，垂直居中 */
+        .nc-flex--row-15-middle { display:flex; gap:15px; align-items:center; }
+        /* flex行，间距15，垂直居中（打回附加内容，紧凑） */
+        .nc-flex--row-15-middle-c { display:flex; gap:15px; align-items:center; }
+        /* flex行，间距15，垂直居中（带空格） */
+        .nc-flex--row-15-middle-sp { display: flex; gap: 15px; align-items: center; }
+        /* flex行，间距20（执行模式单选组容器） */
+        .nc-flex--row-20 { display:flex; gap:20px; }
+        /* flex行，间距5 */
+        .nc-flex--row-5 { display:flex; gap:5px; }
+        /* flex行，间距5，水平居中 */
+        .nc-flex--row-5-center { display:flex; gap:5px; justify-content:center; }
+        /* flex行，间距5，水平居中（图片/音频操作，带空格） */
+        .nc-flex--row-5-center-sp { display: flex; gap: 5px; justify-content: center; }
+        /* flex行，间距5，垂直居中（底部开关组） */
+        .nc-flex--row-5-middle { display:flex; align-items:center; gap:5px; }
+        /* flex行，间距5，上边距5（媒体操作按钮组） */
+        .nc-flex--row-5-mt5 { display:flex; gap:5px; margin-top: 5px; }
+        /* flex行，间距5，上边距5（Galgame音频操作，紧凑） */
+        .nc-flex--row-5-mt5-c { margin-top:5px; display:flex; gap:5px; }
+        /* flex行，间距5，上边距5（带空格） */
+        .nc-flex--row-5-mt5-sp { display: flex; gap: 5px; margin-top: 5px; }
+        /* flex行，间距5，上边距5，换行（其余文件操作） */
+        .nc-flex--row-5-mt5-wrap { display:flex; gap:5px; margin-top: 5px; flex-wrap: wrap; }
+        /* flex行，间距5，上边距5，换行（带空格） */
+        .nc-flex--row-5-mt5-wrap-sp { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+        /* flex行，间距5（Galgame项目按钮组，带空格） */
+        .nc-flex--row-5-sp { display: flex; gap: 5px; }
+        /* flex行，间距6，下边距6，垂直居中（回流关键词行） */
+        .nc-flex--row-6-mb6-mid { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
+        /* flex行，间距8 */
+        .nc-flex--row-8 { display:flex; gap:8px; }
+        /* flex行，间距8，垂直居中 */
+        .nc-flex--row-8-center { display:flex; gap:8px; align-items:center; }
+        /* flex行，间距8，垂直居中（带空格） */
+        .nc-flex--row-8-center-sp { display: flex; gap: 8px; align-items: center; }
+        /* flex行，间距8，下边距8 */
+        .nc-flex--row-8-mb8 { display:flex; gap:8px; margin-bottom:8px; }
+        /* flex行，间距8，垂直居中 */
+        .nc-flex--row-8-middle { display:flex; align-items:center; gap:8px; }
+        /* flex行，间距8，垂直居中，下边距8 */
+        .nc-flex--row-8-middle-mb8 { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+        /* flex行，间距8（带空格） */
+        .nc-flex--row-8-sp { display: flex; gap: 8px; }
+        /* flex行，间距8，允许换行 */
+        .nc-flex--row-8-wrap { display:flex; gap:8px; flex-wrap:wrap; }
+        /* API状态列表每行布局（两端对齐，下边距3，小字） */
+        .nc-flex--row-api-item { display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; font-size:11px; }
+        /* flex行，两端对齐（Agent名称与序号） */
+        .nc-flex--row-between { display:flex; justify-content:space-between; }
+        /* flex行，两端对齐（紧凑） */
+        .nc-flex--row-between-c { display:flex; justify-content:space-between; }
+        /* flex行，两端对齐，垂直居中，下边距12（选项/输入源标题行） */
+        .nc-flex--row-between-mb12 { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        /* flex行，两端对齐，垂直居中，下边距5 */
+        .nc-flex--row-between-mb5 { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+        /* flex行，两端对齐，垂直居中，下边距5（带空格） */
+        .nc-flex--row-between-mb5-sp { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+        /* flex行，两端对齐，垂直居中，下边距8 */
+        .nc-flex--row-between-mb8 { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+        /* flex行，两端对齐，垂直居中（带空格） */
+        .nc-flex--row-between-mid-sp { display: flex; justify-content: space-between; align-items: center; }
+        /* flex行，两端对齐，垂直居中，上边距10（章节查看源码/预览） */
+        .nc-flex--row-between-mt10 { display:flex; justify-content:space-between; align-items:center; margin-top:10px; }
+        /* Galgame快照条目行（小字，下边距） */
+        .nc-flex--snapshot-row { display:flex; align-items:center; gap:5px; margin-bottom:5px; font-size:12px; }
+        /* 文件管理器标签页横向排列 */
+        .nc-flex--tab-bar { display: flex; gap: 10px; padding: 0 10px; margin-bottom: 10px; flex-wrap: wrap; }
+        /* 弹性换行居中，间距10（图片展示行） */
+        .nc-flex--wrap-center { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+
+        /* ── flex 子项属性 ──────────────────────────────── */
+        /* Agent选择面板已启用区域（固定30%高度） */
+        .nc-flex-item--agent-enabled { flex: 0 0 30%; min-height: 0; overflow-y: auto; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; }
+        /* Agent标签展示容器（弹性宽，最低28px） */
+        .nc-flex-item--agent-tags { flex:1; display:flex; flex-wrap:wrap; gap:4px; min-height:28px; background:#1e1e2f; border:1px solid #3a3a5a; border-radius:6px; padding:4px; }
+        /* API状态容器底部（不压缩，上边框） */
+        .nc-flex-item--api-footer { flex-shrink: 0; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); }
+        /* 快照条目名称（固定120px，溢出截断） */
+        .nc-flex-item--entry-name { flex:0 0 120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        /* 文件信息文字（右对齐，灰色） */
+        .nc-flex-item--file-info { flex:1; text-align:right; font-size:12px; color:#888; }
+        /* 面板底部居中按钮组 */
+        .nc-flex-item--footer-center { flex:1; display:flex; justify-content:center; gap:8px; }
+        /* 面板底部左侧按钮组 */
+        .nc-flex-item--footer-left { flex:1; display:flex; justify-content:flex-start; gap:8px; }
+        /* 面板底部右侧按钮组 */
+        .nc-flex-item--footer-right { flex:1; display:flex; gap:10px; justify-content:flex-end; }
+        /* flex子项，占满可用空间 */
+        .nc-flex-item--grow { flex:1; }
+        /* flex子项，占2份（面板主体区） */
+        .nc-flex-item--grow2 { flex:2; min-height:0; }
+        /* 图片库卡片容器（固定200px宽） */
+        .nc-flex-item--image-card { flex: 0 0 auto; width: 200px; margin: 5px; text-align: center; }
+        /* 互动场景模态框正文滚动区 */
+        .nc-flex-item--interaction { flex:1; overflow-y: auto; padding:12px; }
+        /* 互动场景模态框底部按钮行（不压缩） */
+        .nc-flex-item--modal-footer { flex-shrink:0; display:flex; gap:10px; justify-content:center; padding:12px; border-top:1px solid rgba(255,255,255,0.1); }
+        /* 可滚动模态框内容区（Agent选择表） */
+        .nc-flex-item--modal-scroll { flex:1; overflow-y:auto; padding:10px; }
+        /* flex子项，禁止压缩（textarea等） */
+        .nc-flex-item--no-shrink { flex-shrink: 0; }
+        /* flex子项，禁止压缩，下边距4 */
+        .nc-flex-item--no-shrink-mb4 { flex-shrink: 0; margin-bottom: 4px; }
+        /* flex子项，禁止压缩，上下边距4 */
+        .nc-flex-item--no-shrink-my4 { flex-shrink: 0; margin: 4px 0; }
+        /* 执行进度区（flex占满+暗背景圆角） */
+        .nc-flex-item--progress { flex: 1; overflow-y: auto; background:rgba(0,0,0,.2); padding:10px; border-radius:6px; }
+        /* 输入源来源框容器（相对定位） */
+        .nc-flex-item--relative { flex:1; position:relative; }
+        /* flex可滚动面板（Agent全分类列表） */
+        .nc-flex-item--scroll-panel { flex: 1; min-height: 0; overflow-y: auto; }
+        /* 上传文件按钮（0.5份宽，绿色背景） */
+        .nc-flex-item--upload-btn { flex:0.5; background: #10b981; }
+        /* 工作流可视化容器 */
+        .nc-flex-item--workflow-viz { flex:1; overflow-y:auto; min-height:0; padding-right:4px; }
+        /* gap间距6（当前已启用Agent网格） */
+        .nc-gap--6 { gap: 6px; }
+        /* 输入源列表表头网格（5列固定宽度） */
+        .nc-grid--source-header { display:grid; grid-template-columns:1fr 90px 70px 1fr 30px; gap:8px; margin-bottom:8px; padding:0 4px; color:#888; font-size:12px; font-weight:500; text-transform:uppercase; }
+
+        /* ── 显示/隐藏 ──────────────────────────────── */
+        /* 默认隐藏（要求/中断等按钮，JS控制） */
+        .nc-hidden { display:none; }
+        /* 模型选择容器（默认隐藏，点击获取后显示） */
+        .nc-hidden--model-select { display:none; margin-bottom:16px; }
+        /* 预览面板（默认隐藏，切换后显示） */
+        .nc-hidden--preview-pane { display:none; flex:1; overflow-y:auto; padding:12px; background:#0f172a; box-sizing:border-box; }
+
+        /* ── 尺寸/滚动限制 ──────────────────────────────── */
+        /* 数据化章节列表（50vh，右内边距，下边距） */
+        .nc-size--chapter-list { max-height:50vh; overflow-y:auto; padding-right:4px; margin-bottom:10px; }
+        /* 历史章节树形列表容器（60vh） */
+        .nc-size--chapter-tree { height:60vh; overflow-y:auto; position:relative; }
+        /* 文件管理器内容区（可滚动，内边距10） */
+        .nc-size--file-content { overflow-y: auto; padding: 10px; }
+        /* 占满父容器高度 */
+        .nc-size--full-h { height:100%; }
+        /* 模态框正文最大高度50vh */
+        .nc-size--max50vh { max-height:50vh; }
+        /* 状态书编辑模态框正文最大高度55vh */
+        .nc-size--max55vh { max-height:55vh; }
+        /* 模态框正文最大60vh，可滚动 */
+        .nc-size--max60vh { max-height:60vh; overflow-y:auto; }
+        /* 模态框正文50vh带内边距（Galgame项目选择） */
+        .nc-size--modal-50vh-pad { max-height:50vh; overflow-y:auto; padding:10px; }
+        /* 可滚动200px容器（Galgame快照条目） */
+        .nc-size--scroll-200 { max-height:200px; overflow-y:auto; }
+        /* 可滚动200px容器（回流条件列表） */
+        .nc-size--scroll-200-mb8 { max-height:200px; overflow-y:auto; margin-bottom:8px; }
+        /* 可滚动280px容器（输入源列表） */
+        .nc-size--scroll-280 { max-height:280px; overflow-y:auto; }
+        /* 可滚动300px容器（选项列表） */
+        .nc-size--scroll-300 { max-height:300px; overflow-y:auto; }
+
+        /* ── 内容/正文区 ──────────────────────────────── */
+        /* 章节查看模态框正文区（滚动，位置相对） */
+        .nc-body--chapter-view { padding:12px; overflow-y:auto; max-height:60vh; position:relative; }
+        /* 居中灰色空状态提示 */
+        .nc-body--empty { padding: 20px; text-align: center; color: #aaa; }
+        /* 居中灰色加载提示区域 */
+        .nc-body--loading { padding: 20px; overflow-y: auto; text-align: center; color: #aaa; }
+        /* 正文内边距12（历史章节编辑模态框） */
+        .nc-body--pad12 { padding:12px; }
+        /* 正文内边距20（通用模态框） */
+        .nc-body--pad20 { padding:20px; }
+        /* 带滚动大内边距容器（图片展示区） */
+        .nc-body--pad20-scroll { padding: 20px; overflow-y: auto; }
+
+        /* ── 卡片/面板块 ──────────────────────────────── */
+        /* 中深色卡片（音频/文件列表项） */
+        .nc-card--dark-md { padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; }
+        /* 带下边距中深色卡片（其余文件列表项） */
+        .nc-card--dark-md-mb10 { margin-bottom: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; }
+        /* 深色卡片行布局（Galgame项目列表项） */
+        .nc-card--dark-row { padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+        /* 小深色卡片（节点变量分析/快照导入区） */
+        .nc-card--dark-sm { background:rgba(0,0,0,0.2); padding:8px; border-radius:4px; }
+        /* 图片库缩略图卡片（150px宽） */
+        .nc-card--image-thumb { width: 150px; text-align: center; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; }
+        /* Galgame项目选择卡片（可hover，带过渡） */
+        .nc-card--project-item { padding:10px; margin-bottom:8px; background:rgba(255,255,255,0.05); border-radius:8px; cursor:pointer; transition:background 0.2s; border:1px solid transparent; }
+        /* 输入源编辑卡片容器 */
+        .nc-card--source-card { background:#2a2a3a; border-radius:8px; padding:12px; margin-bottom:8px; border:1px solid #3a3a5a; }
+
+        /* ── 表格 ──────────────────────────────── */
+        /* 紧凑表格（Agent选择表） */
+        .nc-table--sm { width:100%; border-collapse:collapse; font-size:12px; }
+        /* 紧凑表格（变量监视器表，不同属性顺序） */
+        .nc-table--sm2 { width:100%; font-size:12px; border-collapse:collapse; }
+        /* 表体行底部边框（暗灰色） */
+        .nc-table-row--body { border-bottom:1px solid #333; }
+        /* 表头行底部边框（主题紫色） */
+        .nc-table-row--header { border-bottom:1px solid #667eea; }
+        /* 带内边距5表格单元格 */
+        .nc-td--padded { padding:5px; }
+        /* 上下内边距2表格单元格（变量列表） */
+        .nc-td--tight { padding:2px 0; }
+        /* 复选框列表头（30px固定宽） */
+        .nc-th--checkbox { text-align:left; padding:5px; width:30px; }
+        /* 灰色左对齐表头单元格 */
+        .nc-th--muted { text-align:left; color:#aaa; }
+        /* 带内边距左对齐表头单元格 */
+        .nc-th--padded { text-align:left; padding:5px; }
+
+        /* ── 分隔线 ──────────────────────────────── */
+        /* 暗灰色水平分隔线（属性面板区块间） */
+        .nc-divider { border-color:#333; margin:15px 0; }
+        /* 区块底部分隔线（Galgame变量监视器） */
+        .nc-section--border-bottom { border-bottom: 1px solid #333; padding-bottom: 10px; }
+
+        /* ── 图片/媒体 ──────────────────────────────── */
+        /* 紧凑音频播放器（最高40px） */
+        .nc-audio--compact { width:100%; max-height:40px; }
+        /* 全宽音频播放器（Galgame资源库） */
+        .nc-audio--full { width:100%; }
+        /* Galgame资源库预览图（60px高，封面裁剪） */
+        .nc-img--cover-60 { width:100%; max-height:60px; object-fit:cover; border-radius:4px; }
+        /* 全宽带紫边框卡片图片 */
+        .nc-img--full-card { width: 100%; height: auto; border-radius: 8px; border: 2px solid #667eea; }
+        /* Markdown/预览内嵌图片 */
+        .nc-img--markdown { max-width:100%; border-radius:8px; border:1px solid #667eea; }
+        /* 图片库缩略图（最高100px） */
+        .nc-img--thumb-100 { max-width:100%; max-height:100px; border-radius:4px; }
+
+        /* ── 代码/源码预览 ──────────────────────────────── */
+        /* Markdown预览代码块 */
+        .nc-code-block { background:#1e1e1e; padding:10px; border-radius:5px; }
+        /* 错误信息代码块（红字深底） */
+        .nc-code-block--error { color:#ff6b6b; background:#1e1e1e; padding:10px; border-radius:5px; }
+        /* 源码查看 pre 块（等宽，自动换行） */
+        .nc-code-block--pre { background:#1e1e1e; padding:10px; border-radius:5px; font-family:monospace; font-size:12px; white-space:pre-wrap; }
+        /* 配置/章节源码主 pre 样式 */
+        .nc-code-pre--main { margin:0; padding:12px; font-family:Consolas,monospace; font-size:12px; line-height:1.5; color:#eaeaea; white-space:pre-wrap; word-wrap:break-word; }
+        /* 小型代码预览（其余文件库内容预览） */
+        .nc-code-pre--mini { font-size:11px; background: #1e1e1e; padding: 5px; border-radius: 4px; max-height: 100px; overflow: auto; }
+
+        /* ── 文字/排版 ──────────────────────────────── */
+        /* 音频书条目名称文字 */
+        .nc-text--audio-name { font-size:12px; margin-bottom:5px; color:#ccc; }
+        /* 加粗文字（章节标题） */
+        .nc-text--bold { font-weight:600; }
+        /* 加粗灰色文字（节点分析标题等） */
+        .nc-text--bold-muted { font-weight:600; color:#aaa; }
+        /* 加粗主题色文字（文件ID/音频库标题） */
+        .nc-text--bold-primary { font-weight:600; color:#667eea; }
+        /* 更粗主题色文字（Agent显示名） */
+        .nc-text--bolder-primary { font-weight:bold; color:#667eea; }
+        /* 不压缩小号卡片标题（执行进度） */
+        .nc-text--card-title { font-size:12px; flex-shrink: 0; }
+        /* 居中灰色元信息（章节时间戳等） */
+        .nc-text--meta-center { font-size:12px; color:#aaa; margin:5px 0; text-align:center; }
+        /* 模型选择橙黄色提示文字 */
+        .nc-text--model-tip { font-size:12px; color:#ffaa00; margin-top:4px; }
+        /* 右外边距8（开始数据化按钮） */
+        .nc-text--mr8 { margin-right:8px; }
+        /* 带内边距灰色说明（无快照提示） */
+        .nc-text--muted-padded { font-size:12px; color:#aaa; padding:5px; }
+        /* API状态小节标题 */
+        .nc-text--section-hd { font-size:12px; font-weight:600; margin-bottom:5px; }
+        /* 小号文字（变量监视器内容） */
+        .nc-text--sm { font-size:12px; }
+        /* 可点击小号文字（自动/分支标签） */
+        .nc-text--sm-clickable { font-size:12px; cursor:pointer; }
+        /* 小号灰色提示文字（-1表示随机等） */
+        .nc-text--sm-muted { font-size:12px; color:#888; }
+        /* 带上边距小号灰色提示（阶段选择说明） */
+        .nc-text--sm-muted-mt2 { font-size:12px; color:#888; margin-top:2px; }
+        /* 小号灰色提示文字（暂无启用Agent等，属性顺序不同） */
+        .nc-text--sm-muted2 { color:#888; font-size:12px; }
+        /* 超小号可换行灰色文字（图片ID） */
+        .nc-text--xs-break { font-size:11px; color:#aaa; margin:5px 0; word-break:break-all; }
+        /* 居中超小灰色文字（未配置自定义API） */
+        .nc-text--xs-center-muted { font-size:11px; color:#888; text-align:center; }
+        /* 半透明超小灰色文字（内容长度，带空格） */
+        .nc-text--xs-faded { font-size:11px; opacity:.6; color:#aaa; }
+        /* 半透明超小灰色文字（紧凑写法） */
+        .nc-text--xs-faded-c { font-size:11px; opacity:.6; color:#aaa; }
+        /* 超小号浅灰文字（变量分析区内容） */
+        .nc-text--xs-light { font-size:11px; color:#ccc; }
+        /* 带上边距超小浅灰文字（Agent角色） */
+        .nc-text--xs-light-mt4 { font-size:11px; color:#ccc; margin-top:4px; }
+        /* 超小号灰色辅助文字（类型/执行间隔说明） */
+        .nc-text--xs-muted { font-size:11px; color:#aaa; }
+        /* 超小灰色文字（紧凑写法） */
+        .nc-text--xs-muted-c { font-size:11px; color:#888; }
+        /* 带上边距超小字（脚本变量说明） */
+        .nc-text--xs-muted-mt3 { font-size:11px; color:#aaa; margin-top:3px; }
+        /* 带上边距超小灰色提示（按住Ctrl多选） */
+        .nc-text--xs-muted-mt4 { font-size:11px; color:#888; margin-top:4px; }
+        /* 带上边距超小灰色提示（ID格式说明） */
+        .nc-text--xs-muted-mt5 { font-size:11px; color:#888; margin-top:5px; }
+        /* 带上边距超小字（快照添加说明） */
+        .nc-text--xs-muted-mt5-cff0 { font-size:11px; color:#aaa; margin-top:5px; }
+        /* 超小号灰色辅助文字（日期/更新时间） */
+        .nc-text--xxs-muted { font-size:10px; color:#888; }
+        /* 超小号灰色辅助文字（图片ID） */
+        .nc-text--xxs-muted2 { font-size:10px; color:#aaa; }
+
+        /* ── 间距工具 ──────────────────────────────── */
+        /* 图片加载错误提示（带外边距） */
+        .nc-error-img-item { margin:5px; color:#ff6b6b; }
+        /* 下外边距10（资源库区块/图片音频分组） */
+        .nc-mb10 { margin-bottom:10px; }
+        /* 右对齐按钮行（数据化全选/反选） */
+        .nc-mb10--btn-row-right { margin-bottom:10px; display:flex; gap:8px; justify-content:flex-end; }
+        /* 下外边距12（章节编辑字段组） */
+        .nc-mb12 { margin-bottom:12px; }
+        /* 下外边距15（通用表单字段间距） */
+        .nc-mb15 { margin-bottom:15px; }
+        /* 确认对话框居中消息（可折行） */
+        .nc-mb15--confirm-msg { margin-bottom:15px; text-align:center; word-wrap:break-word; }
+        /* 文件选择行布局（带下边距15） */
+        .nc-mb15--file-selector { margin-bottom:15px; display:flex; gap:8px; align-items:center; }
+        /* 下外边距16（配置编辑器字段组） */
+        .nc-mb16 { margin-bottom:16px; }
+        /* 下外边距6（选项卡片标题行） */
+        .nc-mb6 { margin-bottom:6px; }
+        /* 下外边距8（媒体项目块） */
+        .nc-mb8 { margin-bottom:8px; }
+        /* Galgame快照条目滚动区（上边距10） */
+        .nc-mt10--snapshot-scroll { margin-top:10px; max-height:200px; overflow-y:auto; }
+        /* 上外边距12（管理Agent按钮上方间距） */
+        .nc-mt12 { margin-top:12px; }
+        /* 执行进度区块（上边框 + flex列布局） */
+        .nc-mt12--progress-section { margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,.1); display: flex; flex-direction: column; flex: 1; min-height: 0; }
+        /* 右对齐上边距4（返回手动输入链接） */
+        .nc-mt4--right { margin-top:4px; text-align:right; }
+        /* API测试结果文字区 */
+        .nc-mt8--test-result { margin-top:8px; font-size:13px; color:#aaa; }
+        /* 上下外边距10（音频/图片分组标题） */
+        .nc-my10 { margin:10px 0; }
+
+        /* ── 文字对齐 ──────────────────────────────── */
+        /* 居中确认对话框内容（可折行） */
+        .nc-center--confirm { text-align:center; padding:20px; word-wrap:break-word; }
+        /* 居中文字下边距20（数据化标题区） */
+        .nc-center--mb20 { text-align:center; margin-bottom:20px; }
+        /* 居中下边距20（历史管理标题，紧凑） */
+        .nc-center--mb20-c { text-align:center; margin-bottom:20px; }
+        /* 居中内边距20（加载中/空状态提示） */
+        .nc-center--pad20 { text-align:center; padding:20px; }
+        /* 居中内边距20（紧凑） */
+        .nc-center--pad20-c { text-align:center; padding:20px; }
+        /* 居中内边距20灰色文字（空状态/加载中） */
+        .nc-center--pad20-muted { text-align:center; padding:20px; color:#aaa; }
+        /* 居中内边距20灰色（紧凑） */
+        .nc-center--pad20-muted-c { text-align:center; padding:20px; color:#aaa; }
+
+        /* ── 其他/自动生成 ──────────────────────────────── */
+        /* 输入区工具栏（两端对齐，不压缩） */
+        .nc-flex--input-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-shrink: 0; }
+        /* 关联Agents超小块级灰色标签 */
+        .nc-label--agents-hint { color:#aaa; font-size:11px; display:block; margin-bottom:2px; }
+        /* 块级灰色标签（连线类型） */
+        .nc-label--muted { color:#aaa; display:block; }
+        /* 橙黄色警告提示（未检测到角色卡） */
+        .nc-text--warning-tip { color:#ffaa00; font-size:13px; margin-top:4px; }
     `;
         document.head.appendChild(style);
     }
@@ -6090,7 +7086,7 @@
                     document.head.appendChild(style);
 
                     this.customStyleElement = style;
-                    Notify.success(`配色样式已加载: ${file.name}`, '', {timeOut: 2000});
+                    Notify.success(`配色样式已加载: ${file.name}`, '', { timeOut: 2000 });
                 } catch (err) {
                     Notify.error('读取CSS文件失败: ' + err.message);
                 } finally {
@@ -6111,27 +7107,27 @@
             const allConfigIds = Object.keys(apiConfigs);
 
             if (allConfigIds.length === 0) {
-                container.innerHTML = '<div style="font-size:11px; color:#888; text-align:center;">未配置自定义API</div>';
+                container.innerHTML = '<div class="nc-text--xs-center-muted">未配置自定义API</div>';
                 return;
             }
 
-            let html = '<div style="font-size:12px; font-weight:600; margin-bottom:5px;">🔌 API状态</div>';
+            let html = '<div class="nc-text--section-hd">🔌 API状态</div>';
             for (const id of allConfigIds) {
                 const status = apiStatus[id];
                 const config = apiConfigs[id];
                 let statusHtml;
                 if (status) {
                     if (status.ok) {
-                        statusHtml = `<span style="color:#28a745;">✅ 可用</span>`;
+                        statusHtml = `<span class="nc-text--success">✅ 可用</span>`;
                     } else {
-                        statusHtml = `<span style="color:#dc3545;" title="${this._escapeHtml(status.error || '')}">❌ 不可用</span>`;
+                        statusHtml = `<span class="nc-text--danger" title="${this._escapeHtml(status.error || '')}">❌ 不可用</span>`;
                     }
                 } else {
-                    statusHtml = `<span style="color:#ffc107;">⏳ 未测试</span>`;
+                    statusHtml = `<span class="nc-text--warn-yellow">⏳ 未测试</span>`;
                 }
-                html += `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px; font-size:11px;">
-            <span style="color:#aaa;">${id} (${config ? config.model : '?'}):</span>
-            <span>${statusHtml} <button class="nc-api-retest-btn" data-config-id="${id}" style="background:none; border:none; color:#667eea; cursor:pointer; font-size:11px;">↻</button></span>
+                html += `<div class="nc-flex--row-api-item">
+            <span class="nc-color--muted">${id} (${config ? config.model : '?'}):</span>
+            <span>${statusHtml} <button class="nc-api-retest-btn nc-icon-btn--retest" data-config-id="${id}">↻</button></span>
         </div>`;
             }
 
@@ -6163,8 +7159,8 @@
         },
 
         _downloadText(content, filename, mimeType = 'text/plain;charset=utf-8') {
-            const url = URL.createObjectURL(new Blob([content], {type: mimeType}));
-            Object.assign(document.createElement('a'), {href: url, download: filename}).click();
+            const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+            Object.assign(document.createElement('a'), { href: url, download: filename }).click();
             URL.revokeObjectURL(url);
         },
 
@@ -6277,7 +7273,7 @@
             <h2 style="margin:0;color:${options.accentColor || '#667eea'};font-size:${options.titleSize || '20px'};">
                 ${this._escapeHtml(title)}
             </h2>
-            ${options.subtitle ? `<p style="margin:8px 0 0;font-size:12px;color:#aaa;">${this._escapeHtml(options.subtitle)}</p>` : ''}
+            ${options.subtitle ? `<p class="nc-modal-subtitle--gray">${this._escapeHtml(options.subtitle)}</p>` : ''}
         </div>
         <div class="nc-modal-body nc-scroll markdown-body">${this._renderMarkdown(content)}</div>
         <div class="nc-modal-footer">
@@ -6295,7 +7291,7 @@
                 const textToCopy = content;
                 try {
                     await navigator.clipboard.writeText(textToCopy);
-                    Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
+                    Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
                 } catch (err) {
                     // 降级方案：使用 execCommand
                     try {
@@ -6307,7 +7303,7 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（使用降级方案）', '', {timeOut: 2000});
+                        Notify.success('内容已复制到剪贴板（使用降级方案）', '', { timeOut: 2000 });
                     } catch (err2) {
                         Notify.error('复制失败，请手动选择文本后复制');
                         UI.showMarkdownModal('复制失败，请手动复制以下内容', textToCopy, {
@@ -6355,9 +7351,9 @@
 
             const escapedError = this._escapeHtml(fullError);
             const coloredError = escapedError
-                .replace(/✓/g, '<span style="color: #28a745; font-weight: bold;">✓</span>')
-                .replace(/✗/g, '<span style="color: #dc3545; font-weight: bold;">✗</span>')
-                .replace(/❌/g, '<span style="color: #dc3545; font-weight: bold;">❌</span>');
+                .replace(/✓/g, '<span class="nc-text--success-bold">✓</span>')
+                .replace(/✗/g, '<span class="nc-text--danger-bold">✗</span>')
+                .replace(/❌/g, '<span class="nc-text--danger-bold">❌</span>');
 
             const loadButtonText = WORKFLOW_STATE.currentConfigFile ? '🔄 重新加载配置文件' : '📂 加载配置文件';
 
@@ -6371,8 +7367,8 @@
 
             panel.innerHTML = `
         <div class="nc-error-title">
-            <div style="font-size:40px;margin-bottom:5px;">⚠️</div>
-            <h2 style="margin:0;font-size:18px;color:#ff6b6b;">系统检测未通过</h2>
+            <div class="nc-icon--warn-xl">⚠️</div>
+            <h2 class="nc-modal-title--error">系统检测未通过</h2>
         </div>
         <div class="nc-error-list">${coloredError}</div>
         <div class="nc-error-buttons">
@@ -6416,7 +7412,7 @@
                             console.error('[错误面板] loadConfigFromJson 返回失败');
                             return;
                         }
-                        Notify.success('配置文件加载成功...', '', {timeOut: 2000});
+                        Notify.success('配置文件加载成功...', '', { timeOut: 2000 });
                         this.closeAll();
 
                         await openPanelWithCheck();
@@ -6568,7 +7564,7 @@
 
             // 加载保存的预选状态
             const savedSelection = Storage.loadSelectionState();
-            WORKFLOW_STATE.selectionState = {...WORKFLOW_STATE.selectionState, ...savedSelection};
+            WORKFLOW_STATE.selectionState = { ...WORKFLOW_STATE.selectionState, ...savedSelection };
 
             // 不再直接调用 init() 重置所有状态，而是确保所有配置中的 Agent 都有状态
             for (const key of Object.keys(CONFIG.AGENTS)) {
@@ -6596,6 +7592,10 @@
                     if (children) children.classList.add('expanded');
                 });
             }
+            // ── 响应式选项卡导航（平板/手机端）──────────────────────────
+            UI._initTabBar(panel);
+            window.addEventListener('resize', () => UI._initTabBar(panel), { passive: true });
+
 
             // 使用 requestAnimationFrame 确保在下一帧刷新状态，避免渲染延迟
             requestAnimationFrame(() => {
@@ -6707,7 +7707,7 @@
                 ${isRequired ? '<span class="nc-required-badge">必选</span>' : ''}
             </label>
         `;
-            }).join('') || '<span style="color:#888; font-size:12px;">暂无启用Agent</span>';
+            }).join('') || '<span class="nc-text--sm-muted2">暂无启用Agent</span>';
         },
 
         // ==================== 生成面板HTML ====================
@@ -6730,7 +7730,7 @@
 
             let statusIndicatorHTML = '';
             for (const [state, label] of Object.entries(stateLabels)) {
-                const colors = CONFIG.AGENT_STATUS_COLORS[state] || {border: '#888', text: '#888'};
+                const colors = CONFIG.AGENT_STATUS_COLORS[state] || { border: '#888', text: '#888' };
                 let color;
                 if (state === 'idle' || state === 'reflow_waiting') {
                     color = colors.text;
@@ -6755,12 +7755,12 @@
                     <span class="nc-token-label">tokens</span>
                 </div>
                 <span class="nc-token-last" id="nc-token-last">本次: -</span>
-                <button id="nc-token-reset" class="nc-btn nc-btn-xs nc-btn-ghost" style="padding:3px 8px;">重置</button>
+                <button id="nc-token-reset" class="nc-btn nc-btn-xs nc-btn-ghost nc-btn--token-reset">重置</button>
             </div>
         </div>
 
         <!-- 面板主体 - 四栏布局，占2/3高度 -->
-        <div class="nc-panel-body" style="flex:2; min-height:0;">
+        <div class="nc-panel-body nc-flex-item--grow2">
             <!-- 左侧：层次树形预选菜单 -->
             <div class="nc-card nc-card--accent">
                 <div class="nc-card-title">🎯 预选配置</div>
@@ -6772,7 +7772,7 @@
             <!-- 左中：Agent自定义（所有复选框 + 内部启动层） -->
             <div class="nc-card">
                 <div class="nc-card-title">⚙️ Agent配置</div>
-                <div class="nc-card-content nc-scroll" style="height:100%;">
+                <div class="nc-card-content nc-scroll nc-size--full-h">
                     ${agentCustomHTML}
                 </div>
             </div>
@@ -6780,13 +7780,13 @@
             <!-- 右中：工作流预览监控 -->
             <div class="nc-card">
                 <div class="nc-card-title">📊 工作流预览监控</div>
-                <div class="nc-card-content" style="display:flex; flex-direction:column; gap:10px; height:100%;">
+                <div class="nc-card-content nc-flex--col-10-full">
                     <!-- 状态颜色指示器 -->
-                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:5px;font-size:11px;color:#888;">
+                    <div class="nc-flex--info-hint-row">
                         ${statusIndicatorHTML}
                     </div>
                     <!-- 工作流预览容器（包含Agent按钮和废章层） -->
-                    <div id="nc-workflow-viz" class="nc-scroll" style="flex:1; overflow-y:auto; min-height:0; padding-right:4px;">
+                    <div id="nc-workflow-viz" class="nc-scroll nc-flex-item--workflow-viz">
                         <!-- 内容由 updateWorkflowViz 动态生成 -->
                     </div>
                 </div>
@@ -6795,58 +7795,58 @@
             <!-- 右侧：输入与进度 -->
             <div class="nc-card nc-card--dark">
                 <div class="nc-card-title">📝 输入框</div>
-                <div class="nc-card-content" style="display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px; flex-shrink: 0;">
+                <div class="nc-card-content nc-flex--col-grow-overflow">
+                    <div class="nc-flex--input-toolbar">
                         <div class="nc-chapter-info">
                             <span>当前: 第<span class="nc-chapter-num" id="nc-current-chapter-num">${latestNum}</span>章</span>
                         </div>
                         <div class="nc-toolbar">
                             <button class="nc-toolbar-btn" id="nc-view-chapter-content">查修文章</button>
                             <button class="nc-toolbar-btn" id="nc-view-chapter-status">查修状态</button>
-                            <button class="nc-toolbar-btn" id="nc-clear-input" style="color:#ff6b6b;border-color:rgba(255,107,107,.3);">清空</button>
+                            <button class="nc-toolbar-btn nc-toolbar-btn--clear" id="nc-clear-input">清空</button>
                         </div>
                     </div>
-                    <textarea id="nc-user-input" placeholder="请输入，例如：&#10;• 发现新的线索，推进主线剧情发展&#10;• 人物关系发生重大转折或变化&#10" style="flex-shrink: 0;">${WORKFLOW_STATE.userInputCache || ''}</textarea>
-                    <div style="display: flex; margin-top: 8px; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <textarea id="nc-user-input" placeholder="请输入，例如：&#10;• 发现新的线索，推进主线剧情发展&#10;• 人物关系发生重大转折或变化&#10" class="nc-flex-item--no-shrink">${WORKFLOW_STATE.userInputCache || ''}</textarea>
+                    <div class="nc-flex--action-bar">
                         <button id="nc-submit-input" class="nc-btn nc-btn-primary nc-btn-sm" disabled>✍️ 提交输入</button>
                         <button id="nc-submit-chapter-status" class="nc-btn nc-btn-primary nc-btn-sm" disabled>📚 章节状态</button>
-                        <button id="nc-view-requirement" class="nc-btn nc-btn-primary nc-btn-sm" style="display:none;">📋 要求</button>
+                        <button id="nc-view-requirement" class="nc-btn nc-btn-primary nc-btn-sm nc-hidden">📋 要求</button>
                     </div>
 
                     <!-- 进度区域 -->
-                    <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.1); display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                        <div class="nc-card-title" style="font-size:12px; flex-shrink: 0;">🚀 执行进度</div>
-                        <div id="nc-progress-content" class="nc-scroll" style="flex: 1; overflow-y: auto; background:rgba(0,0,0,.2); padding:10px; border-radius:6px;">准备启动...</div>
+                    <div class="nc-mt12--progress-section">
+                        <div class="nc-card-title nc-text--card-title">🚀 执行进度</div>
+                        <div id="nc-progress-content" class="nc-scroll nc-flex-item--progress">准备启动...</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="nc-panel-footer" style="display:flex; align-items:center; gap:10px;">
-            <div style="flex:1; display:flex; justify-content:flex-start; gap:8px;">
+        <div class="nc-panel-footer nc-flex--row-10-middle">
+            <div class="nc-flex-item--footer-left">
                 <button id="nc-reload-config-btn" class="nc-btn nc-btn-secondary nc-btn-sm">📂 加载配置文件</button>
                 <button id="nc-load-css-btn" class="nc-btn nc-btn-secondary nc-btn-sm">🎨 加载配色样式</button>
                 <button id="nc-config-gui-btn" class="nc-btn nc-btn-secondary nc-btn-sm">⚙️ 配置GUI</button>
             </div>
-            <div style="flex:1; display:flex; justify-content:center; gap:8px;">
+            <div class="nc-flex-item--footer-center">
                 <button id="nc-clean-pure-btn" class="nc-btn nc-btn-danger nc-btn-sm">🧹 一键纯净</button>
                 <button id="nc-history-btn" class="nc-btn nc-btn-secondary nc-btn-sm">📚 历史章节</button>
                 <button id="nc-file-manager-btn" class="nc-btn nc-btn-secondary nc-btn-sm">📁 文件管理</button>
                 <button id="nc-export-data-btn" class="nc-btn nc-btn-secondary nc-btn-sm">📊 数据导出</button>
                 <button id="nc-novel-data-btn" class="nc-btn nc-btn-secondary nc-btn-sm">📊 小说数据化</button>
             </div>
-            <div style="flex:1; display:flex; gap:10px; justify-content:flex-end;">
-                <div style="display:flex; align-items:center; gap:5px;">
+            <div class="nc-flex-item--footer-right">
+                <div class="nc-flex--row-5-middle">
                     <input type="checkbox" id="nc-auto-mode" ${WORKFLOW_STATE.autoMode ? 'checked' : ''}>
-                    <label for="nc-auto-mode" style="font-size:12px; cursor:pointer;">自动</label>
+                    <label for="nc-auto-mode" class="nc-text--sm-clickable">自动</label>
                 </div>
                 <!-- ===== 新增：唯一分支开关 ===== -->
-                <div style="display:flex; align-items:center; gap:5px;">
+                <div class="nc-flex--row-5-middle">
                     <input type="checkbox" id="nc-enforce-unique" ${WORKFLOW_STATE.enforceUniqueBranches ? 'checked' : ''}>
-                    <label for="nc-enforce-unique" style="font-size:12px; cursor:pointer;" title="开启后，同一选项只能生成一个目标章节">🔒 分支</label>
+                    <label for="nc-enforce-unique" class="nc-text--sm-clickable" title="开启后，同一选项只能生成一个目标章节">🔒 分支</label>
                 </div>
                 <!-- ===== 结束新增 ===== -->
-                <button id="nc-stop-btn" class="nc-btn nc-btn-danger nc-btn-sm" style="display:none;">⏸️ 中断</button>
+                <button id="nc-stop-btn" class="nc-btn nc-btn-danger nc-btn-sm nc-hidden">⏸️ 中断</button>
                 <button id="nc-start-btn" class="nc-btn nc-btn-primary nc-btn-sm">▶️ 启动</button>
                 <button id="nc-close-btn" class="nc-btn nc-btn-ghost nc-btn-sm">❌ 关闭</button>
             </div>
@@ -6924,31 +7924,31 @@
             }
 
             if (agentCheckboxes === '') {
-                agentCheckboxes = '<div style="color:#888; font-size:12px;">暂无可用Agent</div>';
+                agentCheckboxes = '<div class="nc-text--sm-muted2">暂无可用Agent</div>';
             }
 
             return `
-        <div style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
-            <div style="flex-shrink: 0; margin-bottom: 4px;">
-                <div class="nc-agent-group-title" style="color:#667eea;">🚀 当前启用</div>
+        <div class="nc-flex--col-full">
+            <div class="nc-flex-item--no-shrink-mb4">
+                <div class="nc-agent-group-title nc-color--primary">🚀 当前启用</div>
             </div>
-            <div style="flex: 0 0 30%; min-height: 0; overflow-y: auto; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
-                <div id="nc-current-agents-inside" class="nc-grid-2" style="gap: 6px;">
+            <div class="nc-flex-item--agent-enabled">
+                <div id="nc-current-agents-inside" class="nc-grid-2 nc-gap--6">
                     ${launchLayerHTML}
                 </div>
             </div>
-            <div style="flex-shrink: 0; margin: 4px 0;">
-                <div style="font-size:11px;color:#888;">
-                    <span style="color:#28a745;">绿色标记</span>为必选Agent
+            <div class="nc-flex-item--no-shrink-my4">
+                <div class="nc-text--xs-muted-c">
+                    <span class="nc-text--success">绿色标记</span>为必选Agent
                 </div>
             </div>
-            <div style="flex: 1; min-height: 0; overflow-y: auto;">
+            <div class="nc-flex-item--scroll-panel">
                 <div class="nc-grid-2">
                     ${agentCheckboxes}
                 </div>
             </div>
             <!-- API配置状态区域 -->
-            <div id="nc-api-status-container" style="flex-shrink: 0; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);"></div>
+            <div id="nc-api-status-container" class="nc-flex-item--api-footer"></div>
         </div>
     `;
         },
@@ -6960,13 +7960,13 @@
 
             // 数据化模式标识
             const dataficationBanner = Workflow.isDataficationMode ?
-                `<div style="background: rgba(102, 126, 234, 0.3); color: #667eea; padding: 4px 8px; border-radius: 6px; margin-bottom: 10px; font-size: 12px; text-align: center; border: 1px solid #667eea;">
+                `<div class="nc-banner--info">
             📊 当前处于数据化模式
          </div>` : '';
 
             // 互动小说模式标识
             const interactiveModeBanner = WORKFLOW_STATE.configMode === 'interactive' ?
-                `<div style="background: linear-gradient(90deg, #ff6b6b, #c92a2a); color: white; padding: 8px 16px; border-radius: 30px; margin-bottom: 12px; font-weight: 600; text-align: center; box-shadow: 0 4px 12px rgba(255, 107, 107, 0.4); display: inline-block; width: auto; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(4px);">
+                `<div class="nc-banner--warning-red">
         🎮 当前处于互动小说创作模式
      </div>` : '';
 
@@ -7048,7 +8048,7 @@
                         const text = await file.text();
                         const json = JSON.parse(text);
                         loadConfigFromJson(json, file.name, file.size);
-                        Notify.success('配置文件加载成功，重新打开面板...', '', {timeOut: 2000});
+                        Notify.success('配置文件加载成功，重新打开面板...', '', { timeOut: 2000 });
                         UI.closeAll();
                         await openPanelWithCheck();
                     } catch (err) {
@@ -7066,7 +8066,7 @@
             // 一键纯净按钮
             panel.querySelector('#nc-clean-pure-btn').addEventListener('click', async () => {
                 if (WORKFLOW_STATE.isRunning) {
-                    Notify.warning('请先停止当前工作流', '', {timeOut: 2000});
+                    Notify.warning('请先停止当前工作流', '', { timeOut: 2000 });
                     return;
                 }
                 const confirmed = await UI.showConfirmModal('⚠️ 一键纯净将删除所有历史章节、所有状态书、取消激活所有世界书，并重置内存缓存。此操作不可撤销！\n\n确定继续吗？', '确认');
@@ -7131,7 +8131,7 @@
                         startTime: null,
                         currentChapter: 1,
                         shouldStop: false,
-                        tokenStats: {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0},
+                        tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
                         discarded: false,
                         discardedChapter: null,
                         userInputCache: '',
@@ -7172,7 +8172,7 @@
                     UI.updateCurrentChapterNum();
                     UI.clearProgress();
                     UI.updateProgress('✅ 一键纯净完成');
-                    Notify.success('系统已恢复纯净状态', '', {timeOut: 2000});
+                    Notify.success('系统已恢复纯净状态', '', { timeOut: 2000 });
 
                     // 刷新面板
                     UI.closeAll();
@@ -7203,7 +8203,7 @@
                 if (WORKFLOW_STATE.awaitingInput && WORKFLOW_STATE.inputResolver) {
                     const userInput = inputEl.value.trim();
                     if (!userInput) {
-                        Notify.warning('请输入内容后再提交', '', {timeOut: 2000});
+                        Notify.warning('请输入内容后再提交', '', { timeOut: 2000 });
                         return;
                     }
                     submitBtn.disabled = true;
@@ -7295,7 +8295,7 @@
 
                 HistoryUI.showChapterSelectionModal((selectedChapters) => {
                     if (!selectedChapters || selectedChapters.length === 0) {
-                        Notify.warning('请至少选择一个章节', '', {timeOut: 2000});
+                        Notify.warning('请至少选择一个章节', '', { timeOut: 2000 });
                         return;
                     }
 
@@ -7320,7 +8320,7 @@
                     }
 
                     if (!inputText) {
-                        Notify.warning('没有可用的章节内容', '', {timeOut: 2000});
+                        Notify.warning('没有可用的章节内容', '', { timeOut: 2000 });
                         return;
                     }
 
@@ -7343,7 +8343,7 @@
             panel.querySelector('#nc-view-chapter-content').addEventListener('click', () => {
                 const chapters = Storage.loadChapters();
                 const latest = chapters.length > 0 ? Math.max(...chapters.map(c => c.num)) : 0;
-                HistoryUI.viewChapter(latest, {mode: 'edit'}); // 修改此处
+                HistoryUI.viewChapter(latest, { mode: 'edit' }); // 修改此处
             });
 
             panel.querySelector('#nc-view-chapter-status').addEventListener('click', () => {
@@ -7357,7 +8357,7 @@
                 const agentKey = WORKFLOW_STATE.currentWaitingAgent;
                 const inputIndex = WORKFLOW_STATE.currentWaitingInputIndex;
                 if (!agentKey || inputIndex === null || inputIndex === undefined) {
-                    Notify.info('没有正在等待输入的Agent', '', {timeOut: 2000});
+                    Notify.info('没有正在等待输入的Agent', '', { timeOut: 2000 });
                     return;
                 }
                 const agent = CONFIG.AGENTS[agentKey];
@@ -7434,13 +8434,13 @@
                             }
                         }
                         if (!targetCheckbox) {
-                            Notify.info(`${getAgentDisplayName(agentKey)} 在当前配置中不可用`, '', {timeOut: 2000});
+                            Notify.info(`${getAgentDisplayName(agentKey)} 在当前配置中不可用`, '', { timeOut: 2000 });
                             return;
                         }
                     }
 
                     if (targetCheckbox.disabled) {
-                        Notify.info(`${getAgentDisplayName(agentKey)} 为必选Agent，不可取消`, '', {timeOut: 2000});
+                        Notify.info(`${getAgentDisplayName(agentKey)} 为必选Agent，不可取消`, '', { timeOut: 2000 });
                         return;
                     }
 
@@ -7448,7 +8448,7 @@
                     targetCheckbox.checked = !targetCheckbox.checked;
 
 
-                    const changeEvent = new Event('change', {bubbles: true});
+                    const changeEvent = new Event('change', { bubbles: true });
                     targetCheckbox.dispatchEvent(changeEvent);
                 });
             }
@@ -7709,7 +8709,7 @@
                 ${isRequired ? '<span class="nc-required-badge">必选</span>' : ''}
             </label>
         `;
-            }).join('') || '<span style="color:#888; font-size:12px;">暂无启用Agent</span>';
+            }).join('') || '<span class="nc-text--sm-muted2">暂无启用Agent</span>';
 
             // **【新增】额外检查：渲染完成后，对比启动层中的 data-agent 与下面层复选框是否存在**
             const allLowerCheckboxes = panel.querySelectorAll('.nc-agent-checkbox input:not(#nc-current-agents-inside input)');
@@ -7739,7 +8739,7 @@
             if (errorAgents.length > 0) {
                 const errorBanner = document.createElement('div');
                 errorBanner.style.cssText = 'background: rgba(220,53,69,0.2); border:1px solid #dc3545; border-radius:6px; padding:6px; margin-bottom:10px; font-size:12px; color:#ff6b6b; display:flex; align-items:center; gap:6px;';
-                errorBanner.innerHTML = `⚠️ 有 ${errorAgents.length} 个 Agent 执行出错，<a href="#" id="nc-show-errors" style="color:#667eea; text-decoration:underline; font-weight:bold;">点击查看详情</a>`;
+                errorBanner.innerHTML = `⚠️ 有 ${errorAgents.length} 个 Agent 执行出错，<a href="#" id="nc-show-errors" class="nc-color--primary-link">点击查看详情</a>`;
                 container.prepend(errorBanner);
                 container.querySelector('#nc-show-errors').addEventListener('click', (e) => {
                     e.preventDefault();
@@ -7814,17 +8814,17 @@
                 pageChapters.forEach(ch => {
                     const checked = selectedChapters.has(ch.num) ? 'checked' : '';
                     html += `
-<div class="nc-chapter-item" data-chapter-num="${ch.num}" style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer;">
-    <input type="checkbox" class="chapter-checkbox" value="${ch.num}" ${checked} style="width: 16px; height: 16px; cursor: pointer;" onclick="event.stopPropagation();">
-    <div style="flex:1;">
-        <div style="font-weight:600;">第${ch.num}章 ${ch.title}</div>
-        <div style="font-size:11px; opacity:.6; color:#aaa;">内容长度: ${ch.content.length} 字符</div>
+<div class="nc-chapter-item nc-flex--chapter-row" data-chapter-num="${ch.num}">
+    <input type="checkbox" class="chapter-checkbox" value="${ch.num}" ${checked} class="nc-checkbox--base" onclick="event.stopPropagation();">
+    <div class="nc-flex-item--grow">
+        <div class="nc-text--bold">第${ch.num}章 ${ch.title}</div>
+        <div class="nc-text--xs-faded">内容长度: ${ch.content.length} 字符</div>
     </div>
 </div>
 `;
                 });
                 if (parsedChapters.length === 0) {
-                    html = '<div style="text-align:center; padding:20px; color:#aaa;">暂无章节，请先导入小说文件</div>';
+                    html = '<div class="nc-center--pad20-muted">暂无章节，请先导入小说文件</div>';
                 }
                 listContainer.innerHTML = html;
 
@@ -7846,30 +8846,30 @@
             const totalPages = Math.ceil(parsedChapters.length / pageSize) || 1;
 
             panel.innerHTML = `
-<div style="text-align:center; margin-bottom:20px;">
-    <h2 style="margin:0 0 6px; font-size:20px;">📊 小说数据化</h2>
-    <p style="margin:0; opacity:.6; font-size:12px;">导入 TXT 小说文件，自动提取结构化数据</p>
+<div class="nc-center--mb20">
+    <h2 class="nc-section-title--lg">📊 小说数据化</h2>
+    <p class="nc-modal-subtitle">导入 TXT 小说文件，自动提取结构化数据</p>
 </div>
-<div style="margin-bottom:15px; display:flex; gap:8px; align-items:center;">
-    <input type="file" id="nc-novel-file-input" accept=".txt,text/plain" style="display:none;">
+<div class="nc-mb15--file-selector">
+    <input type="file" id="nc-novel-file-input" accept=".txt,text/plain" class="nc-hidden">
     <button id="nc-import-novel-btn" class="nc-btn nc-btn-primary nc-btn-sm">📂 导入小说</button>
-    <span style="flex:1; text-align:right; font-size:12px; color:#888;" id="nc-file-info">${selectedFile ? selectedFile.name + ' (' + (selectedFile.size / 1024).toFixed(2) + ' KB)' : '未选择文件'}</span>
+    <span class="nc-flex-item--file-info" id="nc-file-info">${selectedFile ? selectedFile.name + ' (' + (selectedFile.size / 1024).toFixed(2) + ' KB)' : '未选择文件'}</span>
 </div>
-<div style="margin-bottom:10px; display:flex; gap:8px; justify-content:flex-end;">
-    <button id="nc-select-all" class="nc-btn nc-btn-xs" style="background: #667eea; color: white; border: none;">✅ 全选</button>
-    <button id="nc-invert-select" class="nc-btn nc-btn-xs" style="background: #667eea; color: white; border: none;">🔄 反选</button>
+<div class="nc-mb10--btn-row-right">
+    <button id="nc-select-all" class="nc-btn nc-btn-xs nc-btn--purple-solid">✅ 全选</button>
+    <button id="nc-invert-select" class="nc-btn nc-btn-xs nc-btn--purple-solid">🔄 反选</button>
 </div>
-<div id="nc-chapter-list" style="max-height:50vh; overflow-y:auto; padding-right:4px; margin-bottom:10px;"></div>
-<div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-    <div style="display:flex; gap:8px; align-items:center;">
-        <button id="nc-prev-page" class="nc-btn nc-btn-xs" style="background: #667eea; color: white; border: none;">◀ 上一页</button>
-        <span style="display:flex; align-items:center; gap:5px;">
-            第 <input type="number" id="nc-page-input" min="1" max="${totalPages}" value="${currentPage}" style="width:50px; text-align:center; background:rgba(0,0,0,0.4); color:#eaeaea; border:1px solid #667eea; border-radius:4px; padding:4px;"> / <span id="nc-total-pages">${totalPages}</span> 页
+<div id="nc-chapter-list" class="nc-size--chapter-list"></div>
+<div class="nc-flex--row-between-mt10">
+    <div class="nc-flex--row-8-center">
+        <button id="nc-prev-page" class="nc-btn nc-btn-xs nc-btn--purple-solid">◀ 上一页</button>
+        <span class="nc-flex--row-5-middle">
+            第 <input type="number" id="nc-page-input" min="1" max="${totalPages}" value="${currentPage}" class="nc-modal-input--page"> / <span id="nc-total-pages">${totalPages}</span> 页
         </span>
-        <button id="nc-next-page" class="nc-btn nc-btn-xs" style="background: #667eea; color: white; border: none;">下一页 ▶</button>
+        <button id="nc-next-page" class="nc-btn nc-btn-xs nc-btn--purple-solid">下一页 ▶</button>
     </div>
     <div>
-        <button id="nc-start-datafication" class="nc-btn nc-btn-primary nc-btn-sm" style="margin-right:8px;">🚀 开始数据化</button>
+        <button id="nc-start-datafication" class="nc-btn nc-btn-primary nc-btn-sm nc-text--mr8">🚀 开始数据化</button>
         <button id="nc-close-btn" class="nc-btn nc-btn-ghost nc-btn-sm">❌ 关闭</button>
     </div>
 </div>
@@ -7899,7 +8899,7 @@
                     parsedChapters: parsedChapters,
                     selectedChapters: Array.from(selectedChapters),
                     currentPage: currentPage,
-                    selectedFile: selectedFile ? {name: selectedFile.name, size: selectedFile.size} : null
+                    selectedFile: selectedFile ? { name: selectedFile.name, size: selectedFile.size } : null
                 };
 
             };
@@ -7928,7 +8928,7 @@
                     selectedChapters.clear();
                     renderList();
                     saveCache();
-                    Notify.success(`成功提取 ${parsed.length} 章`, '', {timeOut: 2000});
+                    Notify.success(`成功提取 ${parsed.length} 章`, '', { timeOut: 2000 });
                 } catch (err) {
                     console.error('[performExtract] 提取失败', err);
                     Notify.error('提取失败：' + err.message);
@@ -7944,7 +8944,7 @@
                     const num = parseInt(match[1], 10);
                     const title = match[2].trim();
                     let content = match[3].trim();
-                    results.push({num, title, content});
+                    results.push({ num, title, content });
                 }
                 return results;
             }
@@ -7969,7 +8969,7 @@
                         }
                         renderList();
                         saveCache();
-                        Notify.info(`已自动补全为连续章节：${allExisting.join(', ')}`, '', {timeOut: 2000});
+                        Notify.info(`已自动补全为连续章节：${allExisting.join(', ')}`, '', { timeOut: 2000 });
                     } else {
 
                     }
@@ -8042,7 +9042,7 @@
                         const targetPage = parseInt(pageInput.value, 10);
                         const totalPages = Math.ceil(parsedChapters.length / pageSize) || 1;
                         if (isNaN(targetPage) || targetPage < 1 || targetPage > totalPages) {
-                            Notify.warning(`请输入1~${totalPages}之间的页码`, '', {timeOut: 2000});
+                            Notify.warning(`请输入1~${totalPages}之间的页码`, '', { timeOut: 2000 });
                             pageInput.value = currentPage;
                             return;
                         }
@@ -8107,7 +9107,7 @@
             startBtn.addEventListener('click', async () => {
                 const selected = Array.from(selectedChapters).sort((a, b) => a - b);
                 if (selected.length === 0) {
-                    Notify.warning('请至少选择一个章节', '', {timeOut: 2000});
+                    Notify.warning('请至少选择一个章节', '', { timeOut: 2000 });
                     return;
                 }
                 const chaptersToProcess = parsedChapters.filter(ch => selectedChapters.has(ch.num));
@@ -8153,13 +9153,13 @@
 
                 modal.innerHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;">资源冲突</h2>
+                <h2 class="nc-modal-title--primary-c">资源冲突</h2>
             </div>
-            <div class="nc-modal-body" style="text-align:center; padding:20px;">
+            <div class="nc-modal-body nc-center--pad20">
                 <p>${resourceType} ID <strong>${this._escapeHtml(resourceId)}</strong> 已存在。</p>
                 <p>请选择操作：</p>
             </div>
-            <div class="nc-modal-footer" style="display:flex; gap:10px; justify-content:center;">
+            <div class="nc-modal-footer nc-flex--footer-10-center">
                 <button id="nc-conflict-overwrite" class="nc-btn nc-btn-primary">覆盖</button>
                 <button id="nc-conflict-skip" class="nc-btn nc-btn-primary">跳过</button>
                 <button id="nc-conflict-cancel" class="nc-btn nc-btn-ghost">取消导入</button>
@@ -8242,7 +9242,7 @@
                             fileObj.format === 'js' ? 'application/javascript' :
                                 fileObj.format === 'css' ? 'text/css' :
                                     'text/plain';
-                        const blob = new Blob([fileObj.text], {type: mime});
+                        const blob = new Blob([fileObj.text], { type: mime });
                         const url = URL.createObjectURL(blob);
                         replacement = `${attrName}="${url}"`;
 
@@ -8320,7 +9320,7 @@
                     } else if (agent.role === 'fusionGenerator') {
                         const fusionData = JSON.parse(output);
                         if (fusionData && fusionData.fusion_image_id) {
-                            images = [{id: fusionData.fusion_image_id}];
+                            images = [{ id: fusionData.fusion_image_id }];
 
                         }
                     } else if (agent.role === 'imageVariator') {
@@ -8368,7 +9368,7 @@
             // 普通输出（非生图师/融图师/变图师或无图片）
             if (!output) {
 
-                Notify.info(`暂无 ${agentName} 的输出`, '', {timeOut: 2000});
+                Notify.info(`暂无 ${agentName} 的输出`, '', { timeOut: 2000 });
                 return;
             }
 
@@ -8422,13 +9422,13 @@
                     // 多图网格布局，但此时还不知道 URL，先显示 loading 或占位符
                     // 我们将在点击查看图片时动态获取，所以初始时显示一个提示
                     return `
-                        <div class="nc-modal-body" style="padding: 20px; overflow-y: auto; text-align: center; color: #aaa;">
+                        <div class="nc-modal-body nc-body--loading">
                             正在加载图片...
                         </div>
                     `;
                 } else {
                     return `
-                        <div class="nc-modal-body nc-scroll markdown-body" style="max-height:60vh; overflow-y:auto;">
+                        <div class="nc-modal-body nc-scroll markdown-body nc-size--max60vh">
                             ${this._renderMarkdown(rawOutput)}
                         </div>
                     `;
@@ -8437,10 +9437,10 @@
 
             modal.innerHTML = `
                 <div class="nc-modal-header">
-                    <h2 style="margin:0; color:#667eea; font-size:20px;">${agentName}</h2>
+                    <h2 class="nc-modal-title--primary-lg">${agentName}</h2>
                 </div>
                 ${renderContent()}
-                <div class="nc-modal-footer" style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+                <div class="nc-modal-footer nc-flex--footer-10-wrap-sp">
                     <button id="nc-img-view-image" class="nc-btn nc-btn-primary" style="${currentView === 'image' ? 'opacity:1;' : 'opacity:0.6;'}">🖼️ 查看图片</button>
                     <button id="nc-img-view-output" class="nc-btn nc-btn-primary" style="${currentView === 'text' ? 'opacity:1;' : 'opacity:0.6;'}">📄 查看输出</button>
                     <button id="nc-img-copy" class="nc-btn nc-btn-secondary">📋 复制</button>
@@ -8477,7 +9477,7 @@
                 revokeImageUrls();
 
                 // 显示加载中
-                bodyContainer.innerHTML = '<div style="padding: 20px; text-align: center; color: #aaa;">加载图片中...</div>';
+                bodyContainer.innerHTML = '<div class="nc-body--empty">加载图片中...</div>';
 
                 // 为每个图片生成 HTML
                 const imageElements = [];
@@ -8486,7 +9486,7 @@
 
                     if (!imgData.id) {
                         console.warn(`[DEBUG][_showImageGeneratorModal] 图片 ${i} 缺少 id 字段`);
-                        imageElements.push(`<div style="margin:5px; color:#ff6b6b;">图片数据无效（缺少 id）</div>`);
+                        imageElements.push(`<div class="nc-error-img-item">图片数据无效（缺少 id）</div>`);
                         continue;
                     }
                     try {
@@ -8497,24 +9497,24 @@
                             imageUrls.push(url);
 
                             imageElements.push(`
-                                <div style="flex: 0 0 auto; width: 200px; margin: 5px; text-align: center;">
-                                    <img src="${url}" style="width: 100%; height: auto; border-radius: 8px; border: 2px solid #667eea;" alt="Generated Image" onload="console.log('图片加载成功: ${url}')" onerror="console.error('图片加载失败: ${url}')">
+                                <div class="nc-flex-item--image-card">
+                                    <img src="${url}" class="nc-img--full-card" alt="Generated Image" onload="console.log('图片加载成功: ${url}')" onerror="console.error('图片加载失败: ${url}')">
                                 </div>
                             `);
                         } else {
                             console.warn(`[DEBUG][_showImageGeneratorModal] 图片 id=${imgData.id} 未找到`);
-                            imageElements.push(`<div style="margin:5px; color:#ff6b6b;">图片 id=${imgData.id} 未找到</div>`);
+                            imageElements.push(`<div class="nc-error-img-item">图片 id=${imgData.id} 未找到</div>`);
                         }
                     } catch (err) {
                         console.error(`[DEBUG][_showImageGeneratorModal] 获取图片 id=${imgData.id} 时出错:`, err);
-                        imageElements.push(`<div style="margin:5px; color:#ff6b6b;">图片加载错误: ${err.message}</div>`);
+                        imageElements.push(`<div class="nc-error-img-item">图片加载错误: ${err.message}</div>`);
                     }
                 }
 
                 const imagesHtml = imageElements.join('');
                 bodyContainer.innerHTML = `
-                    <div style="padding: 20px; overflow-y: auto;">
-                        <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
+                    <div class="nc-body--pad20-scroll">
+                        <div class="nc-flex--wrap-center">
                             ${imagesHtml}
                         </div>
                     </div>
@@ -8528,7 +9528,7 @@
                 currentView = 'text';
                 viewImageBtn.style.opacity = '0.6';
                 viewOutputBtn.style.opacity = '1';
-                bodyContainer.innerHTML = `<div class="nc-scroll markdown-body" style="max-height:60vh; overflow-y:auto;">${this._renderMarkdown(rawOutput)}</div>`;
+                bodyContainer.innerHTML = `<div class="nc-scroll markdown-body nc-size--max60vh">${this._renderMarkdown(rawOutput)}</div>`;
                 // 释放图片 URL，因为文本视图不需要它们
                 revokeImageUrls();
             };
@@ -8549,7 +9549,7 @@
                 }
                 try {
                     await navigator.clipboard.writeText(textToCopy);
-                    Notify.success('已复制到剪贴板', '', {timeOut: 2000});
+                    Notify.success('已复制到剪贴板', '', { timeOut: 2000 });
                 } catch (err) {
                     // 降级方案
                     const textarea = document.createElement('textarea');
@@ -8560,7 +9560,7 @@
                     textarea.select();
                     document.execCommand('copy');
                     document.body.removeChild(textarea);
-                    Notify.success('已复制到剪贴板（降级方案）', '', {timeOut: 2000});
+                    Notify.success('已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
                 }
             });
 
@@ -8589,7 +9589,7 @@
         showDiscardedChapter() {
             const d = WORKFLOW_STATE.discardedChapter;
             if (!d) {
-                Notify.info('暂无废章内容', '', {timeOut: 2000});
+                Notify.info('暂无废章内容', '', { timeOut: 2000 });
                 return;
             }
             let title = d.title || '';
@@ -8686,13 +9686,13 @@
 
             const line = document.createElement('div');
             line.style.cssText = `margin-bottom:3px;${isError ? 'color:#ff6b6b;' : ''}`;
-            const time = new Date().toLocaleTimeString('zh-CN', {hour12: false});
+            const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
             line.textContent = `[${time}] ${text}`;
 
             content.appendChild(line);
             content.scrollTop = content.scrollHeight;
 
-            WORKFLOW_STATE.progressLog.push({text, isError, time});
+            WORKFLOW_STATE.progressLog.push({ text, isError, time });
             if (WORKFLOW_STATE.progressLog.length > CONFIG.MAX_PROGRESS_LINES) {
                 WORKFLOW_STATE.progressLog.shift();
             }
@@ -8709,16 +9709,16 @@
             const lastEl = document.getElementById('nc-token-last');
             if (totalEl) totalEl.textContent = WORKFLOW_STATE.tokenStats.totalInput + WORKFLOW_STATE.tokenStats.totalOutput;
             if (lastEl) {
-                const {lastInput, lastOutput} = WORKFLOW_STATE.tokenStats;
+                const { lastInput, lastOutput } = WORKFLOW_STATE.tokenStats;
                 lastEl.textContent = lastInput || lastOutput ? `本次: +${lastInput + lastOutput}` : '本次: -';
             }
         },
 
         resetTokenStats() {
-            WORKFLOW_STATE.tokenStats = {totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0};
+            WORKFLOW_STATE.tokenStats = { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 };
             Storage.saveTokenStats(WORKFLOW_STATE.tokenStats);
             this.updateTokenDisplay();
-            Notify.success('Token统计已重置', '', {timeOut: 2000});
+            Notify.success('Token统计已重置', '', { timeOut: 2000 });
         },
 
         setLoading(isLoading) {
@@ -8766,6 +9766,80 @@
         },
 
         /**
+         * 响应式选项卡导航初始化
+         * ≤1023px 时在面板主体上方插入选项卡栏，每个卡片对应一个标签页
+         * >1023px 时移除选项卡栏，恢复 grid 布局
+         */
+        _initTabBar(panel) {
+            const BREAKPOINT = 1023;
+            const body = panel.querySelector('.nc-panel-body');
+            if (!body) return;
+
+            const isMobile = window.innerWidth <= BREAKPOINT;
+
+            // 清理旧状态
+            const oldBar = panel.querySelector('.nc-tab-bar');
+            if (oldBar) oldBar.remove();
+            body.querySelectorAll('.nc-card').forEach(c => {
+                c.classList.remove('nc-tab-active');
+                c.removeAttribute('data-tab');
+            });
+
+            if (!isMobile) {
+                // 桌面端：恢复所有卡片可见
+                body.querySelectorAll('.nc-card').forEach(c => { c.style.display = ''; });
+                return;
+            }
+
+            // 平板/手机端：构建选项卡
+            const TABS = [
+                { label: '🎯 预选', icon: '🎯', hint: 'Agent预选' },
+                { label: '🔄 流程', icon: '🔄', hint: '工作流' },
+                { label: '✏️ 输入', icon: '✏️', hint: '输入/进度' },
+                { label: '⚙️ 设置', icon: '⚙️', hint: 'Agent配置' },
+            ];
+
+            const cards = [...body.querySelectorAll(':scope > .nc-card')];
+            cards.forEach((card, idx) => {
+                card.setAttribute('data-tab', Math.min(idx, TABS.length - 1));
+            });
+
+            const bar = document.createElement('div');
+            bar.className = 'nc-tab-bar';
+            TABS.forEach((tab, idx) => {
+                const btn = document.createElement('button');
+                btn.className = 'nc-tab-btn';
+                btn.setAttribute('data-tab-idx', idx);
+                btn.innerHTML = tab.label;
+                btn.title = tab.hint;
+                btn.addEventListener('click', () => UI._switchTab(panel, idx));
+                bar.appendChild(btn);
+            });
+            body.insertAdjacentElement('beforebegin', bar);
+
+            const savedTab = parseInt(sessionStorage.getItem('nc-active-tab') || '0', 10);
+            UI._switchTab(panel, isNaN(savedTab) ? 0 : savedTab);
+        },
+
+        /**
+         * 切换选项卡
+         */
+        _switchTab(panel, tabIdx) {
+            const body = panel.querySelector('.nc-panel-body');
+            const bar = panel.querySelector('.nc-tab-bar');
+            if (!body || !bar) return;
+            body.querySelectorAll(':scope > .nc-card').forEach(card => {
+                const active = parseInt(card.getAttribute('data-tab') ?? '0', 10) === tabIdx;
+                card.classList.toggle('nc-tab-active', active);
+            });
+            bar.querySelectorAll('.nc-tab-btn').forEach(btn => {
+                btn.classList.toggle('nc-tab-active', parseInt(btn.getAttribute('data-tab-idx'), 10) === tabIdx);
+            });
+            try { sessionStorage.setItem('nc-active-tab', tabIdx); } catch (_) { }
+        },
+
+
+        /**
          * 导出数据（章节、世界书、工作流输出等）为 ZIP 压缩包
          * 修改：chapters.json 的格式改为与历史面板“备份JSON”一致的对象结构
          */
@@ -8783,7 +9857,7 @@
                     version: CONFIG.VERSION,
                     exportTime: new Date().toISOString(),
                     totalChapters: chapters.length,
-                    data: {chapters}
+                    data: { chapters }
                 };
                 zip.file('chapters.json', JSON.stringify(chapterBackup, null, 2));
                 UI.updateProgress(`  ✓ 章节数据已打包 (共 ${chapters.length} 章)`);
@@ -8909,13 +9983,13 @@
                         const imageFolder = zip.folder('images');
                         for (let i = 0; i < allImages.length; i++) {
                             const img = allImages[i];
-                            const {id, blob} = img;
+                            const { id, blob } = img;
                             let ext = 'png';
                             if (blob.type.includes('jpeg') || blob.type.includes('jpg')) ext = 'jpg';
                             else if (blob.type.includes('gif')) ext = 'gif';
                             else if (blob.type.includes('webp')) ext = 'webp';
                             const fileName = `${id}.${ext}`;
-                            imageFolder.file(fileName, blob, {binary: true});
+                            imageFolder.file(fileName, blob, { binary: true });
                         }
                         UI.updateProgress(`  ✓ 已导出 ${allImages.length} 张图片`);
                     } else {
@@ -8933,13 +10007,13 @@
                     if (allTexts.length > 0) {
                         const textFolder = zip.folder('texts');
                         for (const item of allTexts) {
-                            const {id, text, format} = item;
+                            const { id, text, format } = item;
                             let ext;
                             if (format === 'html') ext = 'html';
                             else if (format === 'js') ext = 'js';
                             else ext = 'txt'; // 默认 txt
                             const fileName = `${id}.${ext}`;
-                            textFolder.file(fileName, text, {binary: false});
+                            textFolder.file(fileName, text, { binary: false });
                         }
                         UI.updateProgress(`  ✓ 已导出 ${allTexts.length} 个文本文件`);
                     } else {
@@ -8957,14 +10031,14 @@
                     if (allAudios.length > 0) {
                         const audioFolder = zip.folder('audios');
                         for (const audio of allAudios) {
-                            const {id, blob} = audio;
+                            const { id, blob } = audio;
                             let ext = 'mp3';
                             if (blob.type.includes('wav')) ext = 'wav';
                             else if (blob.type.includes('ogg')) ext = 'ogg';
                             else if (blob.type.includes('m4a')) ext = 'm4a';
                             else if (blob.type.includes('flac')) ext = 'flac';
                             const fileName = `${id}.${ext}`;
-                            audioFolder.file(fileName, blob, {binary: true});
+                            audioFolder.file(fileName, blob, { binary: true });
                         }
                         UI.updateProgress(`  ✓ 已导出 ${allAudios.length} 个音频文件`);
                     } else {
@@ -8976,7 +10050,7 @@
                 }
 
                 // ========== 生成并下载 ZIP ==========
-                const blob = await zip.generateAsync({type: 'blob'});
+                const blob = await zip.generateAsync({ type: 'blob' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -9031,14 +10105,14 @@
                 // 模态框结构
                 modal.innerHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;">互动场景</h2>
+                <h2 class="nc-modal-title--primary-c">互动场景</h2>
             </div>
-            <div class="nc-modal-body markdown-body" id="nc-interaction-content" style="flex:1; overflow-y: auto; padding:12px;">
+            <div class="nc-modal-body markdown-body nc-flex-item--interaction" id="nc-interaction-content">
                 ${html}
             </div>
-            <div class="nc-modal-footer" style="flex-shrink:0; display:flex; gap:10px; justify-content:center; padding:12px; border-top:1px solid rgba(255,255,255,0.1);">
-                <button class="nc-modal-copy-btn" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 8px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">复制内容</button>
-                <button class="nc-modal-skip-btn" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; padding: 8px 20px; border-radius: 8px; font-weight: 600; cursor: pointer;">跳过</button>
+            <div class="nc-modal-footer nc-flex-item--modal-footer">
+                <button class="nc-modal-copy-btn nc-btn--grad-purple-action">复制内容</button>
+                <button class="nc-modal-skip-btn nc-btn--grad-purple-action">跳过</button>
             </div>
         `;
 
@@ -9080,7 +10154,7 @@
                     const textToCopy = content.innerText || content.textContent;
                     try {
                         await navigator.clipboard.writeText(textToCopy);
-                        Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
+                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
 
                     } catch (err) {
                         console.warn('[UI.renderAndWaitForInteraction] 剪贴板API失败，使用降级方案:', err);
@@ -9092,7 +10166,7 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', {timeOut: 2000});
+                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
 
                     }
                 });
@@ -9259,17 +10333,17 @@
             // 使用 Flex 列布局，确保内容区域可滚动
             modal.innerHTML = `
         <div class="nc-modal-header">
-            <h2 style="margin:0; color:#667eea; font-size:20px;">${agentName}</h2>
+            <h2 class="nc-modal-title--primary-lg">${agentName}</h2>
         </div>
-        <div class="nc-modal-body" style="display: flex; flex-direction: column; padding:0; height:60vh; overflow:hidden;">
+        <div class="nc-modal-body nc-flex--col-modal-60vh">
             <!-- 源码容器：flex:1 占据剩余空间，overflow:auto 实现滚动 -->
-            <div id="nc-source-container" style="display:block; flex:1; overflow:auto; background:#0f172a; box-sizing:border-box;">
-                <pre id="nc-source-pre" style="margin:0; padding:12px; font-family:Consolas,monospace; font-size:12px; line-height:1.5; color:#eaeaea; white-space:pre-wrap; word-wrap:break-word;"></pre>
+            <div id="nc-source-container" class="nc-source-pane">
+                <pre id="nc-source-pre" class="nc-code-pre--main"></pre>
             </div>
             <!-- 预览容器：同样 flex:1，但初始隐藏 -->
-            <div id="nc-preview-container" class="markdown-body" style="display:none; flex:1; overflow-y:auto; padding:12px; background:#0f172a; box-sizing:border-box;"></div>
+            <div id="nc-preview-container" class="markdown-body nc-hidden--preview-pane"></div>
         </div>
-        <div class="nc-modal-footer" style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+        <div class="nc-modal-footer nc-flex--footer-10-wrap-sp">
             <button id="nc-html-source" class="nc-btn nc-btn-primary">📄 查看源码</button>
             <button id="nc-html-preview" class="nc-btn nc-btn-primary">🌐 预览</button>
             <button id="nc-html-copy" class="nc-btn nc-btn-secondary">📋 复制</button>
@@ -9356,7 +10430,7 @@
 
                 if (previewContainer.children.length === 0) {
 
-                    previewContainer.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">加载预览中...</div>';
+                    previewContainer.innerHTML = '<div class="nc-center--pad20-muted">加载预览中...</div>';
                     try {
 
                         const processedHtml = await this._replaceImagePlaceholders(content);
@@ -9376,7 +10450,7 @@
                         logScrollState(previewContainer, '预览容器(加载后)');
                     } catch (err) {
                         console.error('[UI._showHtmlPreviewModal] 预览渲染失败:', err);
-                        previewContainer.innerHTML = `<div style="color:#ff6b6b; padding:20px;">预览渲染失败: ${err.message}</div>`;
+                        previewContainer.innerHTML = `<div class="nc-color--error-padded">预览渲染失败: ${err.message}</div>`;
                     }
                 } else {
 
@@ -9453,18 +10527,18 @@
             // ========== 修改点：将“其余文件库”按钮的 id 从 nc-file-tab-texts 改为 nc-file-tab-other ==========
             modal.innerHTML = `
         <div class="nc-modal-header">
-            <h2 style="margin:0; color:#667eea;">📁 文件管理器</h2>
+            <h2 class="nc-modal-title--primary">📁 文件管理器</h2>
         </div>
-        <div style="display: flex; gap: 10px; padding: 0 10px; margin-bottom: 10px; flex-wrap: wrap;">
-            <button id="nc-file-tab-images" class="nc-btn nc-btn-primary" style="flex:1;">🖼️ 图片库</button>
-            <button id="nc-file-tab-audios" class="nc-btn nc-btn-secondary" style="flex:1;">🎵 音频库</button>
-            <button id="nc-file-tab-other" class="nc-btn nc-btn-secondary" style="flex:1;">📄 其余文件库</button>  <!-- 原为 nc-file-tab-texts，现改为 other -->
-            <button id="nc-file-tab-library" class="nc-btn nc-btn-secondary" style="flex:1;">📚 图片书</button>
-            <button id="nc-file-tab-audiobook" class="nc-btn nc-btn-secondary" style="flex:1;">📚 音频书</button>
-            <button id="nc-file-tab-galgames" class="nc-btn nc-btn-secondary" style="flex:1;">🎮 Galgame项目</button>
-            <button id="nc-file-upload" class="nc-btn nc-btn-success" style="flex:0.5; background: #10b981;">📤 上传文件</button>
+        <div class="nc-flex--tab-bar">
+            <button id="nc-file-tab-images" class="nc-btn nc-btn-primary nc-flex-item--grow">🖼️ 图片库</button>
+            <button id="nc-file-tab-audios" class="nc-btn nc-btn-secondary nc-flex-item--grow">🎵 音频库</button>
+            <button id="nc-file-tab-other" class="nc-btn nc-btn-secondary nc-flex-item--grow">📄 其余文件库</button>  <!-- 原为 nc-file-tab-texts，现改为 other -->
+            <button id="nc-file-tab-library" class="nc-btn nc-btn-secondary nc-flex-item--grow">📚 图片书</button>
+            <button id="nc-file-tab-audiobook" class="nc-btn nc-btn-secondary nc-flex-item--grow">📚 音频书</button>
+            <button id="nc-file-tab-galgames" class="nc-btn nc-btn-secondary nc-flex-item--grow">🎮 Galgame项目</button>
+            <button id="nc-file-upload" class="nc-btn nc-btn-success nc-flex-item--upload-btn">📤 上传文件</button>
         </div>
-        <div id="nc-file-content" class="nc-modal-body" style="overflow-y: auto; padding: 10px;"></div>
+        <div id="nc-file-content" class="nc-modal-body nc-size--file-content"></div>
         <div class="nc-modal-footer">
             <button class="nc-modal-close-btn">关闭</button>
         </div>
@@ -9501,12 +10575,12 @@
             const setActiveTab = (tabId) => {
 
                 const tabs = [
-                    {btn: imagesTab, id: 'images'},
-                    {btn: libraryTab, id: 'library'},
-                    {btn: audiosTab, id: 'audios'},
-                    {btn: otherFilesTab, id: 'other'},
-                    {btn: audiobookTab, id: 'audiobook'},
-                    {btn: galgamesTab, id: 'galgames'}
+                    { btn: imagesTab, id: 'images' },
+                    { btn: libraryTab, id: 'library' },
+                    { btn: audiosTab, id: 'audios' },
+                    { btn: otherFilesTab, id: 'other' },
+                    { btn: audiobookTab, id: 'audiobook' },
+                    { btn: galgamesTab, id: 'galgames' }
                 ];
                 tabs.forEach(item => {
                     if (item.btn) {
@@ -9540,25 +10614,25 @@
 
                 currentTab = 'images';
                 setActiveTab('images');
-                contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载图片库...</div>';
+                contentDiv.innerHTML = '<div class="nc-center--pad20">加载图片库...</div>';
 
                 try {
                     const allImages = await ImageStore.getAll();
 
                     if (allImages.length === 0) {
-                        contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">图片库为空</div>';
+                        contentDiv.innerHTML = '<div class="nc-center--pad20-muted">图片库为空</div>';
                         return;
                     }
 
-                    let html = '<div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">';
+                    let html = '<div class="nc-flex--gallery">';
                     for (const img of allImages) {
-                        const {id, blob} = img;
+                        const { id, blob } = img;
                         const url = URL.createObjectURL(blob);
                         html += `
-                    <div style="width: 150px; text-align: center; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                        <img src="${url}" style="max-width:100%; max-height:100px; border-radius:4px;" alt="${id}">
-                        <div style="font-size:11px; color:#aaa; margin:5px 0; word-break:break-all;">${id}</div>
-                        <div style="display: flex; gap: 5px; justify-content: center;">
+                    <div class="nc-card--image-thumb">
+                        <img src="${url}" class="nc-img--thumb-100" alt="${id}">
+                        <div class="nc-text--xs-break">${id}</div>
+                        <div class="nc-flex--row-5-center-sp">
                             <button class="nc-btn nc-btn-xs nc-btn-primary download-btn" data-id="${id}" data-type="img">下载</button>
                             <button class="nc-btn nc-btn-xs nc-btn-danger delete-btn" data-id="${id}" data-type="img">删除</button>
                         </div>
@@ -9604,7 +10678,7 @@
 
                 } catch (err) {
                     console.error('[FileManager] 加载图片失败:', err);
-                    contentDiv.innerHTML = `<div style="color:#ff6b6b; padding:20px;">加载失败: ${err.message}</div>`;
+                    contentDiv.innerHTML = `<div class="nc-color--error-padded">加载失败: ${err.message}</div>`;
                 }
             };
 
@@ -9613,13 +10687,13 @@
 
                 currentTab = 'library';
                 setActiveTab('library');
-                contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载图库书...</div>';
+                contentDiv.innerHTML = '<div class="nc-center--pad20">加载图库书...</div>';
 
                 try {
                     const entries = await getLibraryEntries();
 
                     if (entries.length === 0) {
-                        contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">图库书为空</div>';
+                        contentDiv.innerHTML = '<div class="nc-center--pad20-muted">图库书为空</div>';
                         return;
                     }
 
@@ -9629,27 +10703,27 @@
                         if (!imageId) continue;
                         const blob = await ImageStore.get(imageId);
                         if (!blob) continue;
-                        items.push({entry, imageId, blob});
+                        items.push({ entry, imageId, blob });
                     }
 
 
                     if (items.length === 0) {
-                        contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">图库书中无可显示的图片</div>';
+                        contentDiv.innerHTML = '<div class="nc-center--pad20-muted">图库书中无可显示的图片</div>';
                         return;
                     }
 
-                    let html = '<div style="display: flex; flex-wrap: wrap; gap: 15px; justify-content: center;">';
+                    let html = '<div class="nc-flex--gallery">';
                     for (const item of items) {
-                        const {entry, imageId, blob} = item;
+                        const { entry, imageId, blob } = item;
                         const url = URL.createObjectURL(blob);
                         const bookIndex = entry.book;
                         html += `
-                    <div style="width: 150px; text-align: center; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                        <img src="${url}" style="max-width:100%; max-height:100px; border-radius:4px;" alt="${imageId}">
-                        <div style="font-size:11px; color:#aaa; margin:5px 0; word-break:break-all;">
+                    <div class="nc-card--image-thumb">
+                        <img src="${url}" class="nc-img--thumb-100" alt="${imageId}">
+                        <div class="nc-text--xs-break">
                             图库${bookIndex}-${entry.uid}<br>${imageId}
                         </div>
-                        <div style="display: flex; gap: 5px; justify-content: center;">
+                        <div class="nc-flex--row-5-center-sp">
                             <button class="nc-btn nc-btn-xs nc-btn-primary download-library-btn" data-book="${bookIndex}" data-uid="${entry.uid}" data-id="${imageId}">下载</button>
                             <button class="nc-btn nc-btn-xs nc-btn-danger delete-library-btn" data-book="${bookIndex}" data-uid="${entry.uid}" data-id="${imageId}">删除</button>
                         </div>
@@ -9699,7 +10773,7 @@
                                 let entries = Array.isArray(book) ? book : (book.entries || []);
                                 const newEntries = entries.filter(e => e.uid !== uid);
                                 if (newEntries.length !== entries.length) {
-                                    await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
+                                    await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
                                 }
                                 Notify.success(`图库条目已删除`);
                                 loadLibraryImages();
@@ -9712,7 +10786,7 @@
 
                 } catch (err) {
                     console.error('[FileManager] 加载图库书失败:', err);
-                    contentDiv.innerHTML = `<div style="color:#ff6b6b; padding:20px;">加载失败: ${err.message}</div>`;
+                    contentDiv.innerHTML = `<div class="nc-color--error-padded">加载失败: ${err.message}</div>`;
                 }
             };
 
@@ -9721,31 +10795,31 @@
 
                 currentTab = 'audios';
                 setActiveTab('audios');
-                contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载音频库...</div>';
+                contentDiv.innerHTML = '<div class="nc-center--pad20">加载音频库...</div>';
 
                 try {
                     const allAudios = await AudioStore.getAll();
 
                     if (allAudios.length === 0) {
-                        contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">音频库为空</div>';
+                        contentDiv.innerHTML = '<div class="nc-center--pad20-muted">音频库为空</div>';
                         return;
                     }
 
-                    let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                    let html = '<div class="nc-flex--col-10-sp">';
                     for (const audio of allAudios) {
-                        const {id, blob} = audio;
+                        const { id, blob } = audio;
                         const url = URL.createObjectURL(blob);
                         html += `
-                    <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                            <span style="font-weight:600; color:#667eea;">${id}</span>
-                            <span style="font-size:11px; color:#aaa;">${blob.type || 'audio'}</span>
+                    <div class="nc-card--dark-md">
+                        <div class="nc-flex--row-between-mb5-sp">
+                            <span class="nc-text--bold-primary">${id}</span>
+                            <span class="nc-text--xs-muted">${blob.type || 'audio'}</span>
                         </div>
-                        <audio controls style="width:100%; max-height:40px;">
+                        <audio controls class="nc-audio--compact">
                             <source src="${url}" type="${blob.type}">
                             您的浏览器不支持音频播放。
                         </audio>
-                        <div style="display: flex; gap: 5px; margin-top: 5px;">
+                        <div class="nc-flex--row-5-mt5-sp">
                             <button class="nc-btn nc-btn-xs nc-btn-primary download-audio-btn" data-id="${id}">下载</button>
                             <button class="nc-btn nc-btn-xs nc-btn-danger delete-audio-btn" data-id="${id}">删除</button>
                         </div>
@@ -9789,7 +10863,7 @@
 
                 } catch (err) {
                     console.error('[FileManager] 加载音频失败:', err);
-                    contentDiv.innerHTML = `<div style="color:#ff6b6b; padding:20px;">加载失败: ${err.message}</div>`;
+                    contentDiv.innerHTML = `<div class="nc-color--error-padded">加载失败: ${err.message}</div>`;
                 }
             };
 
@@ -9798,13 +10872,13 @@
 
                 currentTab = 'audiobook';
                 setActiveTab('audiobook');
-                contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载音频书...</div>';
+                contentDiv.innerHTML = '<div class="nc-center--pad20">加载音频书...</div>';
 
                 try {
                     const entries = await getAudioLibraryEntries();
 
                     if (entries.length === 0) {
-                        contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">音频书为空</div>';
+                        contentDiv.innerHTML = '<div class="nc-center--pad20-muted">音频书为空</div>';
                         return;
                     }
 
@@ -9814,32 +10888,32 @@
                         if (!audioId) continue;
                         const blob = await AudioStore.get(audioId);
                         if (!blob) continue;
-                        items.push({entry, audioId, blob});
+                        items.push({ entry, audioId, blob });
                     }
 
 
                     if (items.length === 0) {
-                        contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">音频书中无可播放的音频</div>';
+                        contentDiv.innerHTML = '<div class="nc-center--pad20-muted">音频书中无可播放的音频</div>';
                         return;
                     }
 
-                    let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                    let html = '<div class="nc-flex--col-10-sp">';
                     for (const item of items) {
-                        const {entry, audioId, blob} = item;
+                        const { entry, audioId, blob } = item;
                         const url = URL.createObjectURL(blob);
                         const bookIndex = entry.book;
                         html += `
-                    <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                            <span style="font-weight:600; color:#667eea;">音频库${bookIndex}-${entry.uid}</span>
-                            <span style="font-size:11px; color:#aaa;">${blob.type || 'audio'}</span>
+                    <div class="nc-card--dark-md">
+                        <div class="nc-flex--row-between-mb5-sp">
+                            <span class="nc-text--bold-primary">音频库${bookIndex}-${entry.uid}</span>
+                            <span class="nc-text--xs-muted">${blob.type || 'audio'}</span>
                         </div>
-                        <div style="font-size:12px; margin-bottom:5px; color:#ccc;">${entry.name || ''}</div>
-                        <audio controls style="width:100%; max-height:40px;">
+                        <div class="nc-text--audio-name">${entry.name || ''}</div>
+                        <audio controls class="nc-audio--compact">
                             <source src="${url}" type="${blob.type}">
                             您的浏览器不支持音频播放。
                         </audio>
-                        <div style="display: flex; gap: 5px; margin-top: 5px;">
+                        <div class="nc-flex--row-5-mt5-sp">
                             <button class="nc-btn nc-btn-xs nc-btn-primary download-audiobook-btn" data-book="${bookIndex}" data-uid="${entry.uid}" data-id="${audioId}">下载</button>
                             <button class="nc-btn nc-btn-xs nc-btn-danger delete-audiobook-btn" data-book="${bookIndex}" data-uid="${entry.uid}" data-id="${audioId}">删除</button>
                         </div>
@@ -9887,7 +10961,7 @@
                                 let entries = Array.isArray(book) ? book : (book.entries || []);
                                 const newEntries = entries.filter(e => e.uid !== uid);
                                 if (newEntries.length !== entries.length) {
-                                    await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
+                                    await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
                                 }
                                 Notify.success(`音频书条目已删除`);
                                 loadAudioBook();
@@ -9900,7 +10974,7 @@
 
                 } catch (err) {
                     console.error('[FileManager] 加载音频书失败:', err);
-                    contentDiv.innerHTML = `<div style="color:#ff6b6b; padding:20px;">加载失败: ${err.message}</div>`;
+                    contentDiv.innerHTML = `<div class="nc-color--error-padded">加载失败: ${err.message}</div>`;
                 }
             };
 
@@ -9909,28 +10983,28 @@
 
                 currentTab = 'other';
                 setActiveTab('other');
-                contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载其余文件库...</div>';
+                contentDiv.innerHTML = '<div class="nc-center--pad20">加载其余文件库...</div>';
 
                 try {
                     const allTexts = await OtherFileStore.getAll();
 
                     if (allTexts.length === 0) {
-                        contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">其余文件库为空</div>';
+                        contentDiv.innerHTML = '<div class="nc-center--pad20-muted">其余文件库为空</div>';
                         return;
                     }
 
                     let html = '';
                     for (const item of allTexts) {
-                        const {id, text, format} = item;
+                        const { id, text, format } = item;
                         const preview = text.length > 200 ? text.substring(0, 200) + '...' : text;
                         html += `
-                    <div style="margin-bottom: 10px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight:600; color:#667eea;">${id}</span>
-                            <span style="font-size:11px; color:#aaa;">${format}</span>
+                    <div class="nc-card--dark-md-mb10">
+                        <div class="nc-flex--row-between-mid-sp">
+                            <span class="nc-text--bold-primary">${id}</span>
+                            <span class="nc-text--xs-muted">${format}</span>
                         </div>
-                        <pre style="font-size:11px; background: #1e1e1e; padding: 5px; border-radius: 4px; max-height: 100px; overflow: auto;">${this._escapeHtml(preview)}</pre>
-                        <div style="display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap;">
+                        <pre class="nc-code-pre--mini">${this._escapeHtml(preview)}</pre>
+                        <div class="nc-flex--row-5-mt5-wrap-sp">
                             <button class="nc-btn nc-btn-xs nc-btn-primary view-text-btn" data-id="${id}" data-format="${format}">查看</button>
                             <button class="nc-btn nc-btn-xs nc-btn-primary download-text-btn" data-id="${id}" data-format="${format}">下载</button>
                             <button class="nc-btn nc-btn-xs nc-btn-danger delete-text-btn" data-id="${id}">删除</button>
@@ -9965,7 +11039,7 @@
                             const item = await OtherFileStore.get(id);
                             if (item) {
                                 const ext = format === 'html' ? 'html' : format === 'js' ? 'js' : 'txt';
-                                const blob = new Blob([item.text], {type: 'text/plain'});
+                                const blob = new Blob([item.text], { type: 'text/plain' });
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
                                 a.href = url;
@@ -9994,7 +11068,7 @@
 
                 } catch (err) {
                     console.error('[FileManager] 加载文本失败:', err);
-                    contentDiv.innerHTML = `<div style="color:#ff6b6b; padding:20px;">加载失败: ${err.message}</div>`;
+                    contentDiv.innerHTML = `<div class="nc-color--error-padded">加载失败: ${err.message}</div>`;
                 }
             };
 
@@ -10003,27 +11077,27 @@
 
                 currentTab = 'galgames';
                 setActiveTab('galgames');
-                contentDiv.innerHTML = '<div style="text-align:center; padding:20px;">加载Galgame项目...</div>';
+                contentDiv.innerHTML = '<div class="nc-center--pad20">加载Galgame项目...</div>';
 
                 try {
                     const projects = await Storage.listGalgameProjects();
 
                     if (projects.length === 0) {
-                        contentDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#aaa;">暂无Galgame项目</div>';
+                        contentDiv.innerHTML = '<div class="nc-center--pad20-muted">暂无Galgame项目</div>';
                         return;
                     }
 
-                    let html = '<div style="display: flex; flex-direction: column; gap: 10px;">';
+                    let html = '<div class="nc-flex--col-10-sp">';
                     for (const proj of projects) {
                         const date = new Date(proj.updatedAt).toLocaleString();
                         html += `
-                    <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="flex:1;">
-                            <div style="font-weight:600; color:#667eea;">${this._escapeHtml(proj.name)}</div>
-                            <div style="font-size:11px; color:#aaa;">ID: ${proj.id}</div>
-                            <div style="font-size:11px; color:#aaa;">更新: ${date}</div>
+                    <div class="nc-card--dark-row">
+                        <div class="nc-flex-item--grow">
+                            <div class="nc-text--bold-primary">${this._escapeHtml(proj.name)}</div>
+                            <div class="nc-text--xs-muted">ID: ${proj.id}</div>
+                            <div class="nc-text--xs-muted">更新: ${date}</div>
                         </div>
-                        <div style="display: flex; gap: 5px;">
+                        <div class="nc-flex--row-5-sp">
                             <button class="nc-btn nc-btn-xs nc-btn-primary load-gal-btn" data-id="${proj.id}">加载</button>
                             <button class="nc-btn nc-btn-xs nc-btn-secondary export-gal-btn" data-id="${proj.id}" data-name="${proj.name}">导出</button>
                             <button class="nc-btn nc-btn-xs nc-btn-danger delete-gal-btn" data-id="${proj.id}">删除</button>
@@ -10092,7 +11166,7 @@
 
                 } catch (err) {
                     console.error('[FileManager] 加载Galgame项目失败:', err);
-                    contentDiv.innerHTML = `<div style="color:#ff6b6b; padding:20px;">加载失败: ${err.message}</div>`;
+                    contentDiv.innerHTML = `<div class="nc-color--error-padded">加载失败: ${err.message}</div>`;
                 }
             };
 
@@ -10156,22 +11230,22 @@
 
                             modal2.innerHTML = `
                         <div class="nc-modal-header">
-                            <h2 style="margin:0;color:#667eea;">保存 ${storeType === 'image' ? '图片' : storeType === 'audio' ? '音频' : '其余文件'}</h2>
+                            <h2 class="nc-modal-title--primary-c">保存 ${storeType === 'image' ? '图片' : storeType === 'audio' ? '音频' : '其余文件'}</h2>
                         </div>
-                        <div class="nc-modal-body" style="padding:20px;">
-                            <div style="margin-bottom:15px;">
-                                <label style="display:block; margin-bottom:5px; color:#aaa;">自定义ID（可选）</label>
-                                <input type="text" id="nc-custom-id" placeholder="${expectedPrefix}your_id" style="width:100%; padding:8px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px; font-size:13px;">
-                                <div style="font-size:11px; color:#888; margin-top:5px;">必须以 ${expectedPrefix} 开头，只能包含字母、数字、下划线</div>
+                        <div class="nc-modal-body nc-body--pad20">
+                            <div class="nc-mb15">
+                                <label class="nc-field-label--base">自定义ID（可选）</label>
+                                <input type="text" id="nc-custom-id" placeholder="${expectedPrefix}your_id" class="nc-modal-input--base">
+                                <div class="nc-text--xs-muted-mt5">必须以 ${expectedPrefix} 开头，只能包含字母、数字、下划线</div>
                             </div>
                             <div>
-                                <p style="color:#aaa; margin-bottom:5px;">文件名: ${file.name}</p>
+                                <p class="nc-color--muted-mb5">文件名: ${file.name}</p>
                             </div>
                         </div>
-                        <div class="nc-modal-footer" style="display:flex; gap:10px; justify-content:center;">
-                            <button id="nc-confirm-ok" class="nc-modal-copy-btn" style="background:linear-gradient(135deg,#667eea,#764ba2);">确定</button>
-                            <button id="nc-confirm-auto" class="nc-modal-copy-btn" style="background:linear-gradient(135deg,#4ecdc4,#44a3aa);">自动生成</button>
-                            <button class="nc-modal-close-btn" style="background:linear-gradient(135deg,#dc3545,#c82333);">取消</button>
+                        <div class="nc-modal-footer nc-flex--footer-10-center">
+                            <button id="nc-confirm-ok" class="nc-modal-copy-btn nc-btn--grad-purple">确定</button>
+                            <button id="nc-confirm-auto" class="nc-modal-copy-btn nc-btn--grad-teal">自动生成</button>
+                            <button class="nc-modal-close-btn nc-btn--grad-red">取消</button>
                         </div>
                     `;
 
@@ -10380,23 +11454,23 @@
         background: rgba(0,0,0,0.2);
     `;
             header.innerHTML = `
-        <div style="display: flex; gap: 15px; align-items: center;">
-            <span style="font-size: 18px; font-weight: 600; color: #667eea;">🎮 Galgame 制作器</span>
-            <button id="nc-gal-mode-edit" class="nc-btn nc-btn-xs" style="background: linear-gradient(135deg,#667eea,#764ba2);">✏️ 制作模式</button>
-            <button id="nc-gal-mode-play" class="nc-btn nc-btn-xs" style="background: #4ecdc4;">▶️ 播放模式</button>
+        <div class="nc-flex--row-15-middle-sp">
+            <span class="nc-toolbar-title">🎮 Galgame 制作器</span>
+            <button id="nc-gal-mode-edit" class="nc-btn nc-btn-xs nc-gal-btn--edit-mode">✏️ 制作模式</button>
+            <button id="nc-gal-mode-play" class="nc-btn nc-btn-xs nc-btn--teal">▶️ 播放模式</button>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div class="nc-flex--row-8-center-sp">
             <!-- 自动布局按钮移到新建按钮左边 -->
-            <label style="display: flex; align-items: center; gap: 4px; color: #ccc; font-size: 12px;">
+            <label class="nc-checkbox-label--xs">
                 <input type="checkbox" id="nc-gal-show-guides" checked> 显示指示线
             </label>
-            <button id="nc-gal-auto-layout" class="nc-btn nc-btn-xs" style="background: #10b981;">🔄 自动布局</button>
-            <button id="nc-gal-new" class="nc-btn nc-btn-xs" style="background: #10b981;">🆕 新建</button>
-            <button id="nc-gal-save" class="nc-btn nc-btn-xs" style="background: #667eea;">💾 保存</button>
-            <button id="nc-gal-load" class="nc-btn nc-btn-xs" style="background: #667eea;">📂 加载</button>
-            <button id="nc-gal-export" class="nc-btn nc-btn-xs" style="background: #f39c12;">📤 导出</button>
-            <button id="nc-gal-import" class="nc-btn nc-btn-xs" style="background: #f39c12;">📥 导入</button>
-            <button id="nc-gal-package" class="nc-btn nc-btn-xs" style="background: #dc3545;">📦 打包</button>
+            <button id="nc-gal-auto-layout" class="nc-btn nc-btn-xs nc-btn--green">🔄 自动布局</button>
+            <button id="nc-gal-new" class="nc-btn nc-btn-xs nc-btn--green">🆕 新建</button>
+            <button id="nc-gal-save" class="nc-btn nc-btn-xs nc-btn--purple">💾 保存</button>
+            <button id="nc-gal-load" class="nc-btn nc-btn-xs nc-btn--purple">📂 加载</button>
+            <button id="nc-gal-export" class="nc-btn nc-btn-xs nc-btn--orange">📤 导出</button>
+            <button id="nc-gal-import" class="nc-btn nc-btn-xs nc-btn--orange">📥 导入</button>
+            <button id="nc-gal-package" class="nc-btn nc-btn-xs nc-btn--red">📦 打包</button>
             <button id="nc-gal-close" class="nc-btn nc-btn-xs nc-btn-ghost">❌ 关闭</button>
         </div>
     `;
@@ -10419,7 +11493,7 @@
         flex-direction: column;
         gap: 10px;
     `;
-            leftPanel.innerHTML = '<h4 style="margin:0 0 10px; color:#aaa;">📦 资源库</h4><div id="nc-gal-resources"></div>';
+            leftPanel.innerHTML = '<h4 class="nc-heading--muted-h4">📦 资源库</h4><div id="nc-gal-resources"></div>';
             main.appendChild(leftPanel);
 
             // 中央画布容器
@@ -10456,13 +11530,13 @@
         gap: 10px;
     `;
             rightPanel.innerHTML = `
-        <div id="nc-gal-variables" style="border-bottom: 1px solid #333; padding-bottom: 10px;">
-            <h4 style="margin:0 0 10px; color:#667eea;">📊 变量监视器</h4>
-            <div id="nc-gal-var-content" style="font-size:12px;"></div>
+        <div id="nc-gal-variables" class="nc-section--border-bottom">
+            <h4 class="nc-heading--primary-h4">📊 变量监视器</h4>
+            <div id="nc-gal-var-content" class="nc-text--sm"></div>
         </div>
         <div id="nc-gal-properties">
-            <h4 style="margin:0 0 10px; color:#667eea;">🔧 节点属性</h4>
-            <div style="color:#aaa; text-align:center;">未选中节点</div>
+            <h4 class="nc-heading--primary-h4">🔧 节点属性</h4>
+            <div class="nc-color--muted-center">未选中节点</div>
         </div>
     `;
             main.appendChild(rightPanel);
@@ -10592,23 +11666,23 @@
             const images = await ImageStore.getAll();
             const audios = await AudioStore.getAll();
 
-            let html = '<div style="margin-bottom:10px;"><strong style="color:#667eea;">图片</strong></div>';
-            if (images.length === 0) html += '<div style="color:#aaa; font-size:12px;">无图片</div>';
+            let html = '<div class="nc-mb10"><strong class="nc-color--primary">图片</strong></div>';
+            if (images.length === 0) html += '<div class="nc-color--muted-sm">无图片</div>';
             images.forEach(img => {
                 const url = URL.createObjectURL(img.blob);
-                html += `<div style="margin-bottom:8px;">
-            <img src="${url}" style="width:100%; max-height:60px; object-fit:cover; border-radius:4px;">
-            <div style="font-size:10px; color:#aaa;">${img.id}</div>
+                html += `<div class="nc-mb8">
+            <img src="${url}" class="nc-img--cover-60">
+            <div class="nc-text--xxs-muted2">${img.id}</div>
         </div>`;
             });
 
-            html += '<div style="margin:10px 0;"><strong style="color:#667eea;">音频</strong></div>';
-            if (audios.length === 0) html += '<div style="color:#aaa; font-size:12px;">无音频</div>';
+            html += '<div class="nc-my10"><strong class="nc-color--primary">音频</strong></div>';
+            if (audios.length === 0) html += '<div class="nc-color--muted-sm">无音频</div>';
             audios.forEach(audio => {
                 const url = URL.createObjectURL(audio.blob);
-                html += `<div style="margin-bottom:8px;">
-            <audio controls style="width:100%;"><source src="${url}" type="${audio.blob.type}"></audio>
-            <div style="font-size:10px; color:#aaa;">${audio.id}</div>
+                html += `<div class="nc-mb8">
+            <audio controls class="nc-audio--full"><source src="${url}" type="${audio.blob.type}"></audio>
+            <div class="nc-text--xxs-muted2">${audio.id}</div>
         </div>`;
             });
 
@@ -10620,12 +11694,12 @@
             const vars = WORKFLOW_STATE.galProject?.variables || {};
 
             let html = `
-                <table style="width:100%; font-size:12px; border-collapse:collapse;">
-                    <thead><tr><th style="text-align:left; color:#aaa;">变量名</th><th style="text-align:left; color:#aaa;">初始值</th><th style="text-align:left; color:#aaa;">操作</th></tr></thead>
+                <table class="nc-table--sm2">
+                    <thead><tr><th class="nc-th--muted">变量名</th><th class="nc-th--muted">初始值</th><th class="nc-th--muted">操作</th></tr></thead>
                     <tbody id="gal-var-tbody">
                     </tbody>
                 </table>
-                <button id="gal-add-var" style="margin-top:5px; width:100%; padding:4px; background:#10b981; border:none; border-radius:4px; color:white; cursor:pointer;">➕ 新增变量</button>
+                <button id="gal-add-var" class="nc-gal-btn--add-var">➕ 新增变量</button>
             `;
             container.innerHTML = html;
 
@@ -10635,13 +11709,13 @@
                 for (const [name, value] of Object.entries(vars)) {
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td style="padding:2px 0;">${this._escapeHtml(name)}</td>
-                        <td style="padding:2px 0;">
+                        <td class="nc-td--tight">${this._escapeHtml(name)}</td>
+                        <td class="nc-td--tight">
                             <input type="text" class="var-value" data-var="${name}" value="${this._escapeHtml(JSON.stringify(value))}"
-                                style="width:80px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:3px; font-size:10px;">
+                                class="nc-gal-input--var-val">
                         </td>
-                        <td style="padding:2px 0;">
-                            <button class="var-delete" data-var="${name}" style="background:#dc3545; border:none; color:white; border-radius:3px; cursor:pointer; font-size:10px;">✖</button>
+                        <td class="nc-td--tight">
+                            <button class="var-delete nc-gal-btn--var-delete" data-var="${name}">✖</button>
                         </td>
                     `;
                     tbody.appendChild(tr);
@@ -10713,13 +11787,13 @@
 
                 } else {
                     console.error('[GalgameProp] 无法获取 editor，属性面板将不可用');
-                    container.innerHTML = '<div style="color:#ff6b6b; text-align:center; padding:20px;">❌ 编辑器实例丢失，请重新打开制作器</div>';
+                    container.innerHTML = '<div class="nc-color--error-center">❌ 编辑器实例丢失，请重新打开制作器</div>';
                     return;
                 }
             }
 
             if (!node) {
-                container.innerHTML = '<div style="color:#aaa; text-align:center;">未选中节点</div>';
+                container.innerHTML = '<div class="nc-color--muted-center">未选中节点</div>';
 
                 return;
             }
@@ -10752,83 +11826,83 @@
 
             // ===== 构建HTML =====
             let html = `
-        <div style="margin-bottom:15px;">
-            <label style="color:#aaa;">节点ID</label>
-            <input type="number" id="gal-node-id" value="${node.id}" readonly style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px;">
+        <div class="nc-mb15">
+            <label class="nc-color--muted">节点ID</label>
+            <input type="number" id="gal-node-id" value="${node.id}" readonly class="nc-gal-input--base">
         </div>
-        <div style="margin-bottom:15px;">
-            <label style="color:#aaa;">标题</label>
-            <input type="text" id="gal-node-title" value="${this._escapeHtml(node.title || '')}" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px;">
+        <div class="nc-mb15">
+            <label class="nc-color--muted">标题</label>
+            <input type="text" id="gal-node-title" value="${this._escapeHtml(node.title || '')}" class="nc-gal-input--base">
         </div>
-        <div style="margin-bottom:15px;">
-            <label style="color:#aaa;">引用章节号</label>
-            <input type="number" id="gal-node-chapter" value="${node.chapterNum || ''}" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px;">
-            <button id="gal-import-chapter" style="margin-top:5px; width:100%; padding:4px; background:#667eea; border:none; border-radius:4px; color:white; cursor:pointer;">📖 从历史导入</button>
+        <div class="nc-mb15">
+            <label class="nc-color--muted">引用章节号</label>
+            <input type="number" id="gal-node-chapter" value="${node.chapterNum || ''}" class="nc-gal-input--base">
+            <button id="gal-import-chapter" class="nc-gal-btn--import-chapter">📖 从历史导入</button>
         </div>
-        <div style="margin-bottom:15px;">
-            <label style="color:#aaa;">节点脚本 (script)</label>
-            <textarea id="gal-node-script" rows="8" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px; font-family:monospace;"
+        <div class="nc-mb15">
+            <label class="nc-color--muted">节点脚本 (script)</label>
+            <textarea id="gal-node-script" rows="8" class="nc-gal-input--mono"
                 placeholder="示例：\n// 获取用户选择的文本\nlet choice = utils.getText(result);\nif (choice === '接受') {\n    vars.accepted = true;  // 修改变量\n    return 5;              // 跳转到节点5\n} else if (choice === '拒绝') {\n    return 6;\n}\n// 无返回则使用默认目标">${this._escapeHtml(node.script || '')}</textarea>
-            <div style="font-size:11px; color:#aaa; margin-top:3px;">脚本可访问 vars（变量）和 result（用户交互结果），应返回数字节点ID或字符串路径。无返回则使用默认目标。</div>
+            <div class="nc-text--xs-muted-mt3">脚本可访问 vars（变量）和 result（用户交互结果），应返回数字节点ID或字符串路径。无返回则使用默认目标。</div>
         </div>
-        <div style="margin-bottom:15px;">
-            <label style="color:#aaa;">默认目标 (defaultTarget)</label>
-            <input type="text" id="gal-default-target" value="${node.defaultTarget || ''}" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px;" placeholder="例如 5">
+        <div class="nc-mb15">
+            <label class="nc-color--muted">默认目标 (defaultTarget)</label>
+            <input type="text" id="gal-default-target" value="${node.defaultTarget || ''}" class="nc-gal-input--base" placeholder="例如 5">
         </div>
-        <div style="margin-bottom:15px;">
-            <label style="color:#aaa;">进入脚本 (onEnterScript)</label>
-            <textarea id="gal-on-enter-script" rows="3" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px; font-family:monospace;"
+        <div class="nc-mb15">
+            <label class="nc-color--muted">进入脚本 (onEnterScript)</label>
+            <textarea id="gal-on-enter-script" rows="3" class="nc-gal-input--mono"
                 placeholder="示例：vars.enterCount = (vars.enterCount || 0) + 1;">${this._escapeHtml(node.onEnterScript || '')}</textarea>
-            <div style="font-size:11px; color:#aaa;">进入节点时执行，可访问 vars。</div>
+            <div class="nc-text--xs-muted">进入节点时执行，可访问 vars。</div>
         </div>
-        <hr style="border-color:#333; margin:15px 0;">
-        <div id="gal-node-analysis" style="background:rgba(0,0,0,0.2); padding:8px; border-radius:4px;">
-            <div style="font-weight:600; color:#aaa;">📈 当前节点变量分析</div>
-            <div id="gal-analysis-content" style="font-size:11px; color:#ccc;">分析中...</div>
+        <hr class="nc-divider">
+        <div id="gal-node-analysis" class="nc-card--dark-sm">
+            <div class="nc-text--bold-muted">📈 当前节点变量分析</div>
+            <div id="gal-analysis-content" class="nc-text--xs-light">分析中...</div>
         </div>
     `;
 
             // ===== 添加从快照导入变量的区域 =====
             if (snapshotEntries.length > 0) {
                 html += `
-            <hr style="border-color:#333; margin:15px 0;">
-            <div style="background:rgba(0,0,0,0.2); padding:8px; border-radius:4px;">
-                <div style="font-weight:600; color:#aaa;">📦 从本章快照导入变量</div>
-                <div id="gal-snapshot-entries" style="margin-top:10px; max-height:200px; overflow-y:auto;">
+            <hr class="nc-divider">
+            <div class="nc-card--dark-sm">
+                <div class="nc-text--bold-muted">📦 从本章快照导入变量</div>
+                <div id="gal-snapshot-entries" class="nc-mt10--snapshot-scroll">
                     ${snapshotEntries.map((entry, index) => {
                     // 【修改点】生成建议的变量名：直接去掉 "状态-" 前缀，保留原始字符串
                     let suggestedName = entry.name.replace(/^状态-/, '');
                     return `
-                            <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px; font-size:12px;">
-                                <span style="flex:0 0 120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${this._escapeHtml(entry.name)}">${this._escapeHtml(entry.name)}</span>
-                                <input type="text" id="snapshot-var-name-${index}" value="${this._escapeHtml(suggestedName)}" placeholder="变量名" style="flex:1; padding:3px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:3px;">
-                                <button class="snapshot-add-btn" data-index="${index}" style="background:#10b981; border:none; color:white; border-radius:3px; cursor:pointer; padding:3px 8px; font-size:11px;">添加</button>
+                            <div class="nc-flex--snapshot-row">
+                                <span class="nc-flex-item--entry-name" title="${this._escapeHtml(entry.name)}">${this._escapeHtml(entry.name)}</span>
+                                <input type="text" id="snapshot-var-name-${index}" value="${this._escapeHtml(suggestedName)}" placeholder="变量名" class="nc-gal-input--snapshot-var">
+                                <button class="snapshot-add-btn nc-gal-btn--snapshot-add" data-index="${index}">添加</button>
                             </div>
                         `;
                 }).join('')}
                 </div>
-                <div style="font-size:11px; color:#aaa; margin-top:5px;">点击“添加”将条目内容作为字符串存储到对应变量中，可在脚本中通过 vars.变量名 访问。</div>
+                <div class="nc-text--xs-muted-mt5-cff0">点击“添加”将条目内容作为字符串存储到对应变量中，可在脚本中通过 vars.变量名 访问。</div>
             </div>
         `;
             } else if (node.chapterNum) {
                 html += `
-            <hr style="border-color:#333; margin:15px 0;">
-            <div style="background:rgba(0,0,0,0.2); padding:8px; border-radius:4px;">
-                <div style="font-weight:600; color:#aaa;">📦 从本章快照导入变量</div>
-                <div style="font-size:12px; color:#aaa; padding:5px;">本章无状态书快照或未找到状态条目。</div>
+            <hr class="nc-divider">
+            <div class="nc-card--dark-sm">
+                <div class="nc-text--bold-muted">📦 从本章快照导入变量</div>
+                <div class="nc-text--muted-padded">本章无状态书快照或未找到状态条目。</div>
             </div>
         `;
             } else {
                 html += `
-            <hr style="border-color:#333; margin:15px 0;">
-            <div style="background:rgba(0,0,0,0.2); padding:8px; border-radius:4px;">
-                <div style="font-weight:600; color:#aaa;">📦 从本章快照导入变量</div>
-                <div style="font-size:12px; color:#aaa; padding:5px;">请先关联一个章节。</div>
+            <hr class="nc-divider">
+            <div class="nc-card--dark-sm">
+                <div class="nc-text--bold-muted">📦 从本章快照导入变量</div>
+                <div class="nc-text--muted-padded">请先关联一个章节。</div>
             </div>
         `;
             }
 
-            html += `<button id="gal-delete-node" style="margin-top:10px; width:100%; padding:5px; background:#dc3545; border:none; border-radius:4px; color:white; cursor:pointer;">🗑️ 删除节点</button>`;
+            html += `<button id="gal-delete-node" class="nc-gal-btn--delete-node">🗑️ 删除节点</button>`;
 
             container.innerHTML = html;
 
@@ -10845,7 +11919,7 @@
             // 节点属性变化保存（使用 blur 事件避免频繁更新）
             titleInput.addEventListener('blur', () => {
                 node.title = titleInput.value;
-                _editor.updateNode(node.id, {title: node.title});
+                _editor.updateNode(node.id, { title: node.title });
 
             });
 
@@ -10853,26 +11927,26 @@
                 const val = parseInt(chapterInput.value);
                 if (!isNaN(val)) {
                     node.chapterNum = val;
-                    _editor.updateNode(node.id, {chapterNum: node.chapterNum});
+                    _editor.updateNode(node.id, { chapterNum: node.chapterNum });
 
                 }
             });
 
             scriptInput.addEventListener('blur', () => {
                 node.script = scriptInput.value;
-                _editor.updateNode(node.id, {script: node.script});
+                _editor.updateNode(node.id, { script: node.script });
 
             });
 
             defaultTargetInput.addEventListener('blur', () => {
                 node.defaultTarget = defaultTargetInput.value;
-                _editor.updateNode(node.id, {defaultTarget: node.defaultTarget});
+                _editor.updateNode(node.id, { defaultTarget: node.defaultTarget });
 
             });
 
             onEnterScriptInput.addEventListener('blur', () => {
                 node.onEnterScript = onEnterScriptInput.value;
-                _editor.updateNode(node.id, {onEnterScript: node.onEnterScript});
+                _editor.updateNode(node.id, { onEnterScript: node.onEnterScript });
 
             });
 
@@ -10884,7 +11958,7 @@
                         const ch = selected[0];
                         node.chapterNum = ch.num;
                         chapterInput.value = ch.num;
-                        _editor.updateNode(node.id, {chapterNum: ch.num});
+                        _editor.updateNode(node.id, { chapterNum: ch.num });
 
                         Notify.success(`已关联章节 #${ch.num}`);
                         // 重新渲染属性面板以显示快照导入区域
@@ -10915,14 +11989,14 @@
                         const varMatches = line.match(/vars\.([a-zA-Z_$][a-zA-Z0-9_$]*)/g) || [];
                         varMatches.forEach(m => {
                             const name = m.split('.')[1];
-                            if (!varUsage[name]) varUsage[name] = {ref: true, assign: false, values: []};
+                            if (!varUsage[name]) varUsage[name] = { ref: true, assign: false, values: [] };
                         });
                         // 匹配赋值：vars.xxx = ... 或 vars.xxx += ... 等
                         const assignMatch = line.match(/vars\.([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(.+?);/);
                         if (assignMatch) {
                             const name = assignMatch[1];
                             const right = assignMatch[2].trim();
-                            if (!varUsage[name]) varUsage[name] = {ref: true, assign: true, values: []};
+                            if (!varUsage[name]) varUsage[name] = { ref: true, assign: true, values: [] };
                             varUsage[name].assign = true;
                             try {
                                 const val = eval('(' + right + ')');
@@ -10935,7 +12009,7 @@
                         if (plusMatch) {
                             const name = plusMatch[1];
                             const right = plusMatch[2].trim();
-                            if (!varUsage[name]) varUsage[name] = {ref: true, assign: true, values: []};
+                            if (!varUsage[name]) varUsage[name] = { ref: true, assign: true, values: [] };
                             varUsage[name].assign = true;
                             varUsage[name].values.push(`原值 + ${right}`);
                         }
@@ -10943,7 +12017,7 @@
                         if (minusMatch) {
                             const name = minusMatch[1];
                             const right = minusMatch[2].trim();
-                            if (!varUsage[name]) varUsage[name] = {ref: true, assign: true, values: []};
+                            if (!varUsage[name]) varUsage[name] = { ref: true, assign: true, values: [] };
                             varUsage[name].assign = true;
                             varUsage[name].values.push(`原值 - ${right}`);
                         }
@@ -10988,7 +12062,7 @@
                         const entry = snapshotEntries[index];
                         // 存储条目内容到项目变量
                         if (!WORKFLOW_STATE.galProject) {
-                            WORKFLOW_STATE.galProject = {variables: {}};
+                            WORKFLOW_STATE.galProject = { variables: {} };
                         }
                         if (!WORKFLOW_STATE.galProject.variables) {
                             WORKFLOW_STATE.galProject.variables = {};
@@ -11180,7 +12254,7 @@
                         variables: {}
                     };
                     WORKFLOW_STATE.galProjectId = null;
-                    overlay.querySelector('#nc-gal-properties').innerHTML = '<div style="color:#aaa;">未选中节点</div>';
+                    overlay.querySelector('#nc-gal-properties').innerHTML = '<div class="nc-color--muted">未选中节点</div>';
                     UI._renderGalgameVariables(overlay.querySelector('#nc-gal-var-content'));
 
                 });
@@ -11256,13 +12330,13 @@
                     projects.forEach(proj => {
                         const date = new Date(proj.updatedAt).toLocaleString();
                         projectsHTML += `
-                <div class="project-item" data-id="${proj.id}" style="padding:10px; margin-bottom:8px; background:rgba(255,255,255,0.05); border-radius:8px; cursor:pointer; transition:background 0.2s; border:1px solid transparent;" onmouseover="this.style.background='rgba(102,126,234,0.2)'; this.style.borderColor='#667eea'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='transparent'">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <div style="width:40px; height:40px; background:linear-gradient(135deg,#667eea,#764ba2); border-radius:8px; display:flex; align-items:center; justify-content:center; color:white;">🎮</div>
-                        <div style="flex:1;">
-                            <div style="font-weight:600;">${UI._escapeHtml(proj.name)}</div>
-                            <div style="font-size:11px; color:#aaa;">ID: ${proj.id}</div>
-                            <div style="font-size:10px; color:#888;">更新: ${date}</div>
+                <div class="project-item nc-card--project-item" data-id="${proj.id}" onmouseover="this.style.background='rgba(102,126,234,0.2)'; this.style.borderColor='#667eea'" onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='transparent'">
+                    <div class="nc-flex--row-10-middle">
+                        <div class="nc-gal-project-icon">🎮</div>
+                        <div class="nc-flex-item--grow">
+                            <div class="nc-text--bold">${UI._escapeHtml(proj.name)}</div>
+                            <div class="nc-text--xs-muted">ID: ${proj.id}</div>
+                            <div class="nc-text--xxs-muted">更新: ${date}</div>
                         </div>
                     </div>
                 </div>
@@ -11271,9 +12345,9 @@
 
                     loadModal.innerHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;">📂 选择项目</h2>
+                <h2 class="nc-modal-title--primary-c">📂 选择项目</h2>
             </div>
-            <div class="nc-modal-body" style="max-height:50vh; overflow-y:auto; padding:10px;">
+            <div class="nc-modal-body nc-size--modal-50vh-pad">
                 ${projectsHTML}
             </div>
             <div class="nc-modal-footer">
@@ -11298,7 +12372,7 @@
                                 if (selectedNode) {
                                     UI._renderGalgameProperties(selectedNode, overlay.querySelector('#nc-gal-properties'), editor);
                                 } else {
-                                    overlay.querySelector('#nc-gal-properties').innerHTML = '<div style="color:#aaa;">未选中节点</div>';
+                                    overlay.querySelector('#nc-gal-properties').innerHTML = '<div class="nc-color--muted">未选中节点</div>';
                                 }
                                 UI._renderGalgameVariables(overlay.querySelector('#nc-gal-var-content'));
                                 Notify.success('项目加载成功');
@@ -11584,7 +12658,7 @@
                         <div id="player-header">
                             <h1>${this._escapeHtml(projectData.name)}</h1>
                             <div id="player-controls">
-                                <button id="back-btn" style="display:none;">↩ 返回</button>
+                                <button id="back-btn" class="nc-hidden">↩ 返回</button>
                             </div>
                         </div>
                         <div id="player-content" class="markdown-body"></div>
@@ -11678,7 +12752,7 @@
                             async function loadNode(id, skipHistory = false) {
                                 const node = findNode(id);
                                 if (!node) {
-                                    contentDiv.innerHTML = '<div style="color:#ff6b6b;">节点不存在</div>';
+                                    contentDiv.innerHTML = '<div class="nc-color--error">节点不存在</div>';
                                     return;
                                 }
                                 if (!skipHistory && currentNodeId !== id) {
@@ -11708,7 +12782,7 @@
                                 // 生成选项按钮（如果有结果映射，此处为兼容旧版，但新版使用脚本控制，所以暂时不生成按钮）
                                 // 实际上在新版中，选项由控件（如按钮组）在内容中定义，并通过 window.__interactionResolver 传递结果
                                 // 所以我们只需要等待用户交互
-                                optionsDiv.innerHTML = '<div style="color:#aaa; text-align:center;">等待你的选择...</div>';
+                                optionsDiv.innerHTML = '<div class="nc-color--muted-center">等待你的选择...</div>';
                             }
 
                             // 处理用户交互结果
@@ -11772,7 +12846,7 @@
                 </html>`;
 
             // 9. 创建并下载 HTML 文件
-            const blob = new Blob([htmlTemplate], {type: 'text/html'});
+            const blob = new Blob([htmlTemplate], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -11796,7 +12870,7 @@
                 version: CONFIG.VERSION,
                 exportTime: new Date().toISOString(),
                 totalChapters: usedChapters.length,
-                data: {chapters: usedChapters}
+                data: { chapters: usedChapters }
             };
             zip.file('chapters.json', JSON.stringify(chapterBackup, null, 2));
 
@@ -11818,7 +12892,7 @@
                     const blob = await ImageStore.get(id);
                     if (blob) {
                         let ext = blob.type.includes('jpeg') ? 'jpg' : blob.type.includes('png') ? 'png' : 'bin';
-                        imageFolder.file(`${id}.${ext}`, blob, {binary: true});
+                        imageFolder.file(`${id}.${ext}`, blob, { binary: true });
                     }
                 }
             }
@@ -11830,7 +12904,7 @@
                     const blob = await AudioStore.get(id);
                     if (blob) {
                         let ext = blob.type.includes('mp3') ? 'mp3' : blob.type.includes('wav') ? 'wav' : 'bin';
-                        audioFolder.file(`${id}.${ext}`, blob, {binary: true});
+                        audioFolder.file(`${id}.${ext}`, blob, { binary: true });
                     }
                 }
             }
@@ -11857,7 +12931,7 @@
             };
             zip.file('project.json', JSON.stringify(projectData, null, 2));
 
-            const blob = await zip.generateAsync({type: 'blob'});
+            const blob = await zip.generateAsync({ type: 'blob' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -11890,13 +12964,13 @@
 
                 modal.innerHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;">章节冲突</h2>
+                <h2 class="nc-modal-title--primary-c">章节冲突</h2>
             </div>
-            <div class="nc-modal-body" style="text-align:center; padding:20px;">
+            <div class="nc-modal-body nc-center--pad20">
                 <p>导入的章节中有 ${conflictCount} 个与现有章节号冲突。</p>
                 <p>请选择处理方式：</p>
             </div>
-            <div class="nc-modal-footer" style="display:flex; gap:10px; justify-content:center;">
+            <div class="nc-modal-footer nc-flex--footer-10-center">
                 <button id="nc-conflict-replace" class="nc-btn nc-btn-primary">替换</button>
                 <button id="nc-conflict-skip" class="nc-btn nc-btn-primary">跳过</button>
                 <button id="nc-conflict-renumber" class="nc-btn nc-btn-primary">重编号</button>
@@ -12025,18 +13099,18 @@
                             const renumbered = imported.map(c => {
                                 if (existingNums.has(c.num)) {
                                     maxNum++;
-                                    return {...c, num: maxNum};
+                                    return { ...c, num: maxNum };
                                 }
                                 return c;
                             });
                             merged = existing.concat(renumbered);
                         }
                         merged.sort((a, b) => a.num - b.num);
-                        Storage.save({chapters: merged});
+                        Storage.save({ chapters: merged });
                     } else {
                         const merged = existing.concat(imported);
                         merged.sort((a, b) => a.num - b.num);
-                        Storage.save({chapters: merged});
+                        Storage.save({ chapters: merged });
                     }
                 }
             }
@@ -12079,7 +13153,7 @@
             if (selectedNode) {
                 UI._renderGalgameProperties(selectedNode, overlay.querySelector('#nc-gal-properties'), editor);
             } else {
-                overlay.querySelector('#nc-gal-properties').innerHTML = '<div style="color:#aaa;">未选中节点</div>';
+                overlay.querySelector('#nc-gal-properties').innerHTML = '<div class="nc-color--muted">未选中节点</div>';
             }
 
             Notify.success('项目导入成功');
@@ -12128,13 +13202,13 @@
 
                 modal.innerHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;">${this._escapeHtml(title)}</h2>
+                <h2 class="nc-modal-title--primary-c">${this._escapeHtml(title)}</h2>
             </div>
-            <div class="nc-modal-body" style="text-align:center; padding:20px; word-wrap:break-word;">
+            <div class="nc-modal-body nc-center--confirm">
                 ${message.replace(/\n/g, '<br>')}
             </div>
-            <div class="nc-modal-footer" style="display:flex; gap:10px; justify-content:center;">
-                <button class="nc-modal-copy-btn" id="nc-confirm-ok" style="background:linear-gradient(135deg,#667eea,#764ba2);">确认</button>
+            <div class="nc-modal-footer nc-flex--footer-10-center">
+                <button class="nc-modal-copy-btn nc-btn--grad-purple" id="nc-confirm-ok">确认</button>
                 <button class="nc-modal-close-btn" id="nc-confirm-cancel">取消</button>
             </div>
         `;
@@ -12172,14 +13246,14 @@
 
                 modal.innerHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;">${this._escapeHtml(title)}</h2>
+                <h2 class="nc-modal-title--primary-c">${this._escapeHtml(title)}</h2>
             </div>
-            <div class="nc-modal-body" style="padding:20px;">
-                <div style="margin-bottom:15px; text-align:center; word-wrap:break-word;">${message.replace(/\n/g, '<br>')}</div>
-                <input type="text" id="nc-prompt-input" value="${this._escapeHtml(defaultValue)}" style="width:100%; padding:8px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px; font-size:13px;">
+            <div class="nc-modal-body nc-body--pad20">
+                <div class="nc-mb15--confirm-msg">${message.replace(/\n/g, '<br>')}</div>
+                <input type="text" id="nc-prompt-input" value="${this._escapeHtml(defaultValue)}" class="nc-modal-input--base">
             </div>
-            <div class="nc-modal-footer" style="display:flex; gap:10px; justify-content:center;">
-                <button class="nc-modal-copy-btn" id="nc-prompt-ok" style="background:linear-gradient(135deg,#667eea,#764ba2);">确认</button>
+            <div class="nc-modal-footer nc-flex--footer-10-center">
+                <button class="nc-modal-copy-btn nc-btn--grad-purple" id="nc-prompt-ok">确认</button>
                 <button class="nc-modal-close-btn" id="nc-prompt-cancel">取消</button>
             </div>
         `;
@@ -12261,7 +13335,7 @@
                 if (!idSet.has(id)) {
                     idSet.add(id);
                     const placeholder = `<!--IMG_PLACEHOLDER_${id}-->`;
-                    placeholders.push({id, placeholder, alt});
+                    placeholders.push({ id, placeholder, alt });
 
                     imagePromises.push(
                         ImageStore.get(id).then(blob => {
@@ -12278,15 +13352,15 @@
                                 }
                                 return {
                                     id,
-                                    html: `<img src="${url}" alt="${alt}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
+                                    html: `<img src="${url}" alt="${alt}" class="nc-img--markdown">`
                                 };
                             } else {
                                 console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                                return {id, html: `![${alt}](图片丢失)`};
+                                return { id, html: `![${alt}](图片丢失)` };
                             }
                         }).catch(err => {
                             console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                            return {id, html: `![${alt}](图片加载错误)`};
+                            return { id, html: `![${alt}](图片加载错误)` };
                         })
                     );
                     return placeholder;
@@ -12302,7 +13376,7 @@
                 if (!idSet.has(id)) {
                     idSet.add(id);
                     const placeholder = `<!--HTML_IMG_PLACEHOLDER_${id}-->`;
-                    placeholders.push({id, placeholder, isHtml: true});
+                    placeholders.push({ id, placeholder, isHtml: true });
 
                     imagePromises.push(
                         ImageStore.get(id).then(blob => {
@@ -12323,15 +13397,15 @@
 
                                 return {
                                     id,
-                                    html: `<img src="${url}" alt="${alt}" class="${cls}" style="max-width:100%; border-radius:8px; border:1px solid #667eea;">`
+                                    html: `<img src="${url}" alt="${alt}" class="${cls} nc-img--markdown">`
                                 };
                             } else {
                                 console.warn('[DEBUG][_renderMarkdown] 图片 id=', id, '未找到，使用文本占位符');
-                                return {id, html: `[图片丢失: ${id}]`};
+                                return { id, html: `[图片丢失: ${id}]` };
                             }
                         }).catch(err => {
                             console.error('[DEBUG][_renderMarkdown] 获取图片 id=', id, '出错:', err);
-                            return {id, html: `[图片加载错误: ${id}]`};
+                            return { id, html: `[图片加载错误: ${id}]` };
                         })
                     );
                     return placeholder;
@@ -12360,16 +13434,16 @@
             } else {
                 if (typeof marked !== 'undefined') {
                     try {
-                        html = marked.parse(processedText, {gfm: true, breaks: true});
+                        html = marked.parse(processedText, { gfm: true, breaks: true });
 
 
                     } catch (e) {
                         console.error('[DEBUG][_renderMarkdown] marked 解析失败:', e);
-                        html = `<pre style="color:#ff6b6b; background:#1e1e1e; padding:10px; border-radius:5px;">${this._escapeHtml(text)}</pre>`;
+                        html = `<pre class="nc-code-block--error">${this._escapeHtml(text)}</pre>`;
                     }
                 } else {
                     console.warn('[DEBUG][_renderMarkdown] marked 未定义，使用降级显示');
-                    html = `<pre style="background:#1e1e1e; padding:10px; border-radius:5px;">${this._escapeHtml(text)}</pre>`;
+                    html = `<pre class="nc-code-block">${this._escapeHtml(text)}</pre>`;
                 }
             }
 
@@ -12468,7 +13542,7 @@
                 // 标题
                 const header = document.createElement('div');
                 header.className = 'nc-modal-header';
-                header.innerHTML = `<h2 style="margin:0;color:#667eea;">审核: ${this._escapeHtml(agentName)}</h2>`;
+                header.innerHTML = `<h2 class="nc-modal-title--primary-c">审核: ${this._escapeHtml(agentName)}</h2>`;
                 modal.appendChild(header);
 
                 // 内容区（flex:1）
@@ -12643,7 +13717,7 @@
                     ModalStack.remove(overlay);
                     overlay.remove();
 
-                    resolve({action: 'continue', content: finalContent});
+                    resolve({ action: 'continue', content: finalContent });
                 });
 
                 // 打回按钮：打开次级框
@@ -12717,23 +13791,23 @@
 
                 modal.innerHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;">打回原因与建议</h2>
+                <h2 class="nc-modal-title--primary-c">打回原因与建议</h2>
             </div>
-            <div class="nc-modal-body" style="padding:20px;">
-                <div style="margin-bottom:15px;">
-                    <label style="display:block;margin-bottom:5px;color:#aaa;">修改建议</label>
-                    <textarea id="nc-reject-suggestion" style="width:100%;padding:8px;background:#2a2a3a;color:#eaeaea;border:1px solid #667eea;border-radius:5px;font-size:13px;min-height:100px;">${this._escapeHtml(initialState.suggestion)}</textarea>
+            <div class="nc-modal-body nc-body--pad20">
+                <div class="nc-mb15">
+                    <label class="nc-field-label--base-c">修改建议</label>
+                    <textarea id="nc-reject-suggestion" class="nc-modal-textarea--base">${this._escapeHtml(initialState.suggestion)}</textarea>
                 </div>
-                <div style="margin-bottom:15px;">
-                    <label style="display:block;margin-bottom:5px;color:#aaa;">附加内容</label>
-                    <div style="display:flex;gap:15px;align-items:center;">
+                <div class="nc-mb15">
+                    <label class="nc-field-label--base-c">附加内容</label>
+                    <div class="nc-flex--row-15-middle-c">
                         <label><input type="radio" name="attachType" value="original" ${initialState.attachType === 'original' ? 'checked' : ''}> 附加原始输出</label>
                         <label><input type="radio" name="attachType" value="modified" ${initialState.attachType === 'modified' ? 'checked' : ''}> 附加修改后输出</label>
                     </div>
                 </div>
             </div>
-            <div class="nc-modal-footer" style="display:flex;gap:10px;justify-content:center;">
-                <button id="nc-reject-confirm" class="nc-modal-copy-btn" style="background:linear-gradient(135deg,#667eea,#764ba2);">确认打回</button>
+            <div class="nc-modal-footer nc-flex--footer-10-center-c">
+                <button id="nc-reject-confirm" class="nc-modal-copy-btn nc-btn--grad-purple">确认打回</button>
                 <button id="nc-reject-cancel" class="nc-modal-close-btn">取消</button>
             </div>
         `;
@@ -12822,7 +13896,7 @@
 
             const header = document.createElement('div');
             header.className = 'nc-modal-header';
-            header.innerHTML = `<h2 style="margin:0;color:#667eea;">${this._escapeHtml(title)}</h2>`;
+            header.innerHTML = `<h2 class="nc-modal-title--primary-c">${this._escapeHtml(title)}</h2>`;
             modal.appendChild(header);
 
             const body = document.createElement('div');
@@ -12858,7 +13932,7 @@
 
             } catch (err) {
                 console.error('[UI.showPreviewModal] 预览渲染失败', err);
-                body.innerHTML = `<div style="color:#ff6b6b;">预览失败: ${err.message}</div>`;
+                body.innerHTML = `<div class="nc-color--error">预览失败: ${err.message}</div>`;
             }
         },
 
@@ -13168,13 +14242,13 @@
         flex-shrink: 0;
     `;
             header.innerHTML = `
-        <span style="font-size: 18px; font-weight: 600; color: #667eea;">⚙️ 配置文件可视化编辑器</span>
-        <div style="display: flex; gap: 8px;">
+        <span class="nc-toolbar-title">⚙️ 配置文件可视化编辑器</span>
+        <div class="nc-flex--row-8-sp">
             <button id="nc-config-load-current" class="toolbar-btn">📂 加载当前配置</button>
-            <button id="nc-config-apply" class="toolbar-btn" style="background: #10b981; border-color: #10b981; color: white;">✅ 应用配置</button>
-            <button id="nc-config-export" class="toolbar-btn" style="background: #f39c12; border-color: #f39c12; color: white;">📤 导出JSON</button>
-            <button id="nc-config-import" class="toolbar-btn" style="background: #f39c12; border-color: #f39c12; color: white;">📥 导入JSON</button>
-            <button id="nc-config-validate" class="toolbar-btn" style="background: #ffaa00; border-color: #ffaa00; color: white;">🔍 检测配置</button>
+            <button id="nc-config-apply" class="toolbar-btn nc-btn--green-solid">✅ 应用配置</button>
+            <button id="nc-config-export" class="toolbar-btn nc-btn--orange-solid">📤 导出JSON</button>
+            <button id="nc-config-import" class="toolbar-btn nc-btn--orange-solid">📥 导入JSON</button>
+            <button id="nc-config-validate" class="toolbar-btn nc-btn--amber-solid">🔍 检测配置</button>
             <button id="nc-config-close" class="toolbar-btn">❌ 关闭</button>
         </div>
     `;
@@ -13234,7 +14308,7 @@
             const propertyPanel = document.createElement('div');
             propertyPanel.id = 'nc-config-property-panel';
             propertyPanel.className = 'property-panel';
-            propertyPanel.innerHTML = '<div style="color:#aaa; text-align:center; padding:30px;">选择一个节点、API、分类或组查看属性</div>';
+            propertyPanel.innerHTML = '<div class="nc-color--muted-placeholder">选择一个节点、API、分类或组查看属性</div>';
             main.appendChild(propertyPanel);
 
             overlay.appendChild(modal);
@@ -13423,7 +14497,7 @@
 
             modal.querySelector('#nc-config-export').addEventListener('click', () => {
                 const configJSON = editor.getConfig();
-                const blob = new Blob([JSON.stringify(configJSON, null, 2)], {type: 'application/json'});
+                const blob = new Blob([JSON.stringify(configJSON, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -13706,11 +14780,11 @@
             this.offsetX = 0;
             this.offsetY = 0;
             this.isPanning = false;
-            this.panStart = {x: 0, y: 0};
+            this.panStart = { x: 0, y: 0 };
 
             // 拖拽节点
             this.draggingNode = null;
-            this.draggingOffset = {x: 0, y: 0};
+            this.draggingOffset = { x: 0, y: 0 };
             this.draggingStartX = 0;
             this.draggingStartY = 0;
 
@@ -13790,7 +14864,7 @@
             const errorDiv = document.createElement('div');
             errorDiv.className = 'validation-error-card';
             errorDiv.style.cssText = 'background:#2a1a1a; border:1px solid #dc3545; border-radius:8px; padding:12px; margin-bottom:16px;';
-            errorDiv.innerHTML = `<div style="color:#ff6b6b; font-weight:600; margin-bottom:6px;">❌ 配置错误</div>`;
+            errorDiv.innerHTML = `<div class="nc-color--error-title">❌ 配置错误</div>`;
             const list = document.createElement('ul');
             list.style.cssText = 'margin:0; padding-left:20px; color:#ffa0a0; font-size:12px;';
             this.validationErrors.forEach(err => {
@@ -13918,7 +14992,7 @@
             this.canvas.addEventListener('mousedown', this._onMouseDown.bind(this));
             this.canvas.addEventListener('mousemove', this._onMouseMove.bind(this));
             this.canvas.addEventListener('mouseup', this._onMouseUp.bind(this));
-            this.canvas.addEventListener('wheel', this._onWheel.bind(this), {passive: false});
+            this.canvas.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
             this.canvas.addEventListener('contextmenu', e => e.preventDefault());
             window.addEventListener('keydown', this._onKeyDown.bind(this));
         }
@@ -13928,7 +15002,7 @@
             const stage = this.config.workflowStages.find(s => s.id === stageId);
             if (!stage) return [];
             return stage.agents
-                .map(key => ({key, agent: this.config.agents[key]}))
+                .map(key => ({ key, agent: this.config.agents[key] }))
                 .filter(item => item.agent)
                 .sort((a, b) => (a.agent.order || 999) - (b.agent.order || 999));
         }
@@ -13949,14 +15023,14 @@
             }
             const x = stageNode.x + stageNode.width + this.stageAgentOffsetX + offsetX;
             const y = stageNode.y + (stageNode.height / 2) - (this.agentNodeHeight / 2);
-            return {x, y};
+            return { x, y };
         }
 
         _getUnassignedAgents() {
             const allAgents = Object.entries(this.config.agents || {});
             return allAgents
                 .filter(([key, agent]) => !agent.stage || agent.stage.trim() === '')
-                .map(([key, agent]) => ({key, agent}))
+                .map(([key, agent]) => ({ key, agent }))
                 .sort((a, b) => (a.agent.order || 999) - (b.agent.order || 999));
         }
 
@@ -14046,7 +15120,7 @@
                 const agentTotalHeight = this.orderRectHeight + this.orderTopMargin + this.agentNodeHeight;
 
                 for (let i = 0; i < unassignedAgents.length; i++) {
-                    const {key, agent} = unassignedAgents[i];
+                    const { key, agent } = unassignedAgents[i];
                     const col = Math.floor(i / rowsPerColumn);
                     const row = i % rowsPerColumn;
                     const ax = this.unassignedAreaX + col * columnWidth;
@@ -14073,8 +15147,8 @@
                 if (node.type !== 'stage') continue;
                 const sortedAgents = this._getSortedAgentsForStage(node.key);
                 for (let j = sortedAgents.length - 1; j >= 0; j--) {
-                    const {key, agent} = sortedAgents[j];
-                    const {x: ax, y: ay} = this._getAgentPosition(node, j);
+                    const { key, agent } = sortedAgents[j];
+                    const { x: ax, y: ay } = this._getAgentPosition(node, j);
                     const agentWidth = this._getAgentWidth(agent);
                     if (x >= ax && x <= ax + agentWidth && y >= ay && y <= ay + this.agentNodeHeight) {
 
@@ -14132,13 +15206,13 @@
             // 中键平移
             if (e.button === 1 || e.button === 2) {
                 this.isPanning = true;
-                this.panStart = {x: e.clientX - this.offsetX, y: e.clientY - this.offsetY};
+                this.panStart = { x: e.clientX - this.offsetX, y: e.clientY - this.offsetY };
                 e.preventDefault();
             } else if (e.button === 0) {
                 // 左键开始框选
                 this.isSelecting = true;
-                this.selectStart = {x, y};
-                this.selectRect = {x, y, width: 0, height: 0};
+                this.selectStart = { x, y };
+                this.selectRect = { x, y, width: 0, height: 0 };
                 this._requestRender();
             }
         }
@@ -14268,7 +15342,7 @@
                     agent.stage = targetStageId;
 
                     const currentAgents = targetStage.agents
-                        .map(key => ({key, order: this.config.agents[key]?.order || 0}))
+                        .map(key => ({ key, order: this.config.agents[key]?.order || 0 }))
                         .sort((a, b) => a.order - b.order)
                         .map(item => item.key);
 
@@ -14695,7 +15769,7 @@
                     const stageId = node.key;
                     const sortedAgents = this._getSortedAgentsForStage(stageId);
                     sortedAgents.forEach((item, index) => {
-                        const {x, y} = this._getAgentPosition(node, index);
+                        const { x, y } = this._getAgentPosition(node, index);
                         let alpha = 1.0;
                         if (this.draggingAgentKey &&
                             this.draggingTargetStageNode === node &&
@@ -15043,7 +16117,7 @@
 
                 const errorDiv = document.createElement('div');
                 errorDiv.style.cssText = 'background:#2a1a1a; border:1px solid #dc3545; border-radius:4px; padding:8px; margin-bottom:10px;';
-                errorDiv.innerHTML = `<div style="color:#ff6b6b; font-weight:bold; margin-bottom:5px;">❌ 配置错误</div>`;
+                errorDiv.innerHTML = `<div class="nc-color--error-title-bold">❌ 配置错误</div>`;
                 const list = document.createElement('ul');
                 list.style.cssText = 'margin:0; padding-left:20px; color:#ffa0a0; font-size:11px;';
                 this.validationErrors.forEach(err => {
@@ -15105,31 +16179,31 @@
             basicCard.className = 'property-section';
             basicCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             basicCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:14px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">📌 阶段信息</div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">阶段序号</label>
-            <input type="number" id="stage-number" class="field-input" value="${stageData.stage || 1}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+        <div class="property-title nc-prop-title--sm">📌 阶段信息</div>
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--sm">阶段序号</label>
+            <input type="number" id="stage-number" class="field-input nc-field-input--sm" value="${stageData.stage || 1}" min="1" step="1">
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">阶段ID (唯一标识)</label>
-            <input type="text" id="stage-id" class="field-input" value="${this._escapeHtml(stageData.id || '')}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--sm">阶段ID (唯一标识)</label>
+            <input type="text" id="stage-id" class="field-input nc-field-input--sm" value="${this._escapeHtml(stageData.id || '')}">
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">阶段名称</label>
-            <input type="text" id="stage-name" class="field-input" value="${this._escapeHtml(stageData.name || '')}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--sm">阶段名称</label>
+            <input type="text" id="stage-name" class="field-input nc-field-input--sm" value="${this._escapeHtml(stageData.name || '')}">
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">颜色</label>
-            <input type="color" id="stage-color" class="field-input" value="${node.color || '#667eea'}" style="width:100%; height:40px; background:#0f172a; border:1px solid #3a3a5a; border-radius:8px; padding:2px;">
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--sm">颜色</label>
+            <input type="color" id="stage-color" class="field-input nc-field-input--color" value="${node.color || '#667eea'}">
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">执行模式</label>
-            <div style="display:flex; gap:20px;">
-                <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:13px; cursor:pointer;">
-                    <input type="radio" name="stage-mode" value="serial" ${stageData.mode !== 'parallel' ? 'checked' : ''} style="accent-color:#667eea;"> 串行
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--sm">执行模式</label>
+            <div class="nc-flex--row-20">
+                <label class="checkbox-label nc-checkbox-label--sm">
+                    <input type="radio" name="stage-mode" value="serial" ${stageData.mode !== 'parallel' ? 'checked' : ''} class="nc-radio--purple"> 串行
                 </label>
-                <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:13px; cursor:pointer;">
-                    <input type="radio" name="stage-mode" value="parallel" ${stageData.mode === 'parallel' ? 'checked' : ''} style="accent-color:#667eea;"> 并行
+                <label class="checkbox-label nc-checkbox-label--sm">
+                    <input type="radio" name="stage-mode" value="parallel" ${stageData.mode === 'parallel' ? 'checked' : ''} class="nc-radio--purple"> 并行
                 </label>
             </div>
         </div>
@@ -15141,9 +16215,9 @@
             descCard.className = 'property-section';
             descCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             descCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:14px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">📝 描述</div>
+        <div class="property-title nc-prop-title--sm">📝 描述</div>
         <div class="field-group">
-            <textarea id="stage-description" class="field-textarea" rows="3" placeholder="阶段描述" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px; font-family:monospace;">${this._escapeHtml(stageData.description || '')}</textarea>
+            <textarea id="stage-description" class="field-textarea nc-field-input--sm-mono" rows="3" placeholder="阶段描述">${this._escapeHtml(stageData.description || '')}</textarea>
         </div>
     `;
             container.appendChild(descCard);
@@ -15153,14 +16227,14 @@
             actionCard.className = 'property-section';
             actionCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             actionCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:14px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">⚙️ 操作</div>
-        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button id="add-stage-before" class="btn-add" style="background:linear-gradient(135deg, #667eea, #764ba2); border:none; color:white; border-radius:20px; padding:6px 16px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">⬆️ 在前面添加</button>
-            <button id="add-stage-after" class="btn-add" style="background:linear-gradient(135deg, #667eea, #764ba2); border:none; color:white; border-radius:20px; padding:6px 16px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">⬇️ 在后面添加</button>
-            <button id="delete-stage" class="btn-add" style="background:linear-gradient(135deg, #dc3545, #c82333); border:none; color:white; border-radius:20px; padding:6px 16px; font-size:12px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:4px;">🗑️ 删除阶段</button>
+        <div class="property-title nc-prop-title--sm">⚙️ 操作</div>
+        <div class="nc-flex--row-8-wrap">
+            <button id="add-stage-before" class="btn-add nc-cfgedit-btn--stage-insert">⬆️ 在前面添加</button>
+            <button id="add-stage-after" class="btn-add nc-cfgedit-btn--stage-insert">⬇️ 在后面添加</button>
+            <button id="delete-stage" class="btn-add nc-cfgedit-btn--stage-delete">🗑️ 删除阶段</button>
         </div>
-        <div style="margin-top:12px;">
-            <button id="manage-agents" class="btn-add" style="background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; width:100%;">🤖 管理Agent</button>
+        <div class="nc-mt12">
+            <button id="manage-agents" class="btn-add nc-cfgedit-btn--add-full">🤖 管理Agent</button>
         </div>
     `;
             container.appendChild(actionCard);
@@ -15248,15 +16322,15 @@
         _renderEdgeProperties(edge) {
             const container = document.createElement('div');
             container.innerHTML = `
-            <h3 style="color:#667eea; margin:0 0 10px;">连线属性</h3>
-            <div style="margin-bottom:8px;">
-                <label style="color:#aaa; display:block;">类型</label>
-                <select id="edge-type" style="width:100%; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; padding:5px;">
+            <h3 class="nc-heading--primary-h3">连线属性</h3>
+            <div class="nc-mb8">
+                <label class="nc-label--muted">类型</label>
+                <select id="edge-type" class="nc-field-select--edge">
                     <option value="normal" ${edge.type === 'normal' ? 'selected' : ''}>普通</option>
                     <option value="parallel" ${edge.type === 'parallel' ? 'selected' : ''}>并行</option>
                 </select>
             </div>
-            <button id="delete-edge" style="background:#dc3545; color:white; border:none; padding:5px; width:100%; border-radius:4px;">删除连线</button>
+            <button id="delete-edge" class="nc-gal-btn--delete-edge">删除连线</button>
         `;
             this.propertyPanel.appendChild(container);
 
@@ -15292,56 +16366,56 @@
             basicCard.className = 'property-section';
             basicCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             basicCard.innerHTML = `
-                <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">
+                <div class="property-title nc-prop-title--lg">
                     🔌 API 配置: ${this._escapeHtml(apiId)}
                 </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">类型</label>
-                    <select id="api-type" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                <div class="field-group nc-mb16">
+                    <label class="field-label nc-field-label--md">类型</label>
+                    <select id="api-type" class="field-select nc-field-input--md">
                         <option value="text" ${api.type === 'text' ? 'selected' : ''}>text</option>
                         <option value="image" ${api.type === 'image' ? 'selected' : ''}>image</option>
                         <option value="audio" ${api.type === 'audio' ? 'selected' : ''}>audio</option>
                     </select>
                 </div>
                 <!-- 模式选择，紧接类型下方 -->
-                <div class="field-group" style="margin-bottom:16px;" id="api-mode-group">
-                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">模式 (mode)</label>
-                    <select id="api-mode" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;"></select>
+                <div class="field-group nc-mb16" id="api-mode-group">
+                    <label class="field-label nc-field-label--md">模式 (mode)</label>
+                    <select id="api-mode" class="field-select nc-field-input--md"></select>
                 </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">平台 (source)</label>
-                    <select id="api-source" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;"></select>
+                <div class="field-group nc-mb16">
+                    <label class="field-label nc-field-label--md">平台 (source)</label>
+                    <select id="api-source" class="field-select nc-field-input--md"></select>
                 </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">API URL</label>
-                    <input type="text" id="api-url" class="field-input" value="${api.apiUrl || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                <div class="field-group nc-mb16">
+                    <label class="field-label nc-field-label--md">API URL</label>
+                    <input type="text" id="api-url" class="field-input nc-field-input--md" value="${api.apiUrl || ''}">
                 </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">密钥 (key)</label>
-                    <input type="password" id="api-key" class="field-input" value="${api.key || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                <div class="field-group nc-mb16">
+                    <label class="field-label nc-field-label--md">密钥 (key)</label>
+                    <input type="password" id="api-key" class="field-input nc-field-input--md" value="${api.key || ''}">
                 </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">超时 (ms)</label>
-                    <input type="number" id="api-timeout" class="field-input" value="${api.timeout || 3600000}" min="1000" step="1000" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                <div class="field-group nc-mb16">
+                    <label class="field-label nc-field-label--md">超时 (ms)</label>
+                    <input type="number" id="api-timeout" class="field-input nc-field-input--md" value="${api.timeout || 3600000}" min="1000" step="1000">
                 </div>
-                <div class="field-group" style="margin-bottom:16px;">
-                    <div style="flex:1;">
-                        <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">模型 (model)</label>
-                        <div style="display:flex; gap:8px;">
-                            <input type="text" id="api-model" class="field-input" value="${api.model || ''}" placeholder="模型名称" style="flex:1; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                            <button id="fetch-models-btn" class="btn-add" style="white-space:nowrap; background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer;">🔄 获取模型</button>
+                <div class="field-group nc-mb16">
+                    <div class="nc-flex-item--grow">
+                        <label class="field-label nc-field-label--md">模型 (model)</label>
+                        <div class="nc-flex--row-8">
+                            <input type="text" id="api-model" class="field-input nc-field-input--md-flex" value="${api.model || ''}" placeholder="模型名称">
+                            <button id="fetch-models-btn" class="btn-add nc-cfgedit-btn--fetch-model">🔄 获取模型</button>
                         </div>
                     </div>
                 </div>
-                <div id="model-select-container" style="display:none; margin-bottom:16px;">
-                    <select id="model-select" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                <div id="model-select-container" class="nc-hidden--model-select">
+                    <select id="model-select" class="field-select nc-field-input--md">
                         <option value="">选择模型</option>
                     </select>
-                    <div style="margin-top:4px; text-align:right;">
-                        <span id="back-to-manual" style="color:#667eea; font-size:12px; cursor:pointer;">返回手动输入</span>
+                    <div class="nc-mt4--right">
+                        <span id="back-to-manual" class="nc-color--primary-link-sm">返回手动输入</span>
                     </div>
                 </div>
-                <div id="model-tip" style="font-size:12px; color:#ffaa00; margin-top:4px;"></div>
+                <div id="model-tip" class="nc-text--model-tip"></div>
             `;
             container.appendChild(basicCard);
 
@@ -15357,8 +16431,8 @@
             testDiv.className = 'property-section';
             testDiv.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             testDiv.innerHTML = `
-                <button id="test-api" class="btn-add" style="background:linear-gradient(135deg, #667eea, #764ba2); border:none; color:white; border-radius:20px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer; width:100%;">测试连通性</button>
-                <div id="test-result" style="margin-top:8px; font-size:13px; color:#aaa;"></div>
+                <button id="test-api" class="btn-add nc-cfgedit-btn--test-api">测试连通性</button>
+                <div id="test-result" class="nc-mt8--test-result"></div>
             `;
             container.appendChild(testDiv);
 
@@ -15674,80 +16748,80 @@
                     // 图像特有参数，不再包含 mode
                     const samplers = ['DPM++ 2M Karras', 'DPM++ SDE Karras', 'DPM++ 2M SDE', 'Euler a', 'Euler', 'LMS', 'Heun', 'DPM2', 'DPM2 a', 'DPM++ 2S a', 'DPM++ 2M SDE Karras', 'DPM++ 2M SDE Exponential', 'DPM++ 3M SDE', 'DPM++ 3M SDE Karras', 'DPM++ 3M SDE Exponential'];
                     extraHTML = `
-                        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🖼️ 图像参数</div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="property-title nc-prop-title--lg">🖼️ 图像参数</div>
+                        <div class="field-group nc-mb16">
                             <label class="field-label">尺寸 (size)</label>
-                            <input type="text" id="api-size" class="field-input" value="${api.size || '1024x1024'}" placeholder="如 1024x1024" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="text" id="api-size" class="field-input nc-field-input--md" value="${api.size || '1024x1024'}" placeholder="如 1024x1024">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">采样步数 (steps)</label>
-                            <input type="number" id="api-steps" class="field-input" value="${api.steps || 20}" min="1" max="150" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" id="api-steps" class="field-input nc-field-input--md" value="${api.steps || 20}" min="1" max="150">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">CFG Scale</label>
-                            <input type="number" step="0.5" id="api-cfg-scale" class="field-input" value="${api.cfg_scale || 7}" min="1" max="30" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" step="0.5" id="api-cfg-scale" class="field-input nc-field-input--md" value="${api.cfg_scale || 7}" min="1" max="30">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">反向提示词</label>
-                            <input type="text" id="api-negative-prompt" class="field-input" value="${api.negative_prompt || ''}" placeholder="反向提示词" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="text" id="api-negative-prompt" class="field-input nc-field-input--md" value="${api.negative_prompt || ''}" placeholder="反向提示词">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">采样器 (sampler_name)</label>
-                            <select id="api-sampler-name" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <select id="api-sampler-name" class="field-select nc-field-input--md">
                                 ${samplers.map(s => `<option value="${s}" ${api.sampler_name === s ? 'selected' : ''}>${s}</option>`).join('')}
                             </select>
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">种子 (seed)</label>
-                            <input type="number" id="api-seed" class="field-input" value="${api.seed !== undefined ? api.seed : -1}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                            <div style="font-size:12px; color:#888;">-1 表示随机</div>
+                            <input type="number" id="api-seed" class="field-input nc-field-input--md" value="${api.seed !== undefined ? api.seed : -1}">
+                            <div class="nc-text--sm-muted">-1 表示随机</div>
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">批次大小 (batch_size)</label>
-                            <input type="number" id="api-batch-size" class="field-input" value="${api.batch_size || 1}" min="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" id="api-batch-size" class="field-input nc-field-input--md" value="${api.batch_size || 1}" min="1">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">生成数量 (n / samples)</label>
-                            <input type="number" id="api-samples" class="field-input" value="${api.samples || 1}" min="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" id="api-samples" class="field-input nc-field-input--md" value="${api.samples || 1}" min="1">
                         </div>
-                        <div class="checkbox-group" style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px;">
-                            <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
-                                <input type="checkbox" id="api-restore-faces" ${api.restore_faces ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 面部修复
+                        <div class="checkbox-group nc-flex--checkbox-group">
+                            <label class="checkbox-label nc-checkbox-label--md">
+                                <input type="checkbox" id="api-restore-faces" ${api.restore_faces ? 'checked' : ''} class="nc-checkbox--purple-md"> 面部修复
                             </label>
-                            <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
-                                <input type="checkbox" id="api-tiling" ${api.tiling ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 平铺
+                            <label class="checkbox-label nc-checkbox-label--md">
+                                <input type="checkbox" id="api-tiling" ${api.tiling ? 'checked' : ''} class="nc-checkbox--purple-md"> 平铺
                             </label>
                         </div>
                     `;
                 } else if (currentType === 'audio') {
                     // 音频特有参数，不再包含 mode
                     extraHTML = `
-                        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🎵 音频参数</div>
+                        <div class="property-title nc-prop-title--lg">🎵 音频参数</div>
                     `;
                     if (currentSource === 'elevenlabs') {
                         extraHTML += `
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">Voice ID (可选)</label>
-                                <input type="text" id="api-voiceId" class="field-input" value="${api.voiceId || ''}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <input type="text" id="api-voiceId" class="field-input nc-field-input--md" value="${api.voiceId || ''}">
                             </div>
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">Stability (0-1)</label>
-                                <input type="number" step="0.05" id="api-stability" class="field-input" value="${api.stability || 0.5}" min="0" max="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <input type="number" step="0.05" id="api-stability" class="field-input nc-field-input--md" value="${api.stability || 0.5}" min="0" max="1">
                             </div>
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">Similarity Boost (0-1)</label>
-                                <input type="number" step="0.05" id="api-similarity" class="field-input" value="${api.similarity_boost || 0.75}" min="0" max="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <input type="number" step="0.05" id="api-similarity" class="field-input nc-field-input--md" value="${api.similarity_boost || 0.75}" min="0" max="1">
                             </div>
                         `;
                     } else if (currentSource === 'stableaudio') {
                         extraHTML += `
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">时长 (秒)</label>
-                                <input type="number" id="api-duration" class="field-input" value="${api.duration || 30}" min="1" max="300" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <input type="number" id="api-duration" class="field-input nc-field-input--md" value="${api.duration || 30}" min="1" max="300">
                             </div>
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">输出格式</label>
-                                <select id="api-output-format" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <select id="api-output-format" class="field-select nc-field-input--md">
                                     <option value="mp3" ${api.output_format === 'mp3' ? 'selected' : ''}>mp3</option>
                                     <option value="wav" ${api.output_format === 'wav' ? 'selected' : ''}>wav</option>
                                 </select>
@@ -15755,85 +16829,85 @@
                         `;
                     } else if (currentSource === 'azure-tts') {
                         extraHTML += `
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">区域 (region)</label>
-                                <input type="text" id="api-region" class="field-input" value="${api.region || 'eastus'}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <input type="text" id="api-region" class="field-input nc-field-input--md" value="${api.region || 'eastus'}">
                             </div>
                         `;
                     } else if (currentSource === 'huggingface') {
                         extraHTML += `
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">模型 (model)</label>
-                                <input type="text" id="api-hf-model" class="field-input" value="${api.model || ''}" placeholder="如 facebook/musicgen-small" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <input type="text" id="api-hf-model" class="field-input nc-field-input--md" value="${api.model || ''}" placeholder="如 facebook/musicgen-small">
                             </div>
                         `;
                     } else if (currentSource === 'minimax' || currentSource === 'minimax-music' || currentSource === 'minimax-speech') {
                         extraHTML += `
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">Group ID (必填)</label>
-                                <input type="text" id="api-group-id" class="field-input" value="${api.group_id || ''}" placeholder="MiniMax Group ID" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                                <div style="font-size:12px; color:#888;">从 MiniMax 控制台获取</div>
+                                <input type="text" id="api-group-id" class="field-input nc-field-input--md" value="${api.group_id || ''}" placeholder="MiniMax Group ID">
+                                <div class="nc-text--sm-muted">从 MiniMax 控制台获取</div>
                             </div>
                         `;
                     } else if (currentSource === 'mubert') {
                         extraHTML += `
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">Customer ID (可选)</label>
-                                <input type="text" id="api-customer-id" class="field-input" value="${api.customer_id || ''}" placeholder="Mubert Customer ID" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                                <input type="text" id="api-customer-id" class="field-input nc-field-input--md" value="${api.customer_id || ''}" placeholder="Mubert Customer ID">
                             </div>
                         `;
                     } else if (currentSource === 'edge-tts') {
                         extraHTML += `
-                            <div class="field-group" style="margin-bottom:16px;">
+                            <div class="field-group nc-mb16">
                                 <label class="field-label">代理 URL (可选)</label>
-                                <input type="text" id="api-proxy-url" class="field-input" value="${api.proxy_url || ''}" placeholder="Edge TTS 代理地址" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-                                <div style="font-size:12px; color:#888;">若不填则使用默认公共端点</div>
+                                <input type="text" id="api-proxy-url" class="field-input nc-field-input--md" value="${api.proxy_url || ''}" placeholder="Edge TTS 代理地址">
+                                <div class="nc-text--sm-muted">若不填则使用默认公共端点</div>
                             </div>
                         `;
                     }
                 } else if (currentType === 'text') {
                     extraHTML = `
-                        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">📝 文本参数</div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="property-title nc-prop-title--lg">📝 文本参数</div>
+                        <div class="field-group nc-mb16">
                             <label class="field-label">max_tokens</label>
-                            <input type="number" id="api-max-tokens" class="field-input" value="${api.maxTokens || 4000}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" id="api-max-tokens" class="field-input nc-field-input--md" value="${api.maxTokens || 4000}" min="1" step="1">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">temperature</label>
-                            <input type="number" step="0.1" id="api-temperature" class="field-input" value="${api.temperature || 0.8}" min="0" max="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" step="0.1" id="api-temperature" class="field-input nc-field-input--md" value="${api.temperature || 0.8}" min="0" max="2">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">top_p</label>
-                            <input type="number" step="0.05" id="api-top-p" class="field-input" value="${api.top_p || 1}" min="0" max="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" step="0.05" id="api-top-p" class="field-input nc-field-input--md" value="${api.top_p || 1}" min="0" max="1">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">top_k</label>
-                            <input type="number" id="api-top-k" class="field-input" value="${api.top_k || 0}" min="0" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" id="api-top-k" class="field-input nc-field-input--md" value="${api.top_k || 0}" min="0">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">frequency_penalty</label>
-                            <input type="number" step="0.1" id="api-frequency-penalty" class="field-input" value="${api.frequency_penalty || 0}" min="-2" max="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" step="0.1" id="api-frequency-penalty" class="field-input nc-field-input--md" value="${api.frequency_penalty || 0}" min="-2" max="2">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">presence_penalty</label>
-                            <input type="number" step="0.1" id="api-presence-penalty" class="field-input" value="${api.presence_penalty || 0}" min="-2" max="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" step="0.1" id="api-presence-penalty" class="field-input nc-field-input--md" value="${api.presence_penalty || 0}" min="-2" max="2">
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">停止序列 (stop)</label>
-                            <textarea id="api-stop" class="field-textarea" rows="3" placeholder="每行一个停止词" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px; font-family:monospace; line-height:1.5;">${Array.isArray(api.stop) ? api.stop.join('\n') : (api.stop || '')}</textarea>
+                            <textarea id="api-stop" class="field-textarea nc-field-input--md-mono" rows="3" placeholder="每行一个停止词">${Array.isArray(api.stop) ? api.stop.join('\n') : (api.stop || '')}</textarea>
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">logit_bias (token_id:bias)</label>
-                            <textarea id="api-logit-bias" class="field-textarea" rows="3" placeholder="每行一个，如 123: -100" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px; font-family:monospace; line-height:1.5;">${api.logit_bias ? Object.entries(api.logit_bias).map(([k, v]) => `${k}: ${v}`).join('\n') : ''}</textarea>
+                            <textarea id="api-logit-bias" class="field-textarea nc-field-input--md-mono" rows="3" placeholder="每行一个，如 123: -100">${api.logit_bias ? Object.entries(api.logit_bias).map(([k, v]) => `${k}: ${v}`).join('\n') : ''}</textarea>
                         </div>
-                        <div class="checkbox-group" style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px;">
-                            <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
-                                <input type="checkbox" id="api-stream" ${api.stream ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 流式输出
+                        <div class="checkbox-group nc-flex--checkbox-group">
+                            <label class="checkbox-label nc-checkbox-label--md">
+                                <input type="checkbox" id="api-stream" ${api.stream ? 'checked' : ''} class="nc-checkbox--purple-md"> 流式输出
                             </label>
                         </div>
-                        <div class="field-group" style="margin-bottom:16px;">
+                        <div class="field-group nc-mb16">
                             <label class="field-label">n (生成数量)</label>
-                            <input type="number" id="api-n" class="field-input" value="${api.n || 1}" min="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+                            <input type="number" id="api-n" class="field-input nc-field-input--md" value="${api.n || 1}" min="1">
                         </div>
                     `;
                 }
@@ -15945,10 +17019,10 @@
 
                 const result = await testAPIConnection(currentConfig);
                 if (result.ok) {
-                    testResultDiv.innerHTML = '<span style="color:#28a745;">✅ 连接成功</span>';
+                    testResultDiv.innerHTML = '<span class="nc-text--success">✅ 连接成功</span>';
 
                 } else {
-                    testResultDiv.innerHTML = `<span style="color:#dc3545;">❌ 失败: ${result.error}</span>`;
+                    testResultDiv.innerHTML = `<span class="nc-text--danger">❌ 失败: ${result.error}</span>`;
                     console.error('[testAPI] 测试失败:', result.error);
                 }
                 testBtn.disabled = false;
@@ -15973,18 +17047,18 @@
             basicCard.className = 'property-section';
             basicCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             basicCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:14px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🎯 分类: ${catId}</div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">名称</label>
-            <input type="text" id="cat-name" class="field-input" value="${this._escapeHtml(cat.name || '')}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+        <div class="property-title nc-prop-title--sm">🎯 分类: ${catId}</div>
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--sm">名称</label>
+            <input type="text" id="cat-name" class="field-input nc-field-input--sm" value="${this._escapeHtml(cat.name || '')}">
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">描述</label>
-            <textarea id="cat-description" class="field-textarea" rows="2" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px; font-family:monospace;">${this._escapeHtml(cat.description || '')}</textarea>
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--sm">描述</label>
+            <textarea id="cat-description" class="field-textarea nc-field-input--sm-mono" rows="2">${this._escapeHtml(cat.description || '')}</textarea>
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">选择模式</label>
-            <select id="cat-mode" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--sm">选择模式</label>
+            <select id="cat-mode" class="field-select nc-field-input--sm">
                 <option value="single" ${cat.selectionMode === 'single' ? 'selected' : ''}>单选</option>
                 <option value="multiple" ${cat.selectionMode === 'multiple' ? 'selected' : ''}>多选</option>
             </select>
@@ -15996,11 +17070,11 @@
             optionsCard.className = 'property-section';
             optionsCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             optionsCard.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <span class="property-title" style="color:#667eea; font-size:14px; font-weight:600; border-bottom:none; padding-bottom:0;">📋 选项</span>
-            <button id="add-option" class="btn-add" style="background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:4px 12px; font-size:12px; font-weight:600; cursor:pointer;">➕ 添加选项</button>
+        <div class="nc-flex--row-between-mb12">
+            <span class="property-title nc-prop-title--sm-inline">📋 选项</span>
+            <button id="add-option" class="btn-add nc-cfgedit-btn--add-sm">➕ 添加选项</button>
         </div>
-        <div id="cat-options-list" style="max-height:300px; overflow-y:auto;"></div>
+        <div id="cat-options-list" class="nc-size--scroll-300"></div>
     `;
             container.appendChild(optionsCard);
 
@@ -16032,17 +17106,17 @@
 
                 modal.innerHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;">选择关联 Agent - ${optKey}</h2>
+                <h2 class="nc-modal-title--primary-c">选择关联 Agent - ${optKey}</h2>
             </div>
-            <div class="nc-modal-body" style="flex:1; overflow-y:auto; padding:10px;">
-                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <div class="nc-modal-body nc-flex-item--modal-scroll">
+                <table class="nc-table--sm">
                     <thead>
-                        <tr style="border-bottom:1px solid #667eea;">
-                            <th style="text-align:left; padding:5px; width:30px;">选择</th>
-                            <th style="text-align:left; padding:5px;">Agent键</th>
-                            <th style="text-align:left; padding:5px;">显示名称</th>
-                            <th style="text-align:left; padding:5px;">角色</th>
-                            <th style="text-align:left; padding:5px;">阶段</th>
+                        <tr class="nc-table-row--header">
+                            <th class="nc-th--checkbox">选择</th>
+                            <th class="nc-th--padded">Agent键</th>
+                            <th class="nc-th--padded">显示名称</th>
+                            <th class="nc-th--padded">角色</th>
+                            <th class="nc-th--padded">阶段</th>
                         </tr>
                     </thead>
                     <tbody id="agent-select-tbody">
@@ -16051,12 +17125,12 @@
                     const stageName = stageMap[agent.stage] || (agent.stage ? agent.stage : '未分配');
                     const checked = currentAgents.includes(key) ? 'checked' : '';
                     return `
-                                <tr style="border-bottom:1px solid #333;">
-                                    <td style="padding:5px;"><input type="checkbox" value="${key}" ${checked}></td>
-                                    <td style="padding:5px;">${key}</td>
-                                    <td style="padding:5px;">${agent.displayName || ''}</td>
-                                    <td style="padding:5px;">${agent.role || ''}</td>
-                                    <td style="padding:5px;">${stageName}</td>
+                                <tr class="nc-table-row--body">
+                                    <td class="nc-td--padded"><input type="checkbox" value="${key}" ${checked}></td>
+                                    <td class="nc-td--padded">${key}</td>
+                                    <td class="nc-td--padded">${agent.displayName || ''}</td>
+                                    <td class="nc-td--padded">${agent.role || ''}</td>
+                                    <td class="nc-td--padded">${stageName}</td>
                                 </tr>
                             `;
                 }).join('')}
@@ -16104,30 +17178,30 @@
                     const optDiv = document.createElement('div');
                     optDiv.style.cssText = 'background:#2a2a3a; border-radius:8px; padding:12px; margin-bottom:8px; border:1px solid #3a3a5a;';
                     optDiv.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <span style="color:#667eea; font-weight:600;">${optKey}</span>
-                    <span class="delete-option" style="color:#ff6b6b; cursor:pointer; font-size:14px;">✖</span>
+                <div class="nc-flex--row-between-mb8">
+                    <span class="nc-color--primary-bold">${optKey}</span>
+                    <span class="delete-option nc-color--error-btn-md">✖</span>
                 </div>
-                <div style="margin-bottom:6px;">
-                    <input type="text" class="opt-name" data-key="${optKey}" value="${this._escapeHtml(opt.name || '')}" placeholder="名称" style="width:100%; background:#1e1e2f; color:#eaeaea; border:1px solid #3a3a5a; border-radius:6px; padding:6px 8px; font-size:12px; margin-bottom:4px;">
+                <div class="nc-mb6">
+                    <input type="text" class="opt-name nc-opt-input--sm" data-key="${optKey}" value="${this._escapeHtml(opt.name || '')}" placeholder="名称">
                 </div>
-                <div style="margin-bottom:6px;">
-                    <input type="text" class="opt-description" data-key="${optKey}" value="${this._escapeHtml(opt.description || '')}" placeholder="描述" style="width:100%; background:#1e1e2f; color:#eaeaea; border:1px solid #3a3a5a; border-radius:6px; padding:6px 8px; font-size:12px; margin-bottom:4px;">
+                <div class="nc-mb6">
+                    <input type="text" class="opt-description nc-opt-input--sm" data-key="${optKey}" value="${this._escapeHtml(opt.description || '')}" placeholder="描述">
                 </div>
-                <div style="margin-bottom:6px;">
-                    <input type="text" class="opt-icon" data-key="${optKey}" value="${this._escapeHtml(opt.icon || '')}" placeholder="图标" style="width:100%; background:#1e1e2f; color:#eaeaea; border:1px solid #3a3a5a; border-radius:6px; padding:6px 8px; font-size:12px; margin-bottom:4px;">
+                <div class="nc-mb6">
+                    <input type="text" class="opt-icon nc-opt-input--sm" data-key="${optKey}" value="${this._escapeHtml(opt.icon || '')}" placeholder="图标">
                 </div>
                 <div>
-                    <label style="color:#aaa; font-size:11px; display:block; margin-bottom:2px;">关联 Agents</label>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                        <div id="agent-tags-${optKey}" style="flex:1; display:flex; flex-wrap:wrap; gap:4px; min-height:28px; background:#1e1e2f; border:1px solid #3a3a5a; border-radius:6px; padding:4px;">
+                    <label class="nc-label--agents-hint">关联 Agents</label>
+                    <div class="nc-flex--row-8-center">
+                        <div id="agent-tags-${optKey}" class="nc-flex-item--agent-tags">
                             ${(opt.agents || []).map(agentKey => {
                         const agent = this.config.agents[agentKey];
                         const display = agent ? (agent.displayName || agentKey) : agentKey;
-                        return `<span style="background:#667eea; color:white; border-radius:4px; padding:2px 6px; font-size:10px;">${display}</span>`;
+                        return `<span class="nc-tag--agent">${display}</span>`;
                     }).join('')}
                         </div>
-                        <button class="select-agents-btn" data-key="${optKey}" style="background:#667eea; border:none; color:white; border-radius:6px; padding:6px 12px; font-size:11px; cursor:pointer;">选择</button>
+                        <button class="select-agents-btn nc-icon-btn--select-agents" data-key="${optKey}">选择</button>
                     </div>
                 </div>
             `;
@@ -16166,7 +17240,7 @@
                     Notify.error(`选项ID ${optKey} 已存在`);
                     return;
                 }
-                cat.options[optKey] = {name: optKey, description: '', icon: '', agents: []};
+                cat.options[optKey] = { name: optKey, description: '', icon: '', agents: [] };
                 renderOptions();
                 if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
             });
@@ -16197,17 +17271,17 @@
             card.className = 'property-section';
             card.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             card.innerHTML = `
-            <div class="property-title" style="color:#667eea; font-size:14px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🔗 互斥组</div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">组名</label>
-                <input type="text" id="group-name" class="field-input" value="${this._escapeHtml(group.name || '')}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+            <div class="property-title nc-prop-title--sm">🔗 互斥组</div>
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">组名</label>
+                <input type="text" id="group-name" class="field-input nc-field-input--sm" value="${this._escapeHtml(group.name || '')}">
             </div>
             <div class="field-group">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">包含分类</label>
-                <select id="group-categories" class="field-select" multiple size="5" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+                <label class="field-label nc-field-label--sm">包含分类</label>
+                <select id="group-categories" class="field-select nc-field-input--sm" multiple size="5">
                     ${Object.keys(this.config.categories || {}).map(cid => `<option value="${cid}" ${(group.categories || []).includes(cid) ? 'selected' : ''}>${cid}</option>`).join('')}
                 </select>
-                <div style="font-size:11px; color:#888; margin-top:4px;">按住 Ctrl 多选</div>
+                <div class="nc-text--xs-muted-mt4">按住 Ctrl 多选</div>
             </div>
         `;
             container.appendChild(card);
@@ -16236,18 +17310,18 @@
             metaCard.className = 'property-section';
             metaCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             metaCard.innerHTML = `
-            <div class="property-title" style="color:#667eea; font-size:14px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">📄 元信息</div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">版本</label>
-                <input type="text" id="global-version" class="field-input" value="${this._escapeHtml(config.version || '1.0')}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+            <div class="property-title nc-prop-title--sm">📄 元信息</div>
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">版本</label>
+                <input type="text" id="global-version" class="field-input nc-field-input--sm" value="${this._escapeHtml(config.version || '1.0')}">
             </div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">描述</label>
-                <textarea id="global-description" class="field-textarea" rows="3" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px; font-family:monospace;">${this._escapeHtml(config.description || '')}</textarea>
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">描述</label>
+                <textarea id="global-description" class="field-textarea nc-field-input--sm-mono" rows="3">${this._escapeHtml(config.description || '')}</textarea>
             </div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">模式</label>
-                <select id="global-mode" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">模式</label>
+                <select id="global-mode" class="field-select nc-field-input--sm">
                     <option value="normal" ${config.mode === 'normal' ? 'selected' : ''}>normal</option>
                     <option value="datafication" ${config.mode === 'datafication' ? 'selected' : ''}>datafication</option>
                     <option value="interactive" ${config.mode === 'interactive' ? 'selected' : ''}>interactive</option>
@@ -16260,22 +17334,22 @@
             limitCard.className = 'property-section';
             limitCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             limitCard.innerHTML = `
-            <div class="property-title" style="color:#667eea; font-size:14px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🔧 系统限制</div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">最大状态书数量 (maxStateBooks)</label>
-                <input type="number" id="global-maxStateBooks" class="field-input" value="${config.maxStateBooks || 5}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+            <div class="property-title nc-prop-title--sm">🔧 系统限制</div>
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">最大状态书数量 (maxStateBooks)</label>
+                <input type="number" id="global-maxStateBooks" class="field-input nc-field-input--sm" value="${config.maxStateBooks || 5}" min="1" step="1">
             </div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">每本书状态条目上限 (stateTypeLimit)</label>
-                <input type="number" id="global-stateTypeLimit" class="field-input" value="${config.stateTypeLimit || 20}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">每本书状态条目上限 (stateTypeLimit)</label>
+                <input type="number" id="global-stateTypeLimit" class="field-input nc-field-input--sm" value="${config.stateTypeLimit || 20}" min="1" step="1">
             </div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">每本图库书图片上限 (maxImagesPerBook)</label>
-                <input type="number" id="global-maxImagesPerBook" class="field-input" value="${config.maxImagesPerBook !== undefined ? config.maxImagesPerBook : 20}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">每本图库书图片上限 (maxImagesPerBook)</label>
+                <input type="number" id="global-maxImagesPerBook" class="field-input nc-field-input--sm" value="${config.maxImagesPerBook !== undefined ? config.maxImagesPerBook : 20}" min="1" step="1">
             </div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">每本音频库书音频上限 (maxAudiosPerBook)</label>
-                <input type="number" id="global-maxAudiosPerBook" class="field-input" value="${config.maxAudiosPerBook !== undefined ? config.maxAudiosPerBook : 20}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">每本音频库书音频上限 (maxAudiosPerBook)</label>
+                <input type="number" id="global-maxAudiosPerBook" class="field-input nc-field-input--sm" value="${config.maxAudiosPerBook !== undefined ? config.maxAudiosPerBook : 20}" min="1" step="1">
             </div>
         `;
             container.appendChild(limitCard);
@@ -16284,14 +17358,14 @@
             reflowCard.className = 'property-section';
             reflowCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             reflowCard.innerHTML = `
-            <div class="property-title" style="color:#667eea; font-size:14px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🔄 回流控制</div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">最大连续回流次数 (maxConsecutiveReflows)</label>
-                <input type="number" id="global-maxConsecutiveReflows" class="field-input" value="${config.maxConsecutiveReflows || 3}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+            <div class="property-title nc-prop-title--sm">🔄 回流控制</div>
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">最大连续回流次数 (maxConsecutiveReflows)</label>
+                <input type="number" id="global-maxConsecutiveReflows" class="field-input nc-field-input--sm" value="${config.maxConsecutiveReflows || 3}" min="1" step="1">
             </div>
-            <div class="field-group" style="margin-bottom:16px;">
-                <label class="field-label" style="display:block; color:#aaa; font-size:12px; margin-bottom:4px;">最大回流深度 (maxReflowDepth)</label>
-                <input type="number" id="global-maxReflowDepth" class="field-input" value="${config.maxReflowDepth || 100}" min="1" step="1" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:8px 12px; font-size:13px;">
+            <div class="field-group nc-mb16">
+                <label class="field-label nc-field-label--sm">最大回流深度 (maxReflowDepth)</label>
+                <input type="number" id="global-maxReflowDepth" class="field-input nc-field-input--sm" value="${config.maxReflowDepth || 100}" min="1" step="1">
             </div>
         `;
             container.appendChild(reflowCard);
@@ -16357,11 +17431,11 @@
             const headerDiv = document.createElement('div');
             headerDiv.style.cssText = 'display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;';
             headerDiv.innerHTML = `
-        <div style="display:flex; align-items:center; gap:8px;">
-            <input type="text" id="agent-key-input" value="${this._escapeHtml(agentKey)}" style="width:200px; background:#0f172a; color:#eaeaea; border:1px solid #667eea; border-radius:6px; padding:8px 12px; font-size:16px; font-weight:600;">
-            <span style="color:#aaa; font-size:14px;">(修改后自动更新引用)</span>
+        <div class="nc-flex--row-8-middle">
+            <input type="text" id="agent-key-input" value="${this._escapeHtml(agentKey)}" class="nc-modal-input--agent-key">
+            <span class="nc-color--muted-md">(修改后自动更新引用)</span>
         </div>
-        <span style="color:#4ecdc4; cursor:pointer; font-size:14px;" id="back-to-stage">↩ 返回阶段</span>
+        <span class="nc-color--teal-link" id="back-to-stage">↩ 返回阶段</span>
     `;
             container.appendChild(headerDiv);
 
@@ -16370,35 +17444,35 @@
             basicCard.className = 'property-section';
             basicCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             basicCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">📌 基础信息</div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">名称 (name) <span style="color:#ff6b6b;">*必须从角色卡选择</span></label>
-            ${contextError ? `<div style="color:#ff6b6b; font-size:13px; margin-bottom:6px;">❌ ${contextError}</div>` : ''}
-            <select id="agent-name" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+        <div class="property-title nc-prop-title--lg">📌 基础信息</div>
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--md">名称 (name) <span class="nc-color--error">*必须从角色卡选择</span></label>
+            ${contextError ? `<div class="nc-color--error-msg">❌ ${contextError}</div>` : ''}
+            <select id="agent-name" class="field-select nc-field-input--md">
                 <option value="">— 请选择角色卡 —</option>
                 ${characterNames.map(name => `<option value="${this._escapeHtml(name)}" ${agent.name === name ? 'selected' : ''}>${this._escapeHtml(name)}</option>`).join('')}
             </select>
-            ${characterNames.length === 0 && !contextError ? '<div style="color:#ffaa00; font-size:13px; margin-top:4px;">⚠️ 未检测到角色卡</div>' : ''}
+            ${characterNames.length === 0 && !contextError ? '<div class="nc-text--warning-tip">⚠️ 未检测到角色卡</div>' : ''}
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">显示名 (displayName)</label>
-            <input type="text" id="agent-displayName" class="field-input" value="${this._escapeHtml(agent.displayName || '')}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--md">显示名 (displayName)</label>
+            <input type="text" id="agent-displayName" class="field-input nc-field-input--md" value="${this._escapeHtml(agent.displayName || '')}">
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">悬停提示 (hover)</label>
-            <input type="text" id="agent-hover" class="field-input" value="${this._escapeHtml(agent.hover || '')}" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--md">悬停提示 (hover)</label>
+            <input type="text" id="agent-hover" class="field-input nc-field-input--md" value="${this._escapeHtml(agent.hover || '')}">
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">阶段  (stage)</label>
-            <select id="agent-stage" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--md">阶段  (stage)</label>
+            <select id="agent-stage" class="field-select nc-field-input--md">
                 ${(this.config.workflowStages || []).map(s => `<option value="${s.id}" ${agent.stage === s.id ? 'selected' : ''}>${s.name}</option>`).join('')}
                 <option value="" ${!agent.stage ? 'selected' : ''}>无</option>
             </select>
-            <div style="font-size:12px; color:#888; margin-top:2px;">选择所属阶段，留空则出现在左侧未分配区</div>
+            <div class="nc-text--sm-muted-mt2">选择所属阶段，留空则出现在左侧未分配区</div>
         </div>
         <div class="field-group">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">顺序 (order)</label>
-            <input type="number" id="agent-order" class="field-input" value="${agent.order || 0}" min="0" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+            <label class="field-label nc-field-label--md">顺序 (order)</label>
+            <input type="number" id="agent-order" class="field-input nc-field-input--md" value="${agent.order || 0}" min="0">
         </div>
     `;
             container.appendChild(basicCard);
@@ -16408,29 +17482,29 @@
             optionsCard.className = 'property-section';
             optionsCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             optionsCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">⚙️ 配置选项</div>
-        <div class="checkbox-group" style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:16px;">
-            <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
-                <input type="checkbox" id="agent-required" ${agent.required ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 必需
+        <div class="property-title nc-prop-title--lg">⚙️ 配置选项</div>
+        <div class="checkbox-group nc-flex--checkbox-group">
+            <label class="checkbox-label nc-checkbox-label--md">
+                <input type="checkbox" id="agent-required" ${agent.required ? 'checked' : ''} class="nc-checkbox--purple-md"> 必需
             </label>
-            <label class="checkbox-label" style="display:flex; align-items:center; gap:6px; color:#ccc; font-size:14px; cursor:pointer;">
-                <input type="checkbox" id="agent-review" ${agent.review ? 'checked' : ''} style="accent-color:#667eea; width:16px; height:16px;"> 人工审核
+            <label class="checkbox-label nc-checkbox-label--md">
+                <input type="checkbox" id="agent-review" ${agent.review ? 'checked' : ''} class="nc-checkbox--purple-md"> 人工审核
             </label>
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">API 配置 ID</label>
-            <select id="agent-apiConfigId" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--md">API 配置 ID</label>
+            <select id="agent-apiConfigId" class="field-select nc-field-input--md">
                 <option value="">无</option>
                 ${Object.entries(this.config.apiConfigs || {})
-                .filter(([_, cfg]) => cfg.type === 'text')
-                .map(([id]) => `<option value="${id}" ${agent.apiConfigId === id ? 'selected' : ''}>${id}</option>`)
-                .join('')}
+                    .filter(([_, cfg]) => cfg.type === 'text')
+                    .map(([id]) => `<option value="${id}" ${agent.apiConfigId === id ? 'selected' : ''}>${id}</option>`)
+                    .join('')}
             </select>
         </div>
         <div class="field-group">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">执行间隔 (executeInterval)</label>
-            <input type="number" id="agent-executeInterval" class="field-input" value="${agent.executeInterval || 0}" min="0" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
-            <div style="font-size:12px; color:#888;">0 = 每章执行，N>0 = 每N章执行</div>
+            <label class="field-label nc-field-label--md">执行间隔 (executeInterval)</label>
+            <input type="number" id="agent-executeInterval" class="field-input nc-field-input--md" value="${agent.executeInterval || 0}" min="0">
+            <div class="nc-text--sm-muted">0 = 每章执行，N>0 = 每N章执行</div>
         </div>
     `;
             container.appendChild(optionsCard);
@@ -16440,20 +17514,20 @@
             templateCard.className = 'property-section';
             templateCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             templateCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">📝 输入模板</div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <textarea id="agent-inputTemplate" class="field-textarea" rows="10" placeholder="输入模板，用【】作为占位符" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:12px 14px; font-size:14px; font-family:monospace; line-height:1.5;"></textarea>
+        <div class="property-title nc-prop-title--lg">📝 输入模板</div>
+        <div class="field-group nc-mb16">
+            <textarea id="agent-inputTemplate" class="field-textarea nc-field-input--md-mono-lg" rows="10" placeholder="输入模板，用【】作为占位符"></textarea>
         </div>
-        <div class="field-group" style="margin-bottom:16px;">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">角色 (role)</label>
-            <select id="agent-role" class="field-select" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:10px 14px; font-size:14px;">
+        <div class="field-group nc-mb16">
+            <label class="field-label nc-field-label--md">角色 (role)</label>
+            <select id="agent-role" class="field-select nc-field-input--md">
                 <option value="">无</option>
                 ${PREDEFINED_ROLES.map(r => `<option value="${r}" ${agent.role === r ? 'selected' : ''}>${r}</option>`).join('')}
             </select>
         </div>
         <div class="field-group">
-            <label class="field-label" style="display:block; color:#aaa; font-size:14px; margin-bottom:4px;">描述 (description)</label>
-            <textarea id="agent-description" class="field-textarea" rows="2" placeholder="功能描述" style="width:100%; background:#0f172a; color:#eaeaea; border:1px solid #3a3a5a; border-radius:8px; padding:12px 14px; font-size:14px; font-family:monospace; line-height:1.5;">${this._escapeHtml(agent.description || '')}</textarea>
+            <label class="field-label nc-field-label--md">描述 (description)</label>
+            <textarea id="agent-description" class="field-textarea nc-field-input--md-mono-lg" rows="2" placeholder="功能描述">${this._escapeHtml(agent.description || '')}</textarea>
         </div>
     `;
             container.appendChild(templateCard);
@@ -16463,13 +17537,13 @@
             conditionsCard.className = 'property-section';
             conditionsCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             conditionsCard.innerHTML = `
-        <div class="property-title" style="color:#667eea; font-size:16px; font-weight:600; margin-bottom:16px; border-bottom:1px solid #2d2d44; padding-bottom:8px;">🔄 回流条件</div>
-        <div style="margin-bottom:8px;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span style="color:#ccc; font-weight:500; font-size:14px;">关键词列表（每行一个）</span>
-                <button id="add-reflow-condition" class="btn-add" style="background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:6px 16px; font-size:13px; font-weight:600; cursor:pointer;">➕ 添加条件</button>
+        <div class="property-title nc-prop-title--lg">🔄 回流条件</div>
+        <div class="nc-mb8">
+            <div class="nc-flex--row-between-mb8">
+                <span class="nc-color--subtle-label">关键词列表（每行一个）</span>
+                <button id="add-reflow-condition" class="btn-add nc-cfgedit-btn--add-md">➕ 添加条件</button>
             </div>
-            <div id="reflow-conditions-list" style="max-height:200px; overflow-y:auto; margin-bottom:8px;"></div>
+            <div id="reflow-conditions-list" class="nc-size--scroll-200-mb8"></div>
         </div>
     `;
             container.appendChild(conditionsCard);
@@ -16479,18 +17553,18 @@
             sourcesCard.className = 'property-section';
             sourcesCard.style.cssText = 'background:rgba(0,0,0,0.2); border-radius:12px; padding:16px; border:1px solid #2d2d44;';
             sourcesCard.innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <span class="property-title" style="color:#667eea; font-size:16px; font-weight:600; border-bottom:none; padding-bottom:0;">🔗 输入源</span>
-            <button id="add-input-source" class="btn-add" style="background:linear-gradient(135deg, #10b981, #059669); border:none; color:white; border-radius:20px; padding:6px 16px; font-size:13px; font-weight:600; cursor:pointer;">➕ 添加输入源</button>
+        <div class="nc-flex--row-between-mb12">
+            <span class="property-title nc-prop-title--lg-inline">🔗 输入源</span>
+            <button id="add-input-source" class="btn-add nc-cfgedit-btn--add-md">➕ 添加输入源</button>
         </div>
-        <div class="source-header" style="display:grid; grid-template-columns:1fr 90px 70px 1fr 30px; gap:8px; margin-bottom:8px; padding:0 4px; color:#888; font-size:12px; font-weight:500; text-transform:uppercase;">
+        <div class="source-header nc-grid--source-header">
             <span>源标识符</span>
             <span>模式</span>
             <span>auto</span>
             <span>提示词</span>
             <span></span>
         </div>
-        <div id="input-sources-container" style="max-height:280px; overflow-y:auto;"></div>
+        <div id="input-sources-container" class="nc-size--scroll-280"></div>
     `;
             container.appendChild(sourcesCard);
 
@@ -16521,11 +17595,11 @@
                 let html = '';
                 conditions.forEach((cond, index) => {
                     html += `
-                <div style="display:flex; gap:6px; margin-bottom:6px; align-items:center;">
+                <div class="nc-flex--row-6-mb6-mid">
                     <input type="text" class="reflow-condition-item" data-index="${index}" value="${this._escapeHtml(cond)}"
-                        style="flex:1; background:#1e1e2f; color:#eaeaea; border:1px solid #667eea; border-radius:4px; padding:8px 12px; font-size:14px;">
+                        class="nc-source-input--flex">
                     <button class="delete-reflow-condition" data-index="${index}"
-                        style="background:#dc3545; border:none; color:white; border-radius:4px; width:32px; height:32px; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">✖</button>
+                        class="nc-gal-btn--remove-32">✖</button>
                 </div>
             `;
                 });
@@ -16673,22 +17747,22 @@
                 sourceItems.forEach((item, index) => {
                     const listId = `source-list-${agentKey}-${index}`;
                     html += `
-                <div class="source-card" data-index="${index}" style="background:#2a2a3a; border-radius:8px; padding:12px; margin-bottom:8px; border:1px solid #3a3a5a;">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                        <div style="flex:1; position:relative;">
+                <div class="source-card nc-card--source-card" data-index="${index}">
+                    <div class="nc-flex--row-8-middle-mb8">
+                        <div class="nc-flex-item--relative">
                             <input type="text" class="source-src" data-index="${index}" value="${this._escapeHtml(item.src)}"
                                 placeholder="源标识符 (可输入或选择)"
                                 list="${listId}"
-                                style="width:100%; background:#1e1e2f; color:#eaeaea; border:1px solid #667eea; border-radius:6px; padding:10px 12px; font-size:14px;">
+                                class="nc-source-input--main">
                             <datalist id="${listId}">
                                 ${uniqueCandidates.map(s => `<option value="${s}">`).join('')}
                             </datalist>
                         </div>
                         <button class="delete-source" data-index="${index}"
-                                style="background:#dc3545; border:none; color:white; border-radius:4px; width:36px; height:36px; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;">✖</button>
+                                class="nc-gal-btn--remove-36">✖</button>
                     </div>
-                    <div style="display:flex; gap:8px; margin-bottom:8px;">
-                        <select class="source-mode" data-index="${index}" style="flex:1; background:#1e1e2f; color:#eaeaea; border:1px solid #667eea; border-radius:6px; padding:10px; font-size:14px;">
+                    <div class="nc-flex--row-8-mb8">
+                        <select class="source-mode nc-source-select--flex" data-index="${index}">
                             <option value="txt" ${item.mode === 'txt' ? 'selected' : ''}>txt</option>
                             <option value="status" ${item.mode === 'status' ? 'selected' : ''}>status</option>
                             <option value="chapter" ${item.mode === 'chapter' ? 'selected' : ''}>chapter</option>
@@ -16696,12 +17770,12 @@
                         </select>
                         <input type="number" class="source-auto" data-index="${index}" value="${item.auto}" min="0" step="1"
                             placeholder="auto"
-                            style="width:80px; background:#1e1e2f; color:#eaeaea; border:1px solid #667eea; border-radius:6px; padding:10px; font-size:14px;">
+                            class="nc-source-input--type">
                     </div>
                     <div>
                         <input type="text" class="source-prompt" data-index="${index}" value="${this._escapeHtml(item.prompt)}"
                             placeholder="提示词"
-                            style="width:100%; background:#1e1e2f; color:#eaeaea; border:1px solid #667eea; border-radius:6px; padding:10px 12px; font-size:14px;">
+                            class="nc-source-input--main">
                     </div>
                 </div>
             `;
@@ -16896,7 +17970,7 @@
             this.selectedAgentKey = null;
             this.highlightedAgents.clear();      // 新增：清空高亮
             this.selectedGlobal = false;
-            this._renderPropertyPanel({type: 'api'});
+            this._renderPropertyPanel({ type: 'api' });
         }
 
         selectCategory(id) {
@@ -16909,7 +17983,7 @@
             this.selectedAgentKey = null;
             this.highlightedAgents.clear();      // 新增：清空高亮
             this.selectedGlobal = false;
-            this._renderPropertyPanel({type: 'category'});
+            this._renderPropertyPanel({ type: 'category' });
         }
 
         selectGroup(index) {
@@ -16922,7 +17996,7 @@
             this.selectedAgentKey = null;
             this.highlightedAgents.clear();      // 新增：清空高亮
             this.selectedGlobal = false;
-            this._renderPropertyPanel({type: 'group'});
+            this._renderPropertyPanel({ type: 'group' });
         }
 
         selectAgent(agentKey) {
@@ -17144,7 +18218,7 @@
 
             const header = document.createElement('div');
             header.className = 'nc-modal-header';
-            header.innerHTML = `<h2 style="margin:0;color:#667eea;">管理Agent - ${stageNode.label}</h2>`;
+            header.innerHTML = `<h2 class="nc-modal-title--primary-c">管理Agent - ${stageNode.label}</h2>`;
             modal.appendChild(header);
 
             const agentList = document.createElement('div');
@@ -17175,14 +18249,14 @@
                     card.setAttribute('data-agent', agentKey);
                     card.style.cssText = 'background:#2a2a3a; border-radius:6px; padding:8px; cursor:pointer; border:1px solid #667eea;';
                     card.innerHTML = `
-                <div style="display:flex; justify-content:space-between;">
-                    <span style="font-weight:bold; color:#667eea;">${agent.displayName || agentKey}</span>
-                    <span style="color:#aaa; font-size:10px;">order:${agent.order || 0}</span>
+                <div class="nc-flex--row-between">
+                    <span class="nc-text--bolder-primary">${agent.displayName || agentKey}</span>
+                    <span class="nc-color--muted-xs">order:${agent.order || 0}</span>
                 </div>
-                <div style="font-size:11px; color:#ccc; margin-top:4px;">${agent.role || '无角色'}</div>
-                <div style="margin-top:5px; display:flex; gap:5px;">
-                    <span class="edit-agent" style="color:#4ecdc4; cursor:pointer;">✎</span>
-                    <span class="delete-agent" style="color:#ff6b6b; cursor:pointer;">✖</span>
+                <div class="nc-text--xs-light-mt4">${agent.role || '无角色'}</div>
+                <div class="nc-flex--row-5-mt5-c">
+                    <span class="edit-agent nc-color--teal-btn">✎</span>
+                    <span class="delete-agent nc-color--error-btn">✖</span>
                 </div>
             `;
                     agentList.appendChild(card);
@@ -17194,7 +18268,7 @@
                             // 从阶段agents列表中移除
                             stageData.agents = stageData.agents.filter(k => k !== agentKey);
                             agent.stage = '';
-                            Notify.info(`Agent ${agent.displayName || agentKey} 已移至未分配区`, '', {timeOut: 2000});
+                            Notify.info(`Agent ${agent.displayName || agentKey} 已移至未分配区`, '', { timeOut: 2000 });
                             renderAgentGrid();
                             if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
                         } else {
@@ -17372,7 +18446,7 @@
 
             // 拖拽状态
             this.draggingNode = null;
-            this.draggingOffset = {x: 0, y: 0};
+            this.draggingOffset = { x: 0, y: 0 };
             this.draggingStartX = 0;
             this.draggingStartY = 0;
 
@@ -17386,11 +18460,11 @@
             this.offsetX = 0;
             this.offsetY = 0;
             this.isPanning = false;
-            this.panStart = {x: 0, y: 0};
+            this.panStart = { x: 0, y: 0 };
 
             // 框选
             this.isSelecting = false;
-            this.selectStart = {x: 0, y: 0};
+            this.selectStart = { x: 0, y: 0 };
             this.selectRect = null;
 
             // 对齐辅助线与吸附
@@ -17441,7 +18515,7 @@
             this.canvas.addEventListener('mousedown', this._onMouseDown.bind(this));
             this.canvas.addEventListener('mousemove', this._onMouseMove.bind(this));
             this.canvas.addEventListener('mouseup', this._onMouseUp.bind(this));
-            this.canvas.addEventListener('wheel', this._onWheel.bind(this), {passive: false});
+            this.canvas.addEventListener('wheel', this._onWheel.bind(this), { passive: false });
 
             // 新增：双击画布创建节点
             this.canvas.addEventListener('dblclick', this._onDoubleClick.bind(this));
@@ -17511,7 +18585,7 @@
                     this.draggingNode = node;
                     this.draggingStartX = node.x;
                     this.draggingStartY = node.y;
-                    this.draggingOffset = {x: x - node.x, y: y - node.y};
+                    this.draggingOffset = { x: x - node.x, y: y - node.y };
                     this.isSelecting = false;
                     this._requestRender();
                     e.preventDefault();
@@ -17532,15 +18606,15 @@
             // 中键或右键：平移画布
             if (e.button === 1 || e.button === 2) {
                 this.isPanning = true;
-                this.panStart = {x: e.clientX - this.offsetX, y: e.clientY - this.offsetY};
+                this.panStart = { x: e.clientX - this.offsetX, y: e.clientY - this.offsetY };
                 e.preventDefault();
                 return;
             }
 
             // 左键：开始框选
             this.isSelecting = true;
-            this.selectStart = {x, y};
-            this.selectRect = {x, y, width: 0, height: 0};
+            this.selectStart = { x, y };
+            this.selectRect = { x, y, width: 0, height: 0 };
             this._requestRender();
         }
 
@@ -17556,7 +18630,7 @@
                     y >= node.y && y <= node.y + this.nodeHeight) {
 
                     if (node.chapterNum) {
-                        HistoryUI.viewChapter(node.chapterNum, {mode: 'readonly'});
+                        HistoryUI.viewChapter(node.chapterNum, { mode: 'readonly' });
                     } else {
                         Notify.info('该节点未绑定任何章节');
                     }
@@ -17661,8 +18735,8 @@
                     this._recordAction({
                         type: 'update',
                         nodeId: this.draggingFrom.node.id,
-                        oldProps: {resultMap: {[this.draggingFrom.key]: oldTarget}},
-                        newProps: {resultMap: {[this.draggingFrom.key]: targetNode.id}}
+                        oldProps: { resultMap: { [this.draggingFrom.key]: oldTarget } },
+                        newProps: { resultMap: { [this.draggingFrom.key]: targetNode.id } }
                     });
                     if (this.callbacks.onNodeSelect) this.callbacks.onNodeSelect(this.selectedNode);
                     if (this.callbacks.onNodesChange) this.callbacks.onNodesChange();
@@ -17782,30 +18856,30 @@
                 const nodeCenterY = node.y + this.nodeHeight / 2;
                 if (Math.abs(draggedCenterY - nodeCenterY) < threshold) {
 
-                    this.alignLines.push({y: nodeCenterY, horizontal: true});
+                    this.alignLines.push({ y: nodeCenterY, horizontal: true });
                 }
                 if (Math.abs(draggedNode.y - node.y) < threshold) {
 
-                    this.alignLines.push({y: node.y, horizontal: true});
+                    this.alignLines.push({ y: node.y, horizontal: true });
                 }
                 if (Math.abs(draggedNode.y + this.nodeHeight - node.y - this.nodeHeight) < threshold) {
 
-                    this.alignLines.push({y: node.y + this.nodeHeight, horizontal: true});
+                    this.alignLines.push({ y: node.y + this.nodeHeight, horizontal: true });
                 }
 
                 const draggedCenterX = draggedNode.x + this.nodeWidth / 2;
                 const nodeCenterX = node.x + this.nodeWidth / 2;
                 if (Math.abs(draggedCenterX - nodeCenterX) < threshold) {
 
-                    this.alignLines.push({x: nodeCenterX, horizontal: false});
+                    this.alignLines.push({ x: nodeCenterX, horizontal: false });
                 }
                 if (Math.abs(draggedNode.x - node.x) < threshold) {
 
-                    this.alignLines.push({x: node.x, horizontal: false});
+                    this.alignLines.push({ x: node.x, horizontal: false });
                 }
                 if (Math.abs(draggedNode.x + this.nodeWidth - node.x - this.nodeWidth) < threshold) {
 
-                    this.alignLines.push({x: node.x + this.nodeWidth, horizontal: false});
+                    this.alignLines.push({ x: node.x + this.nodeWidth, horizontal: false });
                 }
             }
 
@@ -17821,7 +18895,7 @@
                 const dist = Math.abs(draggedNode.x + this.nodeWidth / 2 - x);
                 if (dist < threshold) {
 
-                    this.alignLines.push({x: x, horizontal: false, isColumn: true});
+                    this.alignLines.push({ x: x, horizontal: false, isColumn: true });
                 }
             }
 
@@ -17837,7 +18911,7 @@
                 const dist = Math.abs(draggedNode.y + this.nodeHeight / 2 - y);
                 if (dist < threshold) {
 
-                    this.alignLines.push({y: y, horizontal: true, isRow: true});
+                    this.alignLines.push({ y: y, horizontal: true, isRow: true });
                 }
             }
         }
@@ -17978,7 +19052,7 @@
 
             for (const node of newNodes) {
                 this.nodes.push(node);
-                this._recordAction({type: 'add', node: JSON.parse(JSON.stringify(node))});
+                this._recordAction({ type: 'add', node: JSON.parse(JSON.stringify(node)) });
             }
             this.selectedNodes.clear();
             for (const node of newNodes) {
@@ -18000,7 +19074,7 @@
             // 确保节点有 type 字段
             if (!node.type) node.type = 'normal';
             this.nodes.push(node);
-            this._recordAction({type: 'add', node: JSON.parse(JSON.stringify(node))});
+            this._recordAction({ type: 'add', node: JSON.parse(JSON.stringify(node)) });
             this._requestRender();
             if (this.callbacks.onNodesChange) this.callbacks.onNodesChange();
         }
@@ -18015,11 +19089,11 @@
                 if (n.resultMap) {
                     for (const [key, target] of Object.entries(n.resultMap)) {
                         if (target === nodeId) {
-                            references.push({nodeId: n.id, key, oldTarget: target});
+                            references.push({ nodeId: n.id, key, oldTarget: target });
                         }
                     }
                     if (n.resultMap.default === nodeId) {
-                        references.push({nodeId: n.id, key: 'default', oldTarget: nodeId});
+                        references.push({ nodeId: n.id, key: 'default', oldTarget: nodeId });
                     }
                 }
             }
@@ -18041,7 +19115,7 @@
             if (idx !== -1) this.nodes.splice(idx, 1);
 
             if (!batch) {
-                this._recordAction({type: 'delete', node: nodeCopy, references});
+                this._recordAction({ type: 'delete', node: nodeCopy, references });
             }
             this._requestRender();
             if (this.callbacks.onNodesChange) this.callbacks.onNodesChange();
@@ -18055,7 +19129,7 @@
                     oldProps[key] = node[key];
                 }
                 Object.assign(node, updates);
-                this._recordAction({type: 'update', nodeId, oldProps, newProps: updates});
+                this._recordAction({ type: 'update', nodeId, oldProps, newProps: updates });
                 this._requestRender();
                 if (this.callbacks.onNodeSelect && this.selectedNode && this.selectedNode.id === nodeId) {
                     this.callbacks.onNodeSelect(node);
@@ -18427,12 +19501,12 @@
                     // BFS 逐层向外搜索（无半径限制）
                     let found = false;
                     let bestCol = targetCol, bestRow = targetRow;
-                    const queue = [{col: targetCol, row: targetRow, dist: 0}];
+                    const queue = [{ col: targetCol, row: targetRow, dist: 0 }];
                     const visited = new Set([key]);
                     let idx = 0;
 
                     while (idx < queue.length && !found) {
-                        const {col, row, dist} = queue[idx++];
+                        const { col, row, dist } = queue[idx++];
                         const currentKey = `${col},${row}`;
                         if (!occupied.has(currentKey)) {
                             bestCol = col;
@@ -18444,18 +19518,18 @@
 
                         // 四个方向扩展（右、左、下、上）
                         const directions = [
-                            {dc: 1, dr: 0},  // 右
-                            {dc: -1, dr: 0}, // 左
-                            {dc: 0, dr: 1},  // 下
-                            {dc: 0, dr: -1}  // 上
+                            { dc: 1, dr: 0 },  // 右
+                            { dc: -1, dr: 0 }, // 左
+                            { dc: 0, dr: 1 },  // 下
+                            { dc: 0, dr: -1 }  // 上
                         ];
-                        for (const {dc, dr} of directions) {
+                        for (const { dc, dr } of directions) {
                             const ncol = col + dc;
                             const nrow = row + dr;
                             const nkey = `${ncol},${nrow}`;
                             if (!visited.has(nkey)) {
                                 visited.add(nkey);
-                                queue.push({col: ncol, row: nrow, dist: dist + 1});
+                                queue.push({ col: ncol, row: nrow, dist: dist + 1 });
                             }
                         }
                     }
@@ -18498,7 +19572,7 @@
             }
 
             if (movedNodes.length > 0) {
-                this._recordAction({type: 'moveMultiple', nodes: movedNodes});
+                this._recordAction({ type: 'moveMultiple', nodes: movedNodes });
 
             } else {
 
@@ -18547,7 +19621,7 @@
             const utils = {
                 getControl: (res) => {
                     const match = res.match(/^\[([^:]+):\s*(.*)\]$/);
-                    return match ? {type: match[1], value: match[2]} : null;
+                    return match ? { type: match[1], value: match[2] } : null;
                 },
                 getNumber: (res) => {
                     const ctrl = utils.getControl(res);
@@ -18605,7 +19679,7 @@
             const node = this.getNode(nodeId);
             if (!node) {
                 console.error('[GalgamePlayer] 节点不存在:', nodeId);
-                this.container.innerHTML = '<div style="color:#ff6b6b;">节点不存在</div>';
+                this.container.innerHTML = '<div class="nc-color--error">节点不存在</div>';
                 return;
             }
 
@@ -18619,7 +19693,7 @@
             const chapter = chapters.find(c => c.num === node.chapterNum);
             if (!chapter) {
                 console.error('[GalgamePlayer] 章节丢失:', node.chapterNum);
-                this.container.innerHTML = '<div style="color:#ff6b6b;">章节内容丢失</div>';
+                this.container.innerHTML = '<div class="nc-color--error">章节内容丢失</div>';
                 return;
             }
 
@@ -18629,7 +19703,7 @@
             this.executeScripts(this.container);
 
             if (this.optionsContainer) {
-                this.optionsContainer.innerHTML = '<div style="color:#aaa; text-align:center;">交互区域</div>';
+                this.optionsContainer.innerHTML = '<div class="nc-color--muted-center">交互区域</div>';
             }
 
             if (this.callbacks.onNodeChange) {
@@ -18722,7 +19796,7 @@
             const chapters = Storage.loadChapters();
 
 
-            const {childrenMap, chapterMap} = buildTreeMaps(chapters);
+            const { childrenMap, chapterMap } = buildTreeMaps(chapters);
             const roots = chapters.filter(ch => ch.parent === null).sort((a, b) => a.num - b.num);
 
             const expandedSet = new Set();
@@ -18733,7 +19807,7 @@
             const flattenTree = (nodes, level) => {
                 let flat = [];
                 for (const node of nodes) {
-                    flat.push({...node, level, hasChildren: childrenMap[node.num]?.length > 0});
+                    flat.push({ ...node, level, hasChildren: childrenMap[node.num]?.length > 0 });
                     if (expandedSet.has(node.num) && childrenMap[node.num]) {
                         flat = flat.concat(flattenTree(childrenMap[node.num], level + 1));
                     }
@@ -18752,24 +19826,24 @@
 
             // 在工具栏中添加“导入备份”按钮
             const toolbarHTML = `
-        <div style="margin-bottom:15px;">
-            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:8px;">
-                <button data-action="selectBranch" class="nc-btn nc-btn-sm" style="background:linear-gradient(135deg,#667eea,#764ba2); border:none; color:white; border-radius:20px; padding:6px 16px;">🌿 全选当前分支</button>
-                <button data-action="deleteSelected" class="nc-btn nc-btn-sm" style="background:linear-gradient(135deg,#ff6b6b,#ee5a6f); border:none; color:white; border-radius:20px; padding:6px 16px;">🗑️ 删除选中</button>
-                <button data-action="exportSelected" class="nc-btn nc-btn-sm" style="background:linear-gradient(135deg,#4ecdc4,#44a3aa); border:none; color:white; border-radius:20px; padding:6px 16px;">📤 导出选中</button>
-                <button data-action="importBackup" class="nc-btn nc-btn-sm" style="background:linear-gradient(135deg,#4ecdc4,#44a3aa); border:none; color:white; border-radius:20px; padding:6px 16px;">📥 导入备份</button>
-                <button data-action="refresh" class="nc-btn nc-btn-sm" style="background:linear-gradient(135deg,#667eea,#764ba2); border:none; color:white; border-radius:20px; padding:6px 16px;">🔄 刷新</button>
-                <button data-action="close" class="nc-btn nc-btn-sm" style="background:linear-gradient(135deg,#dc3545,#c82333); border:none; color:white; border-radius:20px; padding:6px 16px;">❌ 关闭</button>
+        <div class="nc-mb15">
+            <div class="nc-flex--btn-group-center">
+                <button data-action="selectBranch" class="nc-btn nc-btn-sm nc-hist-toolbar-btn--purple">🌿 全选当前分支</button>
+                <button data-action="deleteSelected" class="nc-btn nc-btn-sm nc-hist-toolbar-btn--red">🗑️ 删除选中</button>
+                <button data-action="exportSelected" class="nc-btn nc-btn-sm nc-hist-toolbar-btn--teal">📤 导出选中</button>
+                <button data-action="importBackup" class="nc-btn nc-btn-sm nc-hist-toolbar-btn--teal">📥 导入备份</button>
+                <button data-action="refresh" class="nc-btn nc-btn-sm nc-hist-toolbar-btn--purple">🔄 刷新</button>
+                <button data-action="close" class="nc-btn nc-btn-sm nc-hist-toolbar-btn--crimson">❌ 关闭</button>
             </div>
         </div>
     `;
 
             panel.innerHTML = `
-        <div style="text-align:center;margin-bottom:20px;">
-            <h2 style="margin:0 0 6px;font-size:20px;">📚 历史章节管理</h2>
+        <div class="nc-center--mb20-c">
+            <h2 class="nc-section-title--lg-c">📚 历史章节管理</h2>
         </div>
         ${toolbarHTML}
-        <div id="nc-chapter-tree" style="height:60vh; overflow-y:auto; position:relative;"></div>
+        <div id="nc-chapter-tree" class="nc-size--chapter-tree"></div>
     `;
 
             overlay.appendChild(panel);
@@ -18836,7 +19910,7 @@
                     }
                     // =====================================
 
-                    leftSpan.innerHTML = `<span class="tree-arrow" style="color:#667eea; width:16px; display:inline-block;">${arrow}</span> ${item.sourcePath || path} ${displayTitle}`;
+                    leftSpan.innerHTML = `<span class="tree-arrow nc-tree-arrow">${arrow}</span> ${item.sourcePath || path} ${displayTitle}`;
 
                     // 新增：如果存在互动结果，添加标签
                     if (item.interactionResult) {
@@ -18876,11 +19950,11 @@
                     actionsDiv.style.display = 'flex';
                     actionsDiv.style.gap = '6px';
                     actionsDiv.innerHTML = `
-                <button data-action="view" data-chapter="${item.num}" style="background:linear-gradient(135deg,#667eea,#764ba2); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer;">查看</button>
-                <button data-action="viewStatus" data-chapter="${item.num}" style="background:linear-gradient(135deg,#4ecdc4,#44a3aa); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer;">状态</button>
-                <button data-action="rollback" data-chapter="${item.num}" style="background:linear-gradient(135deg,#f39c12,#e67e22); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer;">回滚</button>
-                <button data-action="delete" data-chapter="${item.num}" style="background:linear-gradient(135deg,#dc3545,#c82333); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer;">删除</button>
-                <button data-action="branch" data-chapter="${item.num}" style="background:linear-gradient(135deg,#8e44ad,#6c3483); border:none; color:white; border-radius:15px; padding:4px 12px; font-size:11px; cursor:pointer;">从此分支</button>
+                <button data-action="view" data-chapter="${item.num}" class="nc-hist-btn--view">查看</button>
+                <button data-action="viewStatus" data-chapter="${item.num}" class="nc-hist-btn--status">状态</button>
+                <button data-action="rollback" data-chapter="${item.num}" class="nc-hist-btn--rollback">回滚</button>
+                <button data-action="delete" data-chapter="${item.num}" class="nc-hist-btn--delete">删除</button>
+                <button data-action="branch" data-chapter="${item.num}" class="nc-hist-btn--branch">从此分支</button>
             `;
 
                     div.appendChild(checkbox);
@@ -18911,7 +19985,7 @@
 
                     switch (action) {
                         case 'view':
-                            if (chapterNum) await this.viewChapter(chapterNum, {mode: 'readonly', fromHistory: true});
+                            if (chapterNum) await this.viewChapter(chapterNum, { mode: 'readonly', fromHistory: true });
                             break;
                         case 'viewStatus':
                             if (chapterNum) await this.viewChapterStatus(chapterNum, true);
@@ -18974,7 +20048,7 @@
             try {
                 const chapters = Storage.loadChapters().filter(c => selectedNums.includes(c.num));
                 if (chapters.length === 0) {
-                    Notify.warning('没有可导出的章节', '', {timeOut: 2000});
+                    Notify.warning('没有可导出的章节', '', { timeOut: 2000 });
                     return;
                 }
 
@@ -18984,7 +20058,7 @@
                     version: CONFIG.VERSION,
                     exportTime: new Date().toISOString(),
                     totalChapters: chapters.length,
-                    data: {chapters: chapters.map(ch => ({...ch}))}
+                    data: { chapters: chapters.map(ch => ({ ...ch })) }
                 };
 
                 // 收集所有图片ID、音频ID和其余文件ID
@@ -19046,7 +20120,7 @@
                                 else if (blob.type.includes('gif')) ext = 'gif';
                                 else if (blob.type.includes('webp')) ext = 'webp';
                                 const fileName = `${id}.${ext}`;
-                                imageFolder.file(fileName, blob, {binary: true});
+                                imageFolder.file(fileName, blob, { binary: true });
                                 imageCount++;
 
                             } else {
@@ -19074,7 +20148,7 @@
                                 else if (blob.type.includes('m4a')) ext = 'm4a';
                                 else if (blob.type.includes('flac')) ext = 'flac';
                                 const fileName = `${id}.${ext}`;
-                                audioFolder.file(fileName, blob, {binary: true});
+                                audioFolder.file(fileName, blob, { binary: true });
                                 audioCount++;
 
                             } else {
@@ -19100,7 +20174,7 @@
                                 const ext = format === 'html' ? 'html' :
                                     format === 'js' ? 'js' : 'txt';
                                 const fileName = `${id}.${ext}`;
-                                otherFolder.file(fileName, item.text, {binary: false});
+                                otherFolder.file(fileName, item.text, { binary: false });
                                 otherCount++;
 
                             } else {
@@ -19115,7 +20189,7 @@
                 }
 
                 // 生成ZIP并下载
-                const blob = await zip.generateAsync({type: 'blob'});
+                const blob = await zip.generateAsync({ type: 'blob' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -19295,7 +20369,7 @@
             const chapters = Storage.loadChapters();
             const chapter = chapters.find(c => c.num === num);
             if (!chapter) {
-                Notify.info('未找到对应章节', '', {timeOut: 2000});
+                Notify.info('未找到对应章节', '', { timeOut: 2000 });
                 return;
             }
 
@@ -19325,7 +20399,7 @@
                 // 元信息行
                 let metaHtml = '';
                 if (chapter.sourcePath || chapter.interactionResult) {
-                    metaHtml = '<div style="font-size:12px; color:#aaa; margin:5px 0; text-align:center;">';
+                    metaHtml = '<div class="nc-text--meta-center">';
                     if (chapter.sourcePath) metaHtml += `来源路径：${chapter.sourcePath}`;
                     if (chapter.interactionResult) metaHtml += ` | 互动结果：${chapter.interactionResult}`;
                     metaHtml += '</div>';
@@ -19335,9 +20409,9 @@
                 let viewToggleHtml = '';
                 if (isHtml) {
                     viewToggleHtml = `
-                <div style="margin-top:10px; display:flex; gap:12px; justify-content:center;">
-                    <button id="nc-view-source" class="nc-btn nc-btn-sm" style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; border: none; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);">📄 源码</button>
-                    <button id="nc-view-preview" class="nc-btn nc-btn-sm" style="background: linear-gradient(135deg, #4ecdc4, #44a3aa); color: white; border: none; box-shadow: 0 4px 12px rgba(78, 205, 196, 0.4);">🌐 预览</button>
+                <div class="nc-flex--chapter-view-btns">
+                    <button id="nc-view-source" class="nc-btn nc-btn-sm nc-btn--grad-purple-shadow">📄 源码</button>
+                    <button id="nc-view-preview" class="nc-btn nc-btn-sm nc-btn--grad-teal-shadow">🌐 预览</button>
                 </div>
             `;
                 }
@@ -19345,31 +20419,31 @@
 
                 bodyHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;font-size:20px;">${displayTitle}</h2>
-                <p style="margin:8px 0 0;font-size:12px;color:#aaa;">${chapter.timestamp}</p>
+                <h2 class="nc-modal-title--primary-lg-c">${displayTitle}</h2>
+                <p class="nc-modal-subtitle--gray">${chapter.timestamp}</p>
                 ${metaHtml}
                 ${viewToggleHtml}
             </div>
-            <div class="nc-modal-body nc-scroll markdown-body" style="padding:12px; overflow-y:auto; max-height:60vh; position:relative;">
-                <div id="nc-chapter-content-loading" style="text-align:center; padding:20px; color:#aaa;">加载内容中...</div>
-                <div id="nc-source-container" style="display:none;"><pre id="nc-source-pre" style="background:#1e1e1e; padding:10px; border-radius:5px; font-family:monospace; font-size:12px; white-space:pre-wrap;"></pre></div>
-                <div id="nc-preview-container" style="display:none;"></div>
+            <div class="nc-modal-body nc-scroll markdown-body nc-body--chapter-view">
+                <div id="nc-chapter-content-loading" class="nc-center--pad20-muted">加载内容中...</div>
+                <div id="nc-source-container" class="nc-hidden"><pre id="nc-source-pre" class="nc-code-block--pre"></pre></div>
+                <div id="nc-preview-container" class="nc-hidden"></div>
             </div>
         `;
             } else {
                 // 编辑模式（保持不变，但增加预览按钮）
                 bodyHTML = `
             <div class="nc-modal-header">
-                <h2 style="margin:0;color:#667eea;font-size:20px;">编辑${displayTitle}</h2>
+                <h2 class="nc-modal-title--primary-lg-c">编辑${displayTitle}</h2>
             </div>
-            <div class="nc-modal-body nc-scroll" style="padding:12px;">
-                <div style="margin-bottom:12px;">
-                    <label style="display:block;margin-bottom:4px;color:#aaa;font-size:12px;">章节标题</label>
-                    <input id="nc-edit-title" type="text" style="width:100%;padding:8px;background:rgba(0,0,0,0.4);color:#eaeaea;border:1px solid #667eea;border-radius:5px;font-size:13px;" value="${chapter.title}">
+            <div class="nc-modal-body nc-scroll nc-body--pad12">
+                <div class="nc-mb12">
+                    <label class="nc-field-label--sm-c">章节标题</label>
+                    <input id="nc-edit-title" type="text" class="nc-modal-input--dark" value="${chapter.title}">
                 </div>
                 <div>
-                    <label style="display:block;margin-bottom:4px;color:#aaa;font-size:12px;">章节内容</label>
-                    <textarea id="nc-edit-content" style="width:100%;min-height:250px;padding:10px;background:rgba(0,0,0,0.4);color:#eaeaea;border:1px solid #667eea;border-radius:5px;font-family:Consolas,monospace;font-size:12px;line-height:1.5;">${this._extractPureContent(chapter)}</textarea>
+                    <label class="nc-field-label--sm-c">章节内容</label>
+                    <textarea id="nc-edit-content" class="nc-modal-textarea--chapter">${this._extractPureContent(chapter)}</textarea>
                 </div>
             </div>
         `;
@@ -19382,7 +20456,7 @@
                     ? `<button class="nc-modal-copy-btn">复制内容</button><button class="nc-modal-close-btn">关闭</button>`
                     : `<button class="nc-modal-copy-btn">复制内容</button><button id="nc-switch-mode" class="nc-btn nc-btn-primary">修改</button><button class="nc-modal-close-btn">关闭</button>`;
                 if (isHtml) {
-                    footerButtons += `<button id="nc-preview-refresh" class="nc-btn nc-btn-xs" style="display:none;">刷新预览</button>`;
+                    footerButtons += `<button id="nc-preview-refresh" class="nc-btn nc-btn-xs nc-hidden">刷新预览</button>`;
                 }
             } else {
                 footerButtons = `<button id="nc-edit-save" class="nc-modal-copy-btn">保存修改</button><button id="nc-copy-content" class="nc-modal-copy-btn">复制内容</button><button id="nc-switch-mode" class="nc-btn nc-btn-primary">查看</button><button class="nc-modal-close-btn">关闭</button>`;
@@ -19472,7 +20546,7 @@
 
                     try {
                         await navigator.clipboard.writeText(chapter.content);
-                        Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
+                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
                     } catch (err) {
                         // 降级方案
                         const textarea = document.createElement('textarea');
@@ -19483,7 +20557,7 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', {timeOut: 2000});
+                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
                     }
                 });
 
@@ -19498,7 +20572,7 @@
 
                         UI._closeModal(overlay);
                         const newMode = mode === 'readonly' ? 'edit' : 'readonly';
-                        this.viewChapter(num, {mode: newMode, fromHistory});
+                        this.viewChapter(num, { mode: newMode, fromHistory });
                     });
                 }
 
@@ -19533,7 +20607,7 @@
                     const newTitle = editTitle.value.trim();
                     const newContent = editContent.value;
                     if (!newTitle) {
-                        Notify.warning('请输入章节标题', '', {timeOut: 2000});
+                        Notify.warning('请输入章节标题', '', { timeOut: 2000 });
                         return;
                     }
 
@@ -19568,7 +20642,7 @@
                     };
                     chapters.sort((a, b) => a.num - b.num);
 
-                    if (Storage.save({chapters})) {
+                    if (Storage.save({ chapters })) {
                         // 收集新内容中的图片ID
                         const newImageIds = [];
                         const newImageRegex = /!\[.*?\]\(id:(img_[^)]+)\)|src="id:(img_[^"]+)"/g;
@@ -19587,7 +20661,7 @@
                             }
                         }
 
-                        Notify.success(`第${chapter.num}章已更新`, '', {timeOut: 2000});
+                        Notify.success(`第${chapter.num}章已更新`, '', { timeOut: 2000 });
                         if (document.getElementById(CONFIG.UI.panelId)) {
                             UI.createPanel();
                         }
@@ -19606,7 +20680,7 @@
                     const textToCopy = `# ${editTitle.value}\n\n${editContent.value}`;
                     try {
                         await navigator.clipboard.writeText(textToCopy);
-                        Notify.success('内容已复制到剪贴板', '', {timeOut: 2000});
+                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
                     } catch (err) {
                         // 降级
                         const textarea = document.createElement('textarea');
@@ -19617,7 +20691,7 @@
                         textarea.select();
                         document.execCommand('copy');
                         document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', {timeOut: 2000});
+                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
                     }
                 });
 
@@ -19625,7 +20699,7 @@
                 switchBtn.addEventListener('click', () => {
 
                     UI._closeModal(overlay);
-                    this.viewChapter(num, {mode: 'readonly', fromHistory});
+                    this.viewChapter(num, { mode: 'readonly', fromHistory });
                 });
 
                 // 关闭
@@ -19671,16 +20745,16 @@
 
             modal.innerHTML = `
         <div class="nc-modal-header">
-            <h2 style="margin:0;color:#667eea;font-size:20px;">${isNew ? '新建第一章' : `编辑第${chapter.num}章`}</h2>
+            <h2 class="nc-modal-title--primary-lg-c">${isNew ? '新建第一章' : `编辑第${chapter.num}章`}</h2>
         </div>
-        <div class="nc-modal-body nc-scroll" style="padding:12px;">
-            <div style="margin-bottom:12px;">
-                <label style="display:block;margin-bottom:4px;color:#aaa;font-size:12px;">章节标题</label>
-                <input id="nc-edit-title" type="text" style="width:100%;padding:8px;background:rgba(0,0,0,0.4);color:#eaeaea;border:1px solid #667eea;border-radius:5px;font-size:13px;" value="${chapter.title}">
+        <div class="nc-modal-body nc-scroll nc-body--pad12">
+            <div class="nc-mb12">
+                <label class="nc-field-label--sm-c">章节标题</label>
+                <input id="nc-edit-title" type="text" class="nc-modal-input--dark" value="${chapter.title}">
             </div>
             <div>
-                <label style="display:block;margin-bottom:4px;color:#aaa;font-size:12px;">章节内容</label>
-                <textarea id="nc-edit-content" style="width:100%;min-height:250px;padding:10px;background:rgba(0,0,0,0.4);color:#eaeaea;border:1px solid #667eea;border-radius:5px;font-family:Consolas,monospace;font-size:12px;line-height:1.5;">${this._extractPureContent(chapter)}</textarea>
+                <label class="nc-field-label--sm-c">章节内容</label>
+                <textarea id="nc-edit-content" class="nc-modal-textarea--chapter">${this._extractPureContent(chapter)}</textarea>
             </div>
         </div>
         <div class="nc-modal-footer">
@@ -19722,7 +20796,7 @@
                 const newTitle = titleInput.value.trim();
                 const newContent = contentInput.value;
                 if (!newTitle) {
-                    Notify.warning('请输入章节标题', '', {timeOut: 2000});
+                    Notify.warning('请输入章节标题', '', { timeOut: 2000 });
                     return;
                 }
 
@@ -19754,7 +20828,7 @@
                     };
                     const success = Storage.saveChapter(newChapter, newChapter.num, snapshot);
                     if (success) {
-                        Notify.success(`第${newChapter.num}章已保存，并附带状态快照`, '', {timeOut: 2000});
+                        Notify.success(`第${newChapter.num}章已保存，并附带状态快照`, '', { timeOut: 2000 });
                         if (document.getElementById(CONFIG.UI.panelId)) {
                             UI.createPanel();
                         }
@@ -19784,8 +20858,8 @@
                         snapshot: snapshot
                     };
                     chapters.sort((a, b) => a.num - b.num);
-                    if (Storage.save({chapters})) {
-                        Notify.success(`第${chapter.num}章已更新`, '', {timeOut: 2000});
+                    if (Storage.save({ chapters })) {
+                        Notify.success(`第${chapter.num}章已更新`, '', { timeOut: 2000 });
                         if (document.getElementById(CONFIG.UI.panelId)) {
                             UI.createPanel();
                         }
@@ -19816,7 +20890,7 @@
             const chapter = chapters.find(c => c.num === num);
             if (!chapter) {
 
-                Notify.info('未找到对应章节', '', {timeOut: 2000});
+                Notify.info('未找到对应章节', '', { timeOut: 2000 });
                 return;
             }
 
@@ -19824,7 +20898,7 @@
 
             if (!chapter.snapshot || snapshotCount === 0) {
 
-                Notify.info('该章节没有状态快照', '', {timeOut: 2000});
+                Notify.info('该章节没有状态快照', '', { timeOut: 2000 });
                 return;
             }
 
@@ -19886,7 +20960,7 @@
                 await AudioStore.clear();
                 // ===== 结束 =====
 
-                Notify.success('历史章节已清空，状态书已清空', '', {timeOut: 2000});
+                Notify.success('历史章节已清空，状态书已清空', '', { timeOut: 2000 });
                 if (document.getElementById(CONFIG.UI.panelId)) {
                     UI.createPanel();
                 }
@@ -20120,7 +21194,7 @@
                                             continue;
                                         }
                                     }
-                                    await API.updateWorldbook(bookName, () => bookData.entries, {render: 'immediate'});
+                                    await API.updateWorldbook(bookName, () => bookData.entries, { render: 'immediate' });
 
                                     UI.updateProgress(`  ✓ 已恢复世界书 ${bookName}`);
                                 } catch (err) {
@@ -20174,7 +21248,7 @@
                             }
 
                             UI.updateProgress('✅ ZIP 导入完成！');
-                            Notify.success('完整备份导入成功', '', {timeOut: 2000});
+                            Notify.success('完整备份导入成功', '', { timeOut: 2000 });
 
                         } else {
                             // ========== 旧版 JSON 导入（仅章节） ==========
@@ -20206,7 +21280,7 @@
 
                                     const ok = await Snapshot.restore(last.snapshot);
                                     UI.updateProgress(ok ? '✓ 状态书状态已恢复' : '❌ 状态书状态恢复失败', !ok);
-                                    if (!ok) Notify.warning('状态书状态恢复失败，但章节数据已导入', '', {timeOut: 2000});
+                                    if (!ok) Notify.warning('状态书状态恢复失败，但章节数据已导入', '', { timeOut: 2000 });
                                 } else {
                                     UI.updateProgress('导入章节无快照，清空状态书...');
 
@@ -20218,7 +21292,7 @@
                                 await resetWorldStateToInitial();
                             }
 
-                            Notify.success('备份导入成功', '', {timeOut: 2000});
+                            Notify.success('备份导入成功', '', { timeOut: 2000 });
                         }
 
                         // 刷新界面
@@ -20273,7 +21347,7 @@
 
 
             if (chapters.length === 0) {
-                Notify.info('暂无历史章节', '', {timeOut: 2000});
+                Notify.info('暂无历史章节', '', { timeOut: 2000 });
                 console.warn('[HistorySelection] 无章节，退出');
                 return;
             }
@@ -20298,11 +21372,11 @@
                 }
                 // ================================
                 return `
-            <div class="nc-chapter-item" data-num="${ch.num}" style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; cursor: pointer;">
-                <input type="checkbox" class="chapter-select-checkbox" value="${ch.num}" data-has-snapshot="${hasSnap}" style="width: 16px; height: 16px; cursor: pointer;">
-                <div style="flex:1;">
-                    <div style="font-weight:600;">${displayTitle}</div>
-                    <div style="font-size:11px;opacity:.6;color:#aaa;">
+            <div class="nc-chapter-item nc-flex--chapter-row" data-num="${ch.num}">
+                <input type="checkbox" class="chapter-select-checkbox nc-checkbox--base" value="${ch.num}" data-has-snapshot="${hasSnap}">
+                <div class="nc-flex-item--grow">
+                    <div class="nc-text--bold">${displayTitle}</div>
+                    <div class="nc-text--xs-faded-c">
                         ${ch.timestamp} · ${(ch.size / 1024).toFixed(2)} KB · ${hasSnap ? '📸' : '⚠️'}
                     </div>
                 </div>
@@ -20312,16 +21386,16 @@
 
             modal.innerHTML = `
         <div class="nc-modal-header">
-            <h2 style="margin:0;color:#667eea;">选择章节</h2>
+            <h2 class="nc-modal-title--primary-c">选择章节</h2>
         </div>
-        <div class="nc-modal-body nc-scroll" style="max-height:50vh;">
+        <div class="nc-modal-body nc-scroll nc-size--max50vh">
             ${chaptersHTML}
         </div>
-        <div class="nc-modal-footer" style="display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
-            <button id="nc-select-all" class="nc-btn nc-btn-sm" style="background:linear-gradient(135deg,#667eea,#764ba2); border:none; color:white; border-radius:20px; padding:6px 16px;">✅ 全选</button>
-            <button id="nc-select-invert" class="nc-btn nc-btn-sm" style="background:linear-gradient(135deg,#4ecdc4,#44a3aa); border:none; color:white; border-radius:20px; padding:6px 16px;">🔄 反选</button>
-            <button id="nc-select-submit" class="nc-btn nc-btn-sm nc-btn-primary" style="background:linear-gradient(135deg,#667eea,#764ba2); border:none; color:white; border-radius:20px; padding:6px 16px;">提交</button>
-            <button id="nc-select-cancel" class="nc-btn nc-btn-sm nc-btn-ghost" style="background:linear-gradient(135deg,#dc3545,#c82333); border:none; color:white; border-radius:20px; padding:6px 16px;">取消</button>
+        <div class="nc-modal-footer nc-flex--footer-8-wrap">
+            <button id="nc-select-all" class="nc-btn nc-btn-sm nc-hist-toolbar-btn--purple">✅ 全选</button>
+            <button id="nc-select-invert" class="nc-btn nc-btn-sm nc-hist-toolbar-btn--teal">🔄 反选</button>
+            <button id="nc-select-submit" class="nc-btn nc-btn-sm nc-btn-primary nc-hist-toolbar-btn--purple">提交</button>
+            <button id="nc-select-cancel" class="nc-btn nc-btn-sm nc-btn-ghost nc-hist-toolbar-btn--crimson">取消</button>
         </div>
     `;
 
@@ -20344,7 +21418,7 @@
                     if (checkbox) {
                         checkbox.checked = !checkbox.checked;
 
-                        const changeEvent = new Event('change', {bubbles: true});
+                        const changeEvent = new Event('change', { bubbles: true });
                         checkbox.dispatchEvent(changeEvent);
                     }
                 });
@@ -20408,7 +21482,7 @@
 
             if (books.length === 0) {
 
-                Notify.info('没有状态书', '', {timeOut: 2000});
+                Notify.info('没有状态书', '', { timeOut: 2000 });
                 return;
             }
 
@@ -20422,7 +21496,7 @@
         async openStateEditor(chapterNum, initialBookName = null, stayOpenAfterSave = false, readonly = false) {
             const books = await getAllStateBooks();
             if (books.length === 0) {
-                Notify.info('没有状态书', '', {timeOut: 2000});
+                Notify.info('没有状态书', '', { timeOut: 2000 });
                 return;
             }
             // 确保模板已加载
@@ -20485,11 +21559,11 @@
             // 如果没有书籍，则关闭模态框并提示
             if (!books || books.length === 0) {
                 console.warn('[HistoryUI._openStateEditorModal] 没有可用的状态书，关闭编辑器');
-                Notify.info('没有可用的状态书', '', {timeOut: 2000});
+                Notify.info('没有可用的状态书', '', { timeOut: 2000 });
                 return;
             }
 
-            let selectHTML = '<select id="nc-edit-book-select" style="margin-left:10px; padding:4px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:4px;">';
+            let selectHTML = '<select id="nc-edit-book-select" class="nc-modal-select--book">';
             books.forEach(book => {
                 const selected = (book === initialBookName) ? 'selected' : '';
                 selectHTML += `<option value="${book}" ${selected}>${book}</option>`;
@@ -20523,11 +21597,11 @@
             }
 
             modal.innerHTML = `
-    <div class="nc-modal-header" style="display: flex; align-items: center; justify-content: space-between;">
-        <h2 style="margin:0; color:#667eea; font-size:20px;">${readonly ? '查看' : '编辑'}状态书 ${chapterNum ? '- 第' + chapterNum + '章' : ''}</h2>
+    <div class="nc-modal-header nc-flex--modal-header">
+        <h2 class="nc-modal-title--primary-lg">${readonly ? '查看' : '编辑'}状态书 ${chapterNum ? '- 第' + chapterNum + '章' : ''}</h2>
         ${selectHTML}
     </div>
-    <div id="nc-edit-state-body" class="nc-modal-body nc-scroll" style="max-height:55vh;"></div>
+    <div id="nc-edit-state-body" class="nc-modal-body nc-scroll nc-size--max55vh"></div>
     ${footerHTML}
 `;
 
@@ -20560,7 +21634,7 @@
                         const catId = match[1];
                         const catName = match[2].trim();
                         const definition = match[3].trim();
-                        map[catId] = {name: catName, definition};
+                        map[catId] = { name: catName, definition };
                         count++;
                     }
                     // 输出最终映射的键，便于确认
@@ -20572,7 +21646,7 @@
             // --- 结束辅助函数 ---
 
             const loadBookForEdit = async (bookName) => {
-                body.innerHTML = '<div style="text-align:center;padding:20px;">加载中...</div>';
+                body.innerHTML = '<div class="nc-center--pad20-c">加载中...</div>';
                 const fieldInputs = [];
                 const fallbackInputs = [];
 
@@ -20593,7 +21667,7 @@
                     const states = entries.filter(e => e?.name?.startsWith(CONFIG.STATE_ENTRY_PREFIX));
 
                     if (states.length === 0) {
-                        body.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;">该状态书没有状态条目</div>';
+                        body.innerHTML = '<div class="nc-center--pad20-muted-c">该状态书没有状态条目</div>';
                         return;
                     }
 
@@ -20800,7 +21874,7 @@
                     currentFallbackInputs = fallbackInputs;
 
                 } catch (e) {
-                    body.innerHTML = `<div style="color:#ff6b6b;padding:20px;">加载失败: ${e.message}</div>`;
+                    body.innerHTML = `<div class="nc-color--error-padded2">加载失败: ${e.message}</div>`;
                     console.error(`[HistoryUI._openStateEditorModal] 加载状态书失败:`, e);
                 }
             };
@@ -20809,7 +21883,7 @@
                 await loadBookForEdit(initialBookName);
             } else {
                 console.warn('[HistoryUI._openStateEditorModal] initialBookName 无效，无法加载');
-                body.innerHTML = '<div style="text-align:center;padding:20px;color:#aaa;">无可用的状态书</div>';
+                body.innerHTML = '<div class="nc-center--pad20-muted-c">无可用的状态书</div>';
             }
 
             select.addEventListener('change', async (e) => {
@@ -20835,7 +21909,7 @@
                         const bookName = item.bookName || currentBook;
                         if (!updatesByBook[bookName]) updatesByBook[bookName] = {};
                         if (!updatesByBook[bookName][item.stateName]) {
-                            updatesByBook[bookName][item.stateName] = {type: 'structured', fields: []};
+                            updatesByBook[bookName][item.stateName] = { type: 'structured', fields: [] };
                         }
                         updatesByBook[bookName][item.stateName].fields.push({
                             node: item.node,
@@ -20846,7 +21920,7 @@
                     currentFallbackInputs.forEach(item => {
                         const bookName = item.bookName || currentBook;
                         if (!updatesByBook[bookName]) updatesByBook[bookName] = {};
-                        updatesByBook[bookName][item.stateName] = {type: 'fallback', content: item.textarea.value};
+                        updatesByBook[bookName][item.stateName] = { type: 'fallback', content: item.textarea.value };
                     });
 
                     for (const [bookName, stateUpdates] of Object.entries(updatesByBook)) {
@@ -20868,7 +21942,7 @@
                                 const catId = update.fields[0]?.catId;
                                 const templateDef = catId ? templateMap[catId]?.definition : null;
                                 if (!templateDef) {
-                                    Notify.warning(`无法重组 ${stateName}：缺少模板定义`, '', {timeOut: 2000});
+                                    Notify.warning(`无法重组 ${stateName}：缺少模板定义`, '', { timeOut: 2000 });
                                     continue;
                                 }
                                 const tree = this._parseStateDefinition(templateDef);
@@ -20897,7 +21971,7 @@
                         }
 
                         // 保存到实时世界书
-                        await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                        await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                         UI.updateProgress(`✓ 已更新 ${bookName}`);
                     }
 
@@ -20907,12 +21981,12 @@
                         const chapter = chapters.find(c => c.num === chapterNum);
                         if (chapter) {
                             chapter.snapshot = await Snapshot.create();
-                            Storage.save({chapters});
+                            Storage.save({ chapters });
                             UI.updateProgress(`✓ 已更新第${chapterNum}章的快照`);
                         }
                     }
 
-                    Notify.success('状态修改已保存', '', {timeOut: 2000});
+                    Notify.success('状态修改已保存', '', { timeOut: 2000 });
 
                     if (stayOpen) {
                         // 重新加载当前书
@@ -20939,13 +22013,13 @@
                         const stateGroups = {};
                         currentFieldInputs.forEach(item => {
                             if (!stateGroups[item.stateName]) {
-                                stateGroups[item.stateName] = {fields: [], fallback: null};
+                                stateGroups[item.stateName] = { fields: [], fallback: null };
                             }
                             stateGroups[item.stateName].fields.push(item);
                         });
                         currentFallbackInputs.forEach(item => {
                             if (!stateGroups[item.stateName]) {
-                                stateGroups[item.stateName] = {fields: [], fallback: item};
+                                stateGroups[item.stateName] = { fields: [], fallback: item };
                             } else {
                                 stateGroups[item.stateName].fallback = item;
                             }
@@ -20994,7 +22068,7 @@
 
                         const fullText = texts.join('\n\n');
                         await navigator.clipboard.writeText(fullText);
-                        Notify.success('状态内容已复制到剪贴板', '', {timeOut: 2000});
+                        Notify.success('状态内容已复制到剪贴板', '', { timeOut: 2000 });
                     } catch (err) {
                         Notify.error('复制失败: ' + err.message);
                     }
@@ -21054,7 +22128,7 @@
             // ===== 结束新增 =====
 
             // 保存剩余章节
-            Storage.save({chapters: remainingChapters});
+            Storage.save({ chapters: remainingChapters });
 
         },
 
@@ -21329,7 +22403,7 @@
             if (missingRequired.length > 0) {
                 const missingNames = missingRequired.map(k => CONFIG.AGENTS[k]?.name || k).join(', ');
                 Notify.error(`配置缺少以下必选Agent:\n${missingNames}`, '配置错误');
-                return {success: false, error: '缺少必选Agent'};
+                return { success: false, error: '缺少必选Agent' };
             }
 
             WORKFLOW_STATE.enabledAgents = calculatedAgents;
@@ -21416,12 +22490,12 @@
 
         async startDatafication(chapters) {
             if (!chapters || chapters.length === 0) {
-                Notify.warning('没有选中任何章节，请先选择要数据化的章节', '', {timeOut: 2000});
+                Notify.warning('没有选中任何章节，请先选择要数据化的章节', '', { timeOut: 2000 });
                 return;
             }
 
             if (WORKFLOW_STATE.isRunning) {
-                Notify.warning('已有工作流正在运行，请先停止', '', {timeOut: 2000});
+                Notify.warning('已有工作流正在运行，请先停止', '', { timeOut: 2000 });
                 return;
             }
 
@@ -21527,7 +22601,7 @@
                 UI.updateAllAgentStatusButtons();
                 UI.updateFloatButtonText();
                 UI.updateWorkflowViz();  // 刷新工作流预览，隐藏数据化横幅
-                Notify.success('数据化处理结束', '', {timeOut: 2000});
+                Notify.success('数据化处理结束', '', { timeOut: 2000 });
             }
         },
 
@@ -21707,7 +22781,7 @@
          * @returns {Promise<void>}
          */
         async _executeAgentByRole(agentKey, isReflow, options = {}) {
-            const {userInput = '', isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { userInput = '', isParallel = false, parallelBeforeSnapshot = null } = options;
             const agent = CONFIG.AGENTS[agentKey];
             if (!agent) return;
 
@@ -21726,13 +22800,13 @@
                     });
                     break;
                 case 'imageVariator':
-                    await this._executeImageVariator(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeImageVariator(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'imageLibrarian':
-                    await this._executeImageLibrarian(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeImageLibrarian(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'typesetter':
-                    await this._executeTypesetter(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeTypesetter(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
 
                 // 状态管理（优化师、维护师暂不支持回流和并行参数）
@@ -21745,21 +22819,21 @@
 
                 // 音频相关
                 case 'musicGenerator':
-                    await this._executeMusicGenerator(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeMusicGenerator(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'voiceCloner':
-                    await this._executeVoiceCloner(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeVoiceCloner(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'audioEditor':
-                    await this._executeAudioEditor(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeAudioEditor(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
                 case 'audioLibrarian':
-                    await this._executeAudioLibrarian(agentKey, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeAudioLibrarian(agentKey, isReflow, { isParallel, parallelBeforeSnapshot });
                     break;
 
                 // 默认通用 Agent
                 default:
-                    await this._executeAgent(agentKey, userInput, isReflow, {isParallel, parallelBeforeSnapshot});
+                    await this._executeAgent(agentKey, userInput, isReflow, { isParallel, parallelBeforeSnapshot });
             }
         },
 
@@ -21811,7 +22885,7 @@
             } else {
                 console.error(`[DEBUG][_executeDataficationChapter] 未找到 finalChapter 角色，数据化可能失败`);
                 UI.updateProgress(`❌ 未找到最终章节师角色，无法继续`, true);
-                return {success: false};
+                return { success: false };
             }
 
             const preSnapshot = await Snapshot.create();
@@ -21840,7 +22914,7 @@
                         );
                         for (const agentKey of sorted) {
                             // ===== 替换点：串行阶段调用公共函数 =====
-                            await this._executeAgentByRole(agentKey, false, {userInput, isParallel: false});
+                            await this._executeAgentByRole(agentKey, false, { userInput, isParallel: false });
                         }
                     } else {
                         // 并行阶段：需要处理 before 快照
@@ -21918,7 +22992,7 @@
 
                 const snapshot = await Snapshot.create();
                 const title = chapter.title || `第${chapter.num}章`;
-                const saveSuccess = Storage.saveChapter({title, content: finalContent}, chapter.num, snapshot);
+                const saveSuccess = Storage.saveChapter({ title, content: finalContent }, chapter.num, snapshot);
                 if (saveSuccess) {
                     UI.updateProgress(`📚 第${chapter.num}章已保存`);
                     UI.updateCurrentChapterNum();
@@ -21935,7 +23009,7 @@
                     }
                 }
 
-                return {success: true};
+                return { success: true };
 
             } catch (error) {
                 if (error.name === 'AbortChapterError') {
@@ -21948,7 +23022,7 @@
                     WORKFLOW_STATE.discarded = true;
                 }
 
-                return {success: false};
+                return { success: false };
             }
         },
 
@@ -22070,7 +23144,7 @@
                 } while (WORKFLOW_STATE.autoMode && !WORKFLOW_STATE.shouldStop);
 
                 if (!interrupted) {
-                    Notify.success('工作流已停止', '', {timeOut: 2000});
+                    Notify.success('工作流已停止', '', { timeOut: 2000 });
                 }
 
             } catch (e) {
@@ -22078,7 +23152,7 @@
                 if (e.name === 'UserInterruptError') {
                     interrupted = true;
                     UI.updateProgress('⏸️ 用户中断');
-                    Notify.warning('工作流已中断', '', {timeOut: 2000});
+                    Notify.warning('工作流已中断', '', { timeOut: 2000 });
                 } else {
                     agentError = e;
                     let errorMsg = e.message;
@@ -22154,7 +23228,7 @@
                     const catId = match[1];
                     const catName = match[2].trim();
                     const definition = match[3].trim(); // 字段列表部分（不含类别标题行）
-                    categoryMap.set(catId, {catName, definition});
+                    categoryMap.set(catId, { catName, definition });
 
                 }
 
@@ -22165,7 +23239,7 @@
 
                 // 3. 遍历每个类别，查找对应的状态条目
                 const categoriesOutput = [];
-                for (const [catId, {catName, definition}] of categoryMap.entries()) {
+                for (const [catId, { catName, definition }] of categoryMap.entries()) {
                     // 构造状态条目名称格式：状态-书号-类别编号-类别名
                     const expectedStateEntryName = `状态-${bookIndex}-${catId.padStart(2, '0')}-${catName}`;
 
@@ -22180,7 +23254,7 @@
                     }
 
                     // 提取状态条目的属性（排除 content 和 name）
-                    const entryCopy = {...stateEntry};
+                    const entryCopy = { ...stateEntry };
                     delete entryCopy.content;
                     delete entryCopy.name;
                     // 将属性对象转换为扁平化的键值对数组
@@ -22297,7 +23371,7 @@
         // ==================== 修改后的 _executeAgent 函数 ====================
 
         async _executeAgent(agentKey, initialUserInput, isReflow = false, options = {}) {
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
 
             if (WORKFLOW_STATE.discarded) {
@@ -22366,7 +23440,7 @@
                             // 非 user 源，直接获取现有内容（不触发用户输入）
                             content = await this._collectInputSourceWithoutWait(agentKey, i, isReflow, options);
                         }
-                        inputContents.push({index: i, src, content});
+                        inputContents.push({ index: i, src, content });
 
                     }
 
@@ -22397,7 +23471,7 @@
 
                     // ===== 新增：用户交互完成提示 =====
                     UI.updateProgress(`✓ 用户交互完成，选择: ${userChoice}`);
-                    Notify.success('交互已响应', '', {timeOut: 2000});
+                    Notify.success('交互已响应', '', { timeOut: 2000 });
 
                     // ===== 新增：唯一性检查 =====
                     if (WORKFLOW_STATE.enforceUniqueBranches && WORKFLOW_STATE.currentParentNum) {
@@ -22522,7 +23596,7 @@
                     AgentStateManager.setState(agentKey, 'completed');
 
                     if (!isParallel) {
-                        WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                        WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                     }
 
                     // 检查回流条件
@@ -22632,7 +23706,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 if (agent.reflowConditions && agent.reflowConditions.length > 0) {
@@ -22669,7 +23743,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`✗ Agent ${getAgentDisplayName(agentKey)} 执行出错，已保存最佳内容作为废章`, true);
                 }
                 throw enhancedError;
@@ -22859,7 +23933,7 @@
                 for (const target of uniqueTargets) {
                     // 初始化 reflowMap[target]
                     if (!WORKFLOW_STATE.reflowMap[target]) {
-                        WORKFLOW_STATE.reflowMap[target] = {sources: [], outputs: {}, previousOutput: undefined};
+                        WORKFLOW_STATE.reflowMap[target] = { sources: [], outputs: {}, previousOutput: undefined };
                     }
 
                     // 保存目标当前的输出（剔除图片）作为“上次输出”
@@ -22909,7 +23983,7 @@
                         if (bestContent) {
                             const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                             const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                            WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                            WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                         }
                         UI.updateProgress(`⚠️ 目标 ${target} 被同一源 ${sourceKey} 连续回流达到 ${CONFIG.MAX_CONSECUTIVE_REFLOWS} 次，本章标记为废章，立即终止`, true);
                         throw new AbortChapterError(`目标 ${target} 被同一源 ${sourceKey} 连续回流达到 ${CONFIG.MAX_CONSECUTIVE_REFLOWS} 次`);
@@ -23085,7 +24159,7 @@
                         );
                         for (const agentKey of sorted) {
                             console.time(`Agent ${agentKey}`);
-                            await this._executeAgentByRole(agentKey, false, {userInput, isParallel: false});
+                            await this._executeAgentByRole(agentKey, false, { userInput, isParallel: false });
                             console.timeEnd(`Agent ${agentKey}`);
 
                             if (WORKFLOW_STATE.shouldStop) {
@@ -23232,7 +24306,7 @@
                     UI.updateProgress('→ 保存章节...');
                     const snapshot = await Snapshot.create();
 
-                    const chapterData = {title, content: cleanContent};
+                    const chapterData = { title, content: cleanContent };
 
                     // 判断是否为互动章节
                     const hasInteractive = agents.includes(interactiveAgentKey);
@@ -23287,23 +24361,23 @@
 
                 if (aborted) {
 
-                    return {success: false, aborted: true};
+                    return { success: false, aborted: true };
                 }
 
                 console.timeEnd('executeWorkflow 总耗时');
-                return {success: true};
+                return { success: true };
 
             } catch (error) {
                 console.error('[DEBUG][executeWorkflow] 捕获到异常:', error);
                 console.timeEnd('executeWorkflow 总耗时');
                 if (error.name === 'ExistingBranchError') {
                     WORKFLOW_STATE.discarded = true;
-                    return {success: false, aborted: false, branchConflict: true};
+                    return { success: false, aborted: false, branchConflict: true };
                 } else if (error.name === 'AbortChapterError') {
                     aborted = true;
                     WORKFLOW_STATE.discarded = true;
                     UI.updateProgress('⚠️ 因连续回流超限，本章强制终止并回滚', true);
-                    return {success: false, aborted: true};
+                    return { success: false, aborted: true };
                 } else if (error.name === 'UserInterruptError') {
                     throw error;
                 } else {
@@ -23376,7 +24450,7 @@
                 }
 
                 const config = CONFIG.apiConfigs[apiConfigId];
-                const {source, apiUrl, key, model, timeout = 3600000} = config;
+                const { source, apiUrl, key, model, timeout = 3600000 } = config;
                 const url = apiUrl.replace(/\/+$/, '');
 
                 // 构建组合信号（用于中断）
@@ -23393,7 +24467,7 @@
                     if (['openai', 'deepseek', 'siliconflow', 'qwen', 'glm', 'mistral', 'groq', 'inference', 'openrouter', '4sapi', 'other'].includes(source)) {
                         const requestBody = {
                             model: model,
-                            messages: [{role: 'user', content: cleanMessage}],
+                            messages: [{ role: 'user', content: cleanMessage }],
                             max_tokens: config.maxTokens,
                             temperature: config.temperature,
                             top_p: config.top_p,
@@ -23433,7 +24507,7 @@
                         const data = await response.json();
                         console.log(`[callAgent][${agentKey}] 响应数据 (简化):`, {
                             choices: data.choices ? data.choices.map(c => ({
-                                message: c.message ? {content_length: c.message.content?.length} : {},
+                                message: c.message ? { content_length: c.message.content?.length } : {},
                                 text_length: c.text?.length
                             })) : '无choices'
                         });
@@ -23515,14 +24589,14 @@
                     else if (source === 'claude') {
                         const requestBody = {
                             model: model,
-                            messages: [{role: 'user', content: cleanMessage}],
+                            messages: [{ role: 'user', content: cleanMessage }],
                             max_tokens: config.maxTokens,
                             temperature: config.temperature,
                             top_p: config.top_p,
                             stop_sequences: config.stop ? (Array.isArray(config.stop) ? config.stop : [config.stop]) : undefined,
                         };
                         if (fileIds.length > 0) {
-                            requestBody.files = fileIds.map(id => ({type: 'file', file_id: id}));
+                            requestBody.files = fileIds.map(id => ({ type: 'file', file_id: id }));
                         }
                         Object.keys(requestBody).forEach(k => requestBody[k] === undefined && delete requestBody[k]);
 
@@ -23600,11 +24674,11 @@
 
 
                         const requestBody = {
-                            messages: [{role: 'user', content: cleanMessage}],
+                            messages: [{ role: 'user', content: cleanMessage }],
                             stream: false,
-                            ...(config.maxTokens && {max_tokens: config.maxTokens}),
-                            ...(config.temperature && {temperature: config.temperature}),
-                            ...(config.top_p && {top_p: config.top_p}),
+                            ...(config.maxTokens && { max_tokens: config.maxTokens }),
+                            ...(config.temperature && { temperature: config.temperature }),
+                            ...(config.top_p && { top_p: config.top_p }),
                         };
 
 
@@ -23670,7 +24744,7 @@
                         message: msg,
                         stack: error.stack,
                         timestamp: Date.now(),
-                        apiConfig: config ? {source, model, timeout} : null,
+                        apiConfig: config ? { source, model, timeout } : null,
                         prompt: message.substring(0, 500)
                     };
                     // 显示友好错误信息到进度区域
@@ -23859,7 +24933,7 @@
 
             if (!headerMatch) {
 
-                return {success: false, error: '未找到协议头部'};
+                return { success: false, error: '未找到协议头部' };
             }
 
             const chapterNum = WORKFLOW_STATE.currentChapter; // 使用当前章节号，不从头部提取
@@ -23875,16 +24949,16 @@
                 const catName = catMatch[2].trim();
                 const fieldsContent = catMatch[3].trim();
 
-                data[catId] = {name: catName, content: fieldsContent};
+                data[catId] = { name: catName, content: fieldsContent };
             }
 
             if (Object.keys(data).length === 0) {
 
-                return {success: false, error: '协议中未找到任何类别定义'};
+                return { success: false, error: '协议中未找到任何类别定义' };
             }
 
 
-            return {success: true, chapterNum, data};
+            return { success: true, chapterNum, data };
         },
 
         // ==================== 优化师专用执行函数 ====================
@@ -24065,7 +25139,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress('⚠️ 无状态书，本章标记为废章，将回滚状态书...', true);
                 }
                 throw new AbortChapterError('无可用状态书，更新失败');
@@ -24134,7 +25208,7 @@
                 const parseResult = this.parseProtocol(protocol);
                 if (parseResult.success) {
                     try {
-                        const {successIds, errorIds} = await updateWorldState(bookName, parseResult.data);
+                        const { successIds, errorIds } = await updateWorldState(bookName, parseResult.data);
                         if (successIds.length) {
                             UI.updateProgress(`    ✅ 更新成功: ${successIds.join(', ')} (共 ${successIds.length} 个类别)`);
                         }
@@ -24160,7 +25234,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress('⚠️ 部分状态更新失败，本章标记为废章，将回滚状态书...', true);
                 }
                 AgentStateManager.setState(agentKey, 'error');
@@ -24175,7 +25249,7 @@
 
         async _executeImageGenerator(agentKey, initialUserInput = '', isReflow = false, options = {}) {
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[IMAGE DEBUG] 本章已被标记为废章，终止执行`);
@@ -24394,7 +25468,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 UI.updateProgress(`✅ 生图师执行完成，生成 ${imageResults.length} 张图片`);
@@ -24423,7 +25497,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 生图师出错，已保存最佳内容作为废章`, true);
                 }
 
@@ -24435,7 +25509,7 @@
 
         async _executeTypesetter(agentKey, isReflow = false, options = {}) {
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[TYPESETTER DEBUG] 本章已被标记为废章，终止执行`);
@@ -24656,7 +25730,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 // 回流条件检查
@@ -24691,7 +25765,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 排版师出错，已保存最佳内容作为废章`, true);
                 }
 
@@ -24703,7 +25777,7 @@
 
         async _executeFusionGenerator(agentKey, initialUserInput = '', isReflow = false, options = {}) {
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn(`[FUSION DEBUG] 本章已被标记为废章，终止执行`);
@@ -24879,10 +25953,10 @@
                         imageData = `data:image/png;base64,${resultBase64}`;
                     }
                     const fusionId = await ImageStore.save(imageData, 'png');
-                    WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({fusion_image_id: fusionId});
+                    WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({ fusion_image_id: fusionId });
                     AgentStateManager.setState(agentKey, 'completed');
                     if (!isParallel) {
-                        WORKFLOW_STATE.lastSerialOutput = {agentKey, output: fusionId};
+                        WORKFLOW_STATE.lastSerialOutput = { agentKey, output: fusionId };
                     }
                     UI.updateProgress(`✅ 融合生图师执行完成（降级），生成图片 ID: ${fusionId}`);
 
@@ -24969,11 +26043,11 @@
                 }
 
                 const fusionId = currentImageId;
-                WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({fusion_image_id: fusionId});
+                WORKFLOW_STATE.outputs[agentKey] = JSON.stringify({ fusion_image_id: fusionId });
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: fusionId};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: fusionId };
                 }
 
                 UI.updateProgress(`✅ 融合生图师执行完成，生成图片 ID: ${fusionId}`);
@@ -24996,7 +26070,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 融合生图师出错，已保存最佳内容作为废章`, true);
                 }
 
@@ -25016,7 +26090,7 @@
         async _executeImageLibrarian(agentKey, isReflow = false, options = {}) {
 
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn('[ImageLibrarian] 本章已被标记为废章，终止执行');
@@ -25128,7 +26202,7 @@
                 WORKFLOW_STATE.outputs[agentKey] = responseText;
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 UI.updateProgress(`✅ 图片管理员执行完成`);
@@ -25164,7 +26238,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 图片管理员出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25178,7 +26252,7 @@
         async _executeImageVariator(agentKey, isReflow = false, options = {}) {
 
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn('[ImageVariator] 本章已被标记为废章，终止执行');
@@ -25300,7 +26374,7 @@
                     WORKFLOW_STATE.outputs[agentKey] = '[]';
                     AgentStateManager.setState(agentKey, 'completed');
                     if (!isParallel) {
-                        WORKFLOW_STATE.lastSerialOutput = {agentKey, output: '[]'};
+                        WORKFLOW_STATE.lastSerialOutput = { agentKey, output: '[]' };
                     }
                     UI.updateProgress(`✅ 变化生图师完成，无变体生成`);
                     return;
@@ -25329,7 +26403,7 @@
                     }
 
                     // 合并参数：使用 inst.params 覆盖默认配置
-                    const params = {...imageConfig, ...(inst.params || {}), prompt: inst.prompt || inst.params?.prompt};
+                    const params = { ...imageConfig, ...(inst.params || {}), prompt: inst.prompt || inst.params?.prompt };
                     if (!params.prompt) {
                         console.warn(`[ImageVariator] 变体 ${i + 1} 缺少 prompt，跳过`);
                         continue;
@@ -25360,7 +26434,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: outputJson};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: outputJson };
                 }
 
                 UI.updateProgress(`✅ 变化生图师完成，生成 ${generatedImages.length} 张图片`);
@@ -25388,7 +26462,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 变化生图师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25405,7 +26479,7 @@
          */
         async _executeMusicGenerator(agentKey, isReflow = false, options = {}) {
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
             if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
@@ -25474,7 +26548,7 @@
                     console.warn('[MusicGenerator] 输出非JSON，使用降级处理');
                     tasks = [{
                         name: '默认音乐',
-                        params: {prompt: agentResponse}
+                        params: { prompt: agentResponse }
                     }];
                 }
 
@@ -25482,7 +26556,7 @@
                 const processedTasks = [];
                 for (const task of tasks) {
                     // 合并参数：任务params + 配置默认值
-                    const params = {...audioConfig, ...task.params};
+                    const params = { ...audioConfig, ...task.params };
                     // 确保有 prompt
                     if (!params.prompt) {
                         console.warn('[MusicGenerator] 任务缺少 prompt，跳过', task);
@@ -25505,7 +26579,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: JSON.stringify(processedTasks)};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: JSON.stringify(processedTasks) };
                 }
 
                 UI.updateProgress(`✅ 音乐生成师完成，生成 ${processedTasks.length} 个音频`);
@@ -25528,7 +26602,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 音乐生成师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25545,7 +26619,7 @@
          */
         async _executeVoiceCloner(agentKey, isReflow = false, options = {}) {
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
             if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
@@ -25625,7 +26699,7 @@
                         continue;
                     }
                     // 合并参数：任务 params + 配置默认值 + 样本 Blob 和文本
-                    const params = {...audioConfig, ...task.params, audioBlob: sampleBlob, text: task.text};
+                    const params = { ...audioConfig, ...task.params, audioBlob: sampleBlob, text: task.text };
                     // 调用 API
                     const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 3600000));
                     const audioId = await AudioStore.save(audioBlob);
@@ -25643,7 +26717,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: JSON.stringify(processedTasks)};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: JSON.stringify(processedTasks) };
                 }
 
                 UI.updateProgress(`✅ 语音克隆师完成，生成 ${processedTasks.length} 个语音`);
@@ -25665,7 +26739,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 语音克隆师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25680,7 +26754,7 @@
          */
         async _executeAudioEditor(agentKey, isReflow = false, options = {}) {
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
             if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
@@ -25751,7 +26825,7 @@
                     // 降级：将整个输出作为 params 中的 prompt
                     tasks = [{
                         name: '编辑结果',
-                        params: {prompt: agentResponse}
+                        params: { prompt: agentResponse }
                     }];
                 }
 
@@ -25759,7 +26833,7 @@
                 const processedTasks = [];
                 for (const task of tasks) {
                     // 合并参数
-                    const params = {...audioConfig, ...task.params, sourceAudioBlob: sourceBlob};
+                    const params = { ...audioConfig, ...task.params, sourceAudioBlob: sourceBlob };
                     // 调用 API
                     const audioBlob = await this._callAudioAPI(audioConfig, params, AbortSignal.timeout(audioConfig.timeout || 3600000));
                     const audioId = await AudioStore.save(audioBlob);
@@ -25776,7 +26850,7 @@
                 AgentStateManager.setState(agentKey, 'completed');
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: JSON.stringify(processedTasks)};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: JSON.stringify(processedTasks) };
                 }
 
                 UI.updateProgress(`✅ 音频编辑师完成，生成 ${processedTasks.length} 个编辑结果`);
@@ -25798,7 +26872,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 音频编辑师出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25810,7 +26884,7 @@
         async _executeAudioLibrarian(agentKey, isReflow = false, options = {}) {
 
 
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
 
             if (WORKFLOW_STATE.discarded) {
                 console.warn('[AudioLibrarian] 本章已被标记为废章，终止执行');
@@ -25929,7 +27003,7 @@
                 WORKFLOW_STATE.outputs[agentKey] = responseText;
 
                 if (!isParallel) {
-                    WORKFLOW_STATE.lastSerialOutput = {agentKey, output: responseText};
+                    WORKFLOW_STATE.lastSerialOutput = { agentKey, output: responseText };
                 }
 
                 UI.updateProgress(`✅ 音频管理员执行完成`);
@@ -25956,7 +27030,7 @@
                 if (bestContent) {
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
-                    WORKFLOW_STATE.discardedChapter = {title, content: bestContent};
+                    WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
                     UI.updateProgress(`  ❌ 音频管理员出错，已保存最佳内容作为废章`, true);
                 }
                 throw error;
@@ -25998,7 +27072,7 @@
                     }
                     // 开始新的新增操作
 
-                    currentAction = {type: 'add', uid: null, book: null};
+                    currentAction = { type: 'add', uid: null, book: null };
                     fieldLines = [];
                 } else if (modifyMatch) {
                     if (currentAction) {
@@ -26009,7 +27083,7 @@
                     const uidStr = modifyMatch[1];
                     const [book, uid] = uidStr.split('-').map(Number);
 
-                    currentAction = {type: 'modify', book, uid};
+                    currentAction = { type: 'modify', book, uid };
                     fieldLines = [];
                 } else if (deleteMatch) {
                     if (currentAction) {
@@ -26021,10 +27095,10 @@
                     const uidPairs = uidListStr.split(/[，,]\s*/);
                     const toDelete = uidPairs.map(pair => {
                         const [b, u] = pair.split('-').map(Number);
-                        return {book: b, uid: u};
+                        return { book: b, uid: u };
                     }).filter(item => !isNaN(item.book) && !isNaN(item.uid));
 
-                    actions.push({type: 'delete', targets: toDelete});
+                    actions.push({ type: 'delete', targets: toDelete });
                     // 删除操作没有后续字段行，直接重置 currentAction
                     currentAction = null;
                     fieldLines = [];
@@ -26143,7 +27217,7 @@
                     const maxUid = entries.reduce((max, e) => Math.max(max, e.uid || 0), 0);
                     const newUid = maxUid + 1;
 
-                    const newEntry = {uid: newUid, enabled: true};
+                    const newEntry = { uid: newUid, enabled: true };
 
                     for (const [key, value] of Object.entries(action.fields)) {
                         setNestedValue(newEntry, key, value);
@@ -26156,12 +27230,12 @@
                     }
 
                     entries.push(newEntry);
-                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                     UI.updateProgress(`  ✅ 音频库新增条目: ${bookName} - uid=${newUid}`);
 
 
                 } else if (action.type === 'modify') {
-                    const {book, uid} = action;
+                    const { book, uid } = action;
                     const bookName = `状态书-音频库${book}`;
 
 
@@ -26179,12 +27253,12 @@
                     }
 
                     entries[entryIndex] = entry;
-                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                     UI.updateProgress(`  ✅ 音频库修改条目: ${bookName} uid=${uid}`);
 
                 } else if (action.type === 'delete') {
                     for (const target of action.targets) {
-                        const {book, uid} = target;
+                        const { book, uid } = target;
                         const bookName = `状态书-音频库${book}`;
 
 
@@ -26194,7 +27268,7 @@
                         if (newEntries.length === entries.length) {
                             console.warn(`[updateAudioLibrary] 未找到条目 ${book}-${uid}，跳过删除`);
                         } else {
-                            await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
+                            await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
                             UI.updateProgress(`  ✅ 音频库删除条目: ${bookName} uid=${uid}`);
                         }
                     }
@@ -26641,7 +27715,7 @@
                     }
                     // 开始新的新增操作
 
-                    currentAction = {type: 'add', uid: null, book: null};
+                    currentAction = { type: 'add', uid: null, book: null };
                     fieldLines = [];
                 } else if (modifyMatch) {
                     if (currentAction) {
@@ -26652,7 +27726,7 @@
                     const uidStr = modifyMatch[1];
                     const [book, uid] = uidStr.split('-').map(Number);
 
-                    currentAction = {type: 'modify', book, uid};
+                    currentAction = { type: 'modify', book, uid };
                     fieldLines = [];
                 } else if (deleteMatch) {
                     if (currentAction) {
@@ -26664,10 +27738,10 @@
                     const uidPairs = uidListStr.split(/[，,]\s*/);
                     const toDelete = uidPairs.map(pair => {
                         const [b, u] = pair.split('-').map(Number);
-                        return {book: b, uid: u};
+                        return { book: b, uid: u };
                     }).filter(item => !isNaN(item.book) && !isNaN(item.uid));
 
-                    actions.push({type: 'delete', targets: toDelete});
+                    actions.push({ type: 'delete', targets: toDelete });
                     // 删除操作没有后续字段行，直接重置 currentAction
                     currentAction = null;
                     fieldLines = [];
@@ -26818,7 +27892,7 @@
                     const startTime = Date.now();
                     const response = await fetch(`${apiUrl}/controlnet/detect`, {
                         method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload),
                         signal: combinedSignal,  // 使用组合信号
                     });
@@ -26896,7 +27970,7 @@
                     const newUid = maxUid + 1;
 
                     // 创建一个空的条目对象
-                    const newEntry = {uid: newUid, enabled: true};
+                    const newEntry = { uid: newUid, enabled: true };
 
                     // 使用 setNestedValue 设置所有字段（支持点号路径）
                     for (const [key, value] of Object.entries(action.fields)) {
@@ -26910,12 +27984,12 @@
                     }
 
                     entries.push(newEntry);
-                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                     UI.updateProgress(`  ✅ 图库新增条目: ${bookName} - uid=${newUid}`);
 
 
                 } else if (action.type === 'modify') {
-                    const {book, uid} = action;
+                    const { book, uid } = action;
                     const bookName = `状态书-图库${book}`;
 
 
@@ -26934,14 +28008,14 @@
                     }
 
                     entries[entryIndex] = entry;
-                    await API.updateWorldbook(bookName, () => entries, {render: 'immediate'});
+                    await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
                     UI.updateProgress(`  ✅ 图库修改条目: ${bookName} uid=${uid}`);
 
 
                 } else if (action.type === 'delete') {
                     // 删除操作不变
                     for (const target of action.targets) {
-                        const {book, uid} = target;
+                        const { book, uid } = target;
                         const bookName = `状态书-图库${book}`;
 
 
@@ -26951,7 +28025,7 @@
                         if (newEntries.length === entries.length) {
                             console.warn(`[updateImageLibrary] 未找到条目 ${book}-${uid}，跳过删除`);
                         } else {
-                            await API.updateWorldbook(bookName, () => newEntries, {render: 'immediate'});
+                            await API.updateWorldbook(bookName, () => newEntries, { render: 'immediate' });
                             UI.updateProgress(`  ✅ 图库删除条目: ${bookName} uid=${uid}`);
 
                         }
@@ -27072,7 +28146,7 @@
             const sdApiUrl = `${apiUrl}/sdapi/v1/img2img`;
 
             // 合并参数：params 中的字段优先
-            const mergedParams = {...config, ...params};
+            const mergedParams = { ...config, ...params };
 
 
             // 构建组合信号
@@ -27125,7 +28199,7 @@
             try {
                 const response = await fetch(sdApiUrl, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                     signal: combinedSignal,
                 });
@@ -27215,14 +28289,14 @@
                 n_iter: 1,
                 seed: -1,
                 alwayson_scripts: {
-                    controlnet: {args: [controlNetUnit]}
+                    controlnet: { args: [controlNetUnit] }
                 }
             };
 
             try {
                 const response = await fetch(sdApiUrl, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                     signal: combinedSignal,  // 使用组合信号
                 });
@@ -27682,7 +28756,7 @@
                     const request = WORKFLOW_STATE.inputRequestQueue.shift();
                     if (!request) continue;
 
-                    const {mode, agentKey, inputIndex, src, isReflow} = request;
+                    const { mode, agentKey, inputIndex, src, isReflow } = request;
 
 
                     if (WORKFLOW_STATE.shouldStop) {
@@ -27717,7 +28791,7 @@
 
                     if (agent && agent.role === 'interactiveAgent' && mode === 'txt') {
                         // ========== interactiveAgent 特殊处理 ==========
-                        let html = await this._collectInputs(agentKey, isReflow, {isParallel: false});
+                        let html = await this._collectInputs(agentKey, isReflow, { isParallel: false });
                         html = html[0];
                         const userChoice = await UI.renderAndWaitForInteraction(html);
                         pending.resolved = true;
@@ -27756,15 +28830,15 @@
                                 modal.style.maxWidth = '400px';
                                 modal.innerHTML = `
                     <div class="nc-modal-header">
-                        <h2 style="margin:0;color:#667eea;">选择 ${fileType === 'png' ? '图片' : fileType === 'audio' ? '音频' : '文本'} 文件</h2>
+                        <h2 class="nc-modal-title--primary-c">选择 ${fileType === 'png' ? '图片' : fileType === 'audio' ? '音频' : '文本'} 文件</h2>
                     </div>
-                    <div class="nc-modal-body" style="text-align:center; padding:20px;">
+                    <div class="nc-modal-body nc-center--pad20">
                         <input type="file" id="nc-file-input" accept="${fileType === 'png' ? 'image/png' :
-                                    fileType === 'txt' ? 'text/plain' :
-                                        fileType === 'html' ? 'text/html' :
-                                            fileType === 'js' ? 'application/javascript' :
-                                                fileType === 'audio' ? 'audio/*' : '*/*'
-                                }" style="margin:10px 0;">
+                                        fileType === 'txt' ? 'text/plain' :
+                                            fileType === 'html' ? 'text/html' :
+                                                fileType === 'js' ? 'application/javascript' :
+                                                    fileType === 'audio' ? 'audio/*' : '*/*'
+                                    }" class="nc-my10">
                     </div>
                     <div class="nc-modal-footer">
                         <button class="nc-modal-close-btn">取消</button>
@@ -27846,7 +28920,7 @@
 
                         UI.updateSubmitButtons(null);
                         UI.updateProgress(`✓ 文件上传成功，ID: ${uploadResult.fileId}`);
-                        Notify.success('文件已上传', '', {timeOut: 2000});
+                        Notify.success('文件已上传', '', { timeOut: 2000 });
 
                         AgentStateManager.setState(agentKey, 'running');
                         UI.updateWorkflowAgentStates();
@@ -27876,28 +28950,28 @@
 
                                 modal.innerHTML = `
                 <div class="nc-modal-header">
-                    <h2 style="margin:0;color:#667eea;">保存 ${fileType === 'png' ? '图片' : fileType === 'audio' ? '音频' : '文本'} 文件</h2>
+                    <h2 class="nc-modal-title--primary-c">保存 ${fileType === 'png' ? '图片' : fileType === 'audio' ? '音频' : '文本'} 文件</h2>
                 </div>
-                <div class="nc-modal-body" style="padding:20px;">
-                    <div style="margin-bottom:15px;">
-                        <label style="display:block; margin-bottom:5px; color:#aaa;">自定义ID（可选）</label>
-                        <input type="text" id="nc-custom-id" placeholder="${expectedPrefix}your_id" style="width:100%; padding:8px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px; font-size:13px;">
-                        <div style="font-size:11px; color:#888; margin-top:5px;">必须以 ${expectedPrefix} 开头，只能包含字母、数字、下划线</div>
+                <div class="nc-modal-body nc-body--pad20">
+                    <div class="nc-mb15">
+                        <label class="nc-field-label--base">自定义ID（可选）</label>
+                        <input type="text" id="nc-custom-id" placeholder="${expectedPrefix}your_id" class="nc-modal-input--base">
+                        <div class="nc-text--xs-muted-mt5">必须以 ${expectedPrefix} 开头，只能包含字母、数字、下划线</div>
                     </div>
                     <div>
-                        <label style="display:block; margin-bottom:5px; color:#aaa;">选择文件</label>
+                        <label class="nc-field-label--base">选择文件</label>
                         <input type="file" id="nc-file-input" accept="${fileType === 'png' ? 'image/png' :
-                                    fileType === 'txt' ? 'text/plain' :
-                                        fileType === 'html' ? 'text/html' :
-                                            fileType === 'js' ? 'application/javascript' :
-                                                fileType === 'audio' ? 'audio/*' : '*/*'
-                                }" style="width:100%; padding:5px; background:#2a2a3a; color:#eaeaea; border:1px solid #667eea; border-radius:5px;">
+                                        fileType === 'txt' ? 'text/plain' :
+                                            fileType === 'html' ? 'text/html' :
+                                                fileType === 'js' ? 'application/javascript' :
+                                                    fileType === 'audio' ? 'audio/*' : '*/*'
+                                    }" class="nc-modal-select--file">
                     </div>
                 </div>
-                <div class="nc-modal-footer" style="display:flex; gap:10px; justify-content:center;">
-                    <button id="nc-save-ok" class="nc-modal-copy-btn" style="background:linear-gradient(135deg,#667eea,#764ba2);">确定</button>
-                    <button id="nc-save-auto" class="nc-modal-copy-btn" style="background:linear-gradient(135deg,#4ecdc4,#44a3aa);">自动生成</button>
-                    <button class="nc-modal-close-btn" style="background:linear-gradient(135deg,#dc3545,#c82333);">取消</button>
+                <div class="nc-modal-footer nc-flex--footer-10-center">
+                    <button id="nc-save-ok" class="nc-modal-copy-btn nc-btn--grad-purple">确定</button>
+                    <button id="nc-save-auto" class="nc-modal-copy-btn nc-btn--grad-teal">自动生成</button>
+                    <button class="nc-modal-close-btn nc-btn--grad-red">取消</button>
                 </div>
             `;
 
@@ -28052,7 +29126,7 @@
 
                         UI.updateSubmitButtons(null);
                         UI.updateProgress(`✓ 文件保存完成，ID: ${fileId}`);
-                        Notify.success('文件已保存', '', {timeOut: 2000});
+                        Notify.success('文件已保存', '', { timeOut: 2000 });
 
                         const textarea = document.getElementById('nc-user-input');
                         if (textarea) {
@@ -28095,7 +29169,7 @@
 
                         // ===== 新增：用户输入完成提示 =====
                         UI.updateProgress(`✓ 用户输入已提交，内容长度: ${userInput.length} 字符`);
-                        Notify.success('用户输入已接收', '', {timeOut: 2000});
+                        Notify.success('用户输入已接收', '', { timeOut: 2000 });
 
                         if (!isReflow) {
                             if (src.endsWith('.last')) {
@@ -28152,7 +29226,7 @@
          * @returns {Promise<Array<string>>} 收集到的内容数组，顺序与 agent.inputs 一致
          */
         async _collectInputs(agentKey, isReflow = false, options = {}) {
-            const {isParallel = false, parallelBeforeSnapshot = null} = options;
+            const { isParallel = false, parallelBeforeSnapshot = null } = options;
             const agent = CONFIG.AGENTS[agentKey];
             if (!agent) throw new Error(`Agent ${agentKey} 不存在`);
 
@@ -28555,7 +29629,7 @@
          * @returns {Promise<Blob>} 生成的音频 Blob
          */
         async _callAudioAPI(config, params, signal) {
-            const {mode, source, apiUrl, key} = config;
+            const { mode, source, apiUrl, key } = config;
             const url = apiUrl.replace(/\/+$/, '');
 
 
@@ -29412,7 +30486,7 @@
                     byteArrays.push(byteArray);
                 }
 
-                return new Blob(byteArrays, {type: mimeType});
+                return new Blob(byteArrays, { type: mimeType });
             } catch (err) {
                 console.error('[Workflow._base64ToBlob] 转换失败:', err);
                 throw err;
@@ -29559,14 +30633,14 @@
 
         // 加载保存的预选状态（此时可能为空）
         const savedSelection = Storage.loadSelectionState();
-        WORKFLOW_STATE.selectionState = {...WORKFLOW_STATE.selectionState, ...savedSelection};
+        WORKFLOW_STATE.selectionState = { ...WORKFLOW_STATE.selectionState, ...savedSelection };
 
         // 在 baseInit 中，找到 Storage.init 调用之后（约第9800行）
         try {
             await Storage.init();
         } catch (e) {
             console.error('[Storage] 初始化失败，但仍尝试继续', e);
-            HISTORY_CACHE = {chapters: [], lastUpdate: Date.now()};
+            HISTORY_CACHE = { chapters: [], lastUpdate: Date.now() };
         }
 
         // ===== 新增：加载映射表 =====
@@ -29602,7 +30676,7 @@
         UI.createFloatButton();
         localStorage.removeItem(CONFIG.SETTINGS_KEY);  // 清除保存的设置
 
-        Notify.success(`${CONFIG.NAME} v${CONFIG.VERSION} 已加载，请先加载配置文件`, '', {timeOut: 2000});
+        Notify.success(`${CONFIG.NAME} v${CONFIG.VERSION} 已加载，请先加载配置文件`, '', { timeOut: 2000 });
     }
 
     if (!window.__novelCreatorInit) {
