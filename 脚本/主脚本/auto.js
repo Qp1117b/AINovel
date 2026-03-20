@@ -452,7 +452,6 @@
         return target;
     }
 
-
     // 辅助函数：获取嵌套对象的值
     function getNestedValue(obj, path) {
         const result = path.split('.').reduce((o, p) => o?.[p], obj);
@@ -466,7 +465,6 @@
         const target = parts.reduce((o, p) => o[p] = o[p] || {}, obj);
         target[last] = value;
     }
-
 
     /**
      * 解析优化师输出的属性配置行
@@ -528,7 +526,6 @@
      * @param {Object} config - parseConfigLine 返回的属性对象
      * @returns {Object} 转换后的属性对象，数组字段使用英文逗号分隔
      */
-
     function convertArrayValues(config) {
         const converted = {};
         // 定义数组字段集合
@@ -551,7 +548,6 @@
 
         return converted;
     }
-
 
     // ==================== Token 计数 ====================
 
@@ -579,7 +575,6 @@
         const estimated = Math.ceil(text.length / 3.35);
         return estimated;
     }
-
 
     // ── clipboard 工具 ─────────────────────────────────────────────────
     /**
@@ -609,13 +604,13 @@
         }
     }
 
+
     // ╔══════════════════════════════════════════════════════════════════╗
     // ║  模块 05：配置解析                                                ║
     // ║  parseCategoryFromContent / buildTemplateContentFromCategories / validateConfig / loadConfigFromJson║
     // ╚══════════════════════════════════════════════════════════════════╝
 
     /** @module ConfigParser — loadConfigFromJson / validateConfig / buildTemplateContentFromCategories */
-
 
     /**
      * 从优化师输出动作的内容中提取类别定义
@@ -661,9 +656,7 @@
         return sorted.map(([_, def]) => def).join('\n\n');
     }
 
-
     function validateConfig(json) {
-        `version=${json.version}, description=${json.description}, mode=${json.mode}`);
 
         const errors = [];
 
@@ -1138,7 +1131,6 @@
         return { valid: errors.length === 0, errors };
     }
 
-
     // ==================== 从 JSON 加载配置 ====================
 
     function loadConfigFromJson(json, fileName, fileSize) {
@@ -1284,7 +1276,6 @@
     const DB_VERSION = 2;
     const STORE_NAME = 'chapters';
     const DB_KEY = CONFIG.STORAGE_KEY;
-
 
     /**
      * 打开 IndexedDB 数据库（增强版）
@@ -3304,7 +3295,6 @@
         sleep: (ms) => new Promise(r => setTimeout(r, ms))
     };
 
-
     /**
      * 测试单个API配置的连通性
      * @param {Object} config - API配置对象，包含 source, apiUrl, key, model, timeout 等
@@ -4677,7 +4667,6 @@
         }
     };
 
-
     // ==================== 其余文件存储管理器 ====================
 
     const OtherFileStore = {
@@ -4840,7 +4829,6 @@
             });
         }
     };
-
 
     // ==================== 音频存储管理器 ====================
 
@@ -19538,7 +19526,6 @@
         }
     }
 
-
     // ==================== Galgame 播放器类 ====================
 
     class GalgamePlayer {
@@ -22189,33 +22176,6 @@
 
     /** @module Workflow — 核心执行引擎：多 Agent 串/并行、回流、人工审核 */
 
-    // ╔══════════════════════════════════════════════════════════════════╗
-    // ║  模块 23a：面板控制器                                             ║
-    // ║  PanelController — 面板开启前置检测 + 状态书激活工具              ║
-    // ╚══════════════════════════════════════════════════════════════════╝
-
-    /**
-     * @module PanelController
-     * 负责"打开主面板"的完整流程：
-     *   1. 前置检测（PreCheck.checkAll）
-     *   2. 加载状态模板
-     *   3. 调用 UI.createPanel
-     *
-     * 同时提供世界书激活工具方法。
-     */
-    const PanelController = {
-        /**
-         * 打开主面板，含前置检测
-         * @param {boolean} [force=false] 强制重新检测（忽略上次缓存结果）
-         */
-        async openWithCheck(force = false) { return openPanelWithCheck(force); },
-
-        /**
-         * 激活所有已存在的状态书（世界书）
-         */
-        async activateStateBooks() { return activateAllExistingStateBooks(); },
-    };
-
     // ── 保持原有全局函数名（被大量调用点引用） ────────────────────────
     async function openPanelWithCheck(force = false) {
 
@@ -22266,7 +22226,6 @@
             UI.showErrorPanel('打开面板时发生错误：\n' + e.message + '\n\n' + e.stack);
         }
     }
-
 
     // ==================== 工作流 ====================
 
@@ -22324,7 +22283,6 @@
             console.error('[activateAllExistingStateBooks] 激活失败:', e);
         }
     }
-
 
     const Workflow = {
 
