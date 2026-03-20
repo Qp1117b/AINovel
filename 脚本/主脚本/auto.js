@@ -23,6 +23,8 @@
     // ║  CONFIG 配置对象与预定义角色列表                                      ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module Config — 全局常量 CONFIG + 预定义角色列表 PREDEFINED_ROLES */
+
     // ==================== 配置 ====================
 
     const CONFIG = {
@@ -50,6 +52,7 @@
             warningThreshold: 10000,
             criticalThreshold: 10000
         },
+        TOKEN_STATS_KEY: 'novel_creator_token_stats_v1',
 
         AGENT_SWITCH_DELAY: 1000,
         MAX_PROGRESS_LINES: 500,
@@ -131,6 +134,8 @@
     // ║  UserInterruptError / ExistingBranchError / AbortChapterError    ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module Errors — UserInterruptError / ExistingBranchError / AbortChapterError */
+
     // ==================== 用户中断专用错误 ====================
 
     class UserInterruptError extends Error {
@@ -141,8 +146,6 @@
     }
 
 
-    // ==================== 新增：分支冲突专用错误 ====================
-
     class ExistingBranchError extends Error {
         constructor() {
             super('分支冲突：该互动结果已存在对应章节');
@@ -150,7 +153,6 @@
         }
     }
 
-    // ==================== 新增：互动映射管理器 ====================
 
     class AbortChapterError extends Error {
         constructor(message) {
@@ -162,75 +164,268 @@
 
 
     // ╔══════════════════════════════════════════════════════════════════╗
-    // ║  模块 03：全局状态                                                  ║
-    // ║  WORKFLOW_STATE / HISTORY_CACHE / stateTemplatesByBook / 全局 keydown 监听║
+    // ║  模块 03：状态管理                                                  ║
+    // ║  StateStore — 统一状态容器，按职责分组，支持订阅与重置               ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
-    // ==================== 状态模板解析 ====================
+    /**
+     * @module StateStore
+     * 唯一全局状态容器，取代散乱的 WORKFLOW_STATE 直接赋值。
+     *
+     * 用法：
+     *   StateStore.get('isRunning')          // 读取
+     *   StateStore.set('isRunning', true)     // 写入（自动通知订阅者）
+     *   StateStore.reset('chapter')           // 按分组重置
+     *   StateStore.subscribe('isRunning', cb) // 监听变化
+     *
+     * 分组（GROUP）：
+     *   runtime   — 工作流运行时核心状态（可跨章节持续）
+     *   chapter   — 每章开始时清零的临时状态
+     *   input     — 用户输入与等待队列
+     *   reflow    — 回流子系统专属状态
+     *   ui        — 面板/历史/Galgame UI 状态
+     *   config    — 配置与 profile 状态
+     *   agent     — Agent 运行状态（原 AgentStateManager）
+     */
+    const StateStore = (() => {
+        // ── 状态定义（字段 + 默认值 + 所属分组） ──────────────────────
+        const SCHEMA = {
+            // ─── runtime：运行时核心（跨章节持续） ───
+            isRunning: { default: false, group: 'runtime' },
+            shouldStop: { default: false, group: 'runtime' },
+            startTime: { default: null, group: 'runtime' },
+            currentStep: { default: '', group: 'runtime' },
+            currentChapter: { default: 1, group: 'runtime' },
+            enabledAgents: { default: [], group: 'runtime' },
+            agentExecutionOrder: { default: [], group: 'runtime' },
+            tokenStats: { default: () => ({ totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 }), group: 'runtime' },
+            progressLog: { default: [], group: 'runtime' },
+            abortController: { default: null, group: 'runtime' },
+            lastCheckFailed: { default: false, group: 'runtime' },
+            lastCheckErrorMessage: { default: '', group: 'runtime' },
+            lastAgentError: { default: {}, group: 'runtime' },
+            apiStatus: { default: {}, group: 'runtime' },
+            chapterMemory: { default: {}, group: 'runtime' },
+            lastSerialOutput: { default: null, group: 'runtime' }, // { agentKey, output }
+            beforeDependencies: { default: null, group: 'runtime' },
+            currentParentNum: { default: null, group: 'runtime' },
+            dataficationCache: { default: null, group: 'runtime' },
+            autoMode: { default: false, group: 'runtime' },
 
-    let stateTemplatesByBook = {};
+            // ─── chapter：每章开始时清零 ───
+            outputs: { default: {}, group: 'chapter' },
+            agentRawOutputs: { default: {}, group: 'chapter' },
+            discarded: { default: false, group: 'chapter' },
+            discardedChapter: { default: null, group: 'chapter' },
+            discardReason: { default: null, group: 'chapter' },
+            lastStateContents: { default: null, group: 'chapter' },
+            currentInteractionResult: { default: null, group: 'chapter' },
 
-    // ==================== 全局状态 ====================
+            // ─── input：用户输入与等待队列 ───
+            awaitingInput: { default: false, group: 'input' },
+            inputResolver: { default: null, group: 'input' },
+            inputRejector: { default: null, group: 'input' },
+            pendingUserInput: { default: '', group: 'input' },
+            pendingInputMode: { default: null, group: 'input' },
+            currentWaitingAgent: { default: null, group: 'input' },
+            currentWaitingInputIndex: { default: null, group: 'input' },
+            inputRequestQueue: { default: [], group: 'input' },
+            isProcessingInput: { default: false, group: 'input' },
+            userInputCache: { default: '', group: 'input' },
+            currentUserInput: { default: '', group: 'input' },
+            lastInputCache: { default: {}, group: 'input' },
+            agentInputCache: { default: {}, group: 'input' },
+            pendingInputBySrc: { default: {}, group: 'input' },
 
-    let WORKFLOW_STATE = {
-        isRunning: false,
-        currentStep: '',
-        outputs: {},
-        startTime: null,
-        currentChapter: 1,
-        shouldStop: false,
-        tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
-        discarded: false,
-        discardedChapter: null,
-        userInputCache: '',
-        progressLog: [],
-        currentProfile: 'standard',
-        enabledAgents: [],
-        agentExecutionOrder: [],
-        currentConfigFile: null,
-        selectionState: {},
-        awaitingInput: false,
-        inputResolver: null,
-        pendingUserInput: '',
-        currentWaitingAgent: null,
-        currentWaitingInputIndex: null,
-        autoMode: false,
-        chapterMemory: {},
-        lastSerialOutput: null, // 存储上一个串行执行的 Agent 的输出，格式 { agentKey, output }
-        inputRequestQueue: [],      // 新增：等待用户输入的请求队列
-        isProcessingInput: false,   // 新增：是否正在处理队列中的请求
-        // 缓存属性
-        currentUserInput: '',       // 缓存 "user" 源输入（主流程）
-        lastInputCache: {},         // 缓存缺失的 ".last" 源输入（主流程），键为agentKey
-        pendingInputBySrc: {},   // 新增：用于合并相同 src 的输入请求
-        agentInputCache: {},         // 缓存缺失的普通Agent源输入（主流程），键为agentKey
-        // ... 现有属性 ...
-        reflowInputCache: {},    // 回流期间临时缓存，键为 src，值为用户输入
+            // ─── reflow：回流子系统 ───
+            reflowInputCache: { default: {}, group: 'reflow' },
+            reflowCacheStack: { default: [], group: 'reflow' },
+            currentReflowCache: { default: null, group: 'reflow' },
+            reflowMap: { default: {}, group: 'reflow' },
+            reflowWaiting: { default: {}, group: 'reflow' },
+            reflowTargetLastSource: { default: {}, group: 'reflow' },
+            reflowTargetCount: { default: {}, group: 'reflow' },
 
-        reflowCacheStack: [],          // 回流缓存栈
-        currentReflowCache: null,      // 当前回流层的缓存对象
-        agentRawOutputs: {},
-        abortController: null,           // 用于取消图像API请求的AbortController
-        lastCheckFailed: false,          // 上次检测是否失败
-        lastCheckErrorMessage: '',       // 失败时的错误信息
-        configMode: 'normal',
-        activeChapterNum: undefined,      // 当前在历史面板中点击的章节号
-        currentBranchStart: undefined,    // 当前分支起点章节号
-        currentBranchLatest: undefined,   // 当前分支最新章节号（用于新建章节）
-        galProject: null,          // 当前打开的 Galgame 项目
-        galProjectId: null,        // 项目ID（用于保存到IndexedDB）
-        enforceUniqueBranches: false,   // 新增：分支唯一性约束开关
-        currentInteractionResult: null,   // 暂存本章的互动结果
-    };
+            // ─── ui：界面与导航状态 ───
+            activeChapterNum: { default: undefined, group: 'ui' },
+            currentBranchStart: { default: undefined, group: 'ui' },
+            currentBranchLatest: { default: undefined, group: 'ui' },
+            galProject: { default: null, group: 'ui' },
+            galProjectId: { default: null, group: 'ui' },
 
+            // ─── config：配置与 profile ───
+            currentProfile: { default: 'standard', group: 'config' },
+            currentConfigFile: { default: null, group: 'config' },
+            configMode: { default: 'normal', group: 'config' },
+            configVersion: { default: null, group: 'config' },
+            configDescription: { default: null, group: 'config' },
+            globalPrompt: { default: null, group: 'config' },
+            selectionState: { default: {}, group: 'config' },
+            enforceUniqueBranches: { default: false, group: 'config' },
+        };
+
+        // ── 内部状态对象 ──────────────────────────────────────────────
+        const _state = {};
+        const _listeners = {}; // key -> Set<callback>
+
+        // 用工厂函数初始化，避免多处共享同一个对象引用
+        function _defaultVal(key) {
+            const def = SCHEMA[key].default;
+            return typeof def === 'function' ? def() : (
+                def !== null && typeof def === 'object' ? JSON.parse(JSON.stringify(def)) : def
+            );
+        }
+
+        function _init() {
+            for (const key of Object.keys(SCHEMA)) {
+                _state[key] = _defaultVal(key);
+            }
+        }
+        _init();
+
+        // ── 公共 API ──────────────────────────────────────────────────
+        const store = {
+            /**
+             * 读取状态字段
+             * @param {string} key
+             */
+            get(key) {
+                if (!(key in SCHEMA)) {
+                    console.warn(`[StateStore.get] 未知字段: "${key}"`);
+                }
+                return _state[key];
+            },
+
+            /**
+             * 写入状态字段，值变化时通知订阅者
+             * @param {string} key
+             * @param {*} value
+             */
+            set(key, value) {
+                if (!(key in SCHEMA)) {
+                    console.warn(`[StateStore.set] 未知字段: "${key}"，已忽略`);
+                    return;
+                }
+                const prev = _state[key];
+                _state[key] = value;
+                if (prev !== value && _listeners[key]) {
+                    for (const cb of _listeners[key]) {
+                        try { cb(value, prev); } catch (e) { console.error(`[StateStore] 订阅回调出错(${key}):`, e); }
+                    }
+                }
+            },
+
+            /**
+             * 订阅字段变化
+             * @param {string} key
+             * @param {function} callback  (newValue, oldValue) => void
+             * @returns {function} 取消订阅函数
+             */
+            subscribe(key, callback) {
+                if (!_listeners[key]) _listeners[key] = new Set();
+                _listeners[key].add(callback);
+                return () => _listeners[key].delete(callback);
+            },
+
+            /**
+             * 按分组重置（不传则重置全部）
+             * @param {'runtime'|'chapter'|'input'|'reflow'|'ui'|'config'|'agent'|undefined} group
+             */
+            reset(group) {
+                for (const [key, schema] of Object.entries(SCHEMA)) {
+                    if (!group || schema.group === group) {
+                        const newVal = _defaultVal(key);
+                        const prev = _state[key];
+                        _state[key] = newVal;
+                        if (prev !== newVal && _listeners[key]) {
+                            for (const cb of _listeners[key]) {
+                                try { cb(newVal, prev); } catch (e) { }
+                            }
+                        }
+                    }
+                }
+            },
+
+            /**
+             * 返回当前全部状态的快照（用于调试/导出）
+             */
+            snapshot() {
+                return { ..._state };
+            },
+
+            /**
+             * 列出某分组的所有字段（用于调试）
+             */
+            groupFields(group) {
+                return Object.entries(SCHEMA)
+                    .filter(([_, s]) => s.group === group)
+                    .map(([k]) => k);
+            },
+        };
+
+        // ── Agent 状态子模块（原 AgentStateManager，内嵌于 StateStore） ──
+        const _agentStates = {}; // agentKey -> AgentStatus
+
+        store.agent = {
+            /** 初始化所有 Agent 为 idle */
+            init() {
+                if (!CONFIG.AGENTS || typeof CONFIG.AGENTS !== 'object') {
+                    console.warn('[StateStore.agent.init] CONFIG.AGENTS 无效');
+                    return;
+                }
+                for (const key of Object.keys(CONFIG.AGENTS)) {
+                    _agentStates[key] = 'idle';
+                }
+            },
+
+            /** 设置单个 Agent 状态，仅在值变化时通知 UI */
+            setState(agentKey, status) {
+                if (!CONFIG.AGENTS?.[agentKey]) return;
+                if (_agentStates[agentKey] === status) return;
+                _agentStates[agentKey] = status;
+                UI.updateAgentStatusButton(agentKey);
+            },
+
+            /** 读取单个 Agent 状态 */
+            getState(agentKey) {
+                return _agentStates[agentKey] || 'idle';
+            },
+
+            /** 重置全部 Agent 为 idle，并刷新 UI */
+            reset() {
+                if (!CONFIG.AGENTS) return;
+                for (const key of Object.keys(CONFIG.AGENTS)) {
+                    _agentStates[key] = 'idle';
+                }
+                UI.updateAllAgentStatusButtons();
+            },
+
+            /** 返回所有 Agent 状态快照 */
+            snapshot() { return { ..._agentStates }; },
+        };
+
+        return store;
+    })();
+
+    // ── 向后兼容代理 ──────────────────────────────────────────────────
+    // 保持 WORKFLOW_STATE.xxx 读写语法不变，内部路由到 StateStore
+    // 新代码请直接使用 StateStore.get/set
+    const WORKFLOW_STATE = new Proxy({}, {
+        get(_, key) { return StateStore.get(key); },
+        set(_, key, value) { StateStore.set(key, value); return true; },
+    });
+
+    // ── 历史缓存（非工作流状态，单独保留） ────────────────────────────
     let HISTORY_CACHE = { chapters: [], lastUpdate: null };
 
+    // ── 状态模板缓存（ConfigParser 填充，UI 读取） ─────────────────────
+    let stateTemplatesByBook = {};
+
+    // ── 全局快捷键 ────────────────────────────────────────────────────
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
             const top = ModalStack._stack[ModalStack._stack.length - 1];
-            if (top) {
-                UI._closeModal(top);
-            }
+            if (top) UI._closeModal(top);
         }
     });
 
@@ -240,8 +435,9 @@
     // ║  deepMerge / getNestedValue / setNestedValue / parseConfigLine / convertArrayValues / countTokens║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module Utils — deepMerge / getNestedValue / setNestedValue / countTokens */
+
     function deepMerge(target, source) {
-        console.debug('[deepMerge] 合并: target type=', typeof target, '| source type=', typeof source);
         if (source === null || typeof source !== 'object') return source;
         if (typeof target !== 'object') target = {};
         for (let key in source) {
@@ -260,13 +456,11 @@
     // 辅助函数：获取嵌套对象的值
     function getNestedValue(obj, path) {
         const result = path.split('.').reduce((o, p) => o?.[p], obj);
-        console.debug(`[getNestedValue] path="${path}" => ${JSON.stringify(result)}`);
         return result;
     }
 
     // 辅助函数：设置嵌套对象的值
     function setNestedValue(obj, path, value) {
-        console.debug(`[setNestedValue] path="${path}" value=${JSON.stringify(value)}`);
         const parts = path.split('.');
         const last = parts.pop();
         const target = parts.reduce((o, p) => o[p] = o[p] || {}, obj);
@@ -336,7 +530,6 @@
      */
 
     function convertArrayValues(config) {
-        console.debug('[convertArrayValues] 入参 keys:', Object.keys(config));
         const converted = {};
         // 定义数组字段集合
         const arrayFields = new Set(['key', 'keysecondary', 'triggers', 'characterFilter.names', 'characterFilter.tags']);
@@ -356,7 +549,6 @@
             }
         }
 
-        console.debug('[convertArrayValues] 结果 keys:', Object.keys(converted));
         return converted;
     }
 
@@ -371,7 +563,6 @@
      * @returns {Promise<number>} token 数
      */
     async function countTokens(text, source = 'unknown', model = '') {
-        console.debug(`[countTokens] source=${source}, model=${model}, textLen=${text?.length ?? 0}`);
         if (!text) return 0;
 
         // 1. 尝试使用 gpt-tokenizer（适用于 OpenAI 兼容模型）
@@ -379,23 +570,52 @@
             try {
                 const tokens = window.GPTTokenizer_cl100k_base.encode(text);
                 return tokens.length;
-            } catch (e) {
+            } catch (_) {
+                // gpt-tokenizer 失败时静默降级到字符估算，属预期分支
             }
         }
 
         // 2. 如果无法精确计数，则使用估算
         const estimated = Math.ceil(text.length / 3.35);
-        console.debug(`[countTokens] 使用估算 => ${estimated} tokens (textLen=${text.length})`);
         return estimated;
     }
 
+
+    // ── clipboard 工具 ─────────────────────────────────────────────────
+    /**
+     * 复制文本到剪贴板，自动降级为 execCommand。
+     * @param {string} text  要复制的内容
+     * @param {string} [successMsg='已复制到剪贴板']  成功提示
+     * @returns {Promise<void>}
+     */
+    async function copyToClipboard(text, successMsg = '已复制到剪贴板') {
+        try {
+            await navigator.clipboard.writeText(text);
+            Notify.success(successMsg, '', { timeOut: 2000 });
+        } catch (_) {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                Notify.success(successMsg + '（降级方案）', '', { timeOut: 2000 });
+            } catch (err2) {
+                console.error('[copyToClipboard] 两种复制方案均失败:', err2);
+                Notify.error('复制失败，请手动选择文本后复制');
+            }
+        }
+    }
 
     // ╔══════════════════════════════════════════════════════════════════╗
     // ║  模块 05：配置解析                                                ║
     // ║  parseCategoryFromContent / buildTemplateContentFromCategories / validateConfig / loadConfigFromJson║
     // ╚══════════════════════════════════════════════════════════════════╝
 
-    // ==================== 新增辅助函数 ====================
+    /** @module ConfigParser — loadConfigFromJson / validateConfig / buildTemplateContentFromCategories */
+
 
     /**
      * 从优化师输出动作的内容中提取类别定义
@@ -405,7 +625,6 @@
      * @returns {Object|null} { catId, catName, definition } 或 null（若解析失败）
      */
     function parseCategoryFromContent(content, uid) {
-        console.debug('[parseCategoryFromContent] uid=', uid, 'content前50字:', String(content).substring(0, 50));
         const lines = content.split('\n');
         if (lines.length === 0) {
             console.warn('[parseCategoryFromContent] content 为空，返回 null');
@@ -438,18 +657,13 @@
      * @returns {string} 拼接后的模板内容
      */
     function buildTemplateContentFromCategories(categories) {
-        console.debug('[buildTemplateContentFromCategories] 类别数量:', categories.size);
         const sorted = Array.from(categories.entries()).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
         return sorted.map(([_, def]) => def).join('\n\n');
     }
 
 
     function validateConfig(json) {
-        console.debug('[validateConfig] ========== 开始校验配置 ==========');
-        console.debug('[validateConfig] 配置概览:',
-            `version=${json.version}, description=${json.description}, mode=${json.mode}`);
-        console.debug('[validateConfig] agents 数量:', json.agents ? Object.keys(json.agents).length : 0);
-        console.debug('[validateConfig] workflowStages 数量:', json.workflowStages ? json.workflowStages.length : 0);
+        `version=${json.version}, description=${json.description}, mode=${json.mode}`);
 
         const errors = [];
 
@@ -461,7 +675,6 @@
 
         // ---------- 1. 校验全局数值配置 ----------
         (function validateGlobal() {
-            console.debug('[validateGlobal] 校验全局数值...');
 
             if (json.maxStateBooks === undefined) addError('缺少必填字段 maxStateBooks');
             else {
@@ -514,7 +727,6 @@
         const audioModeSet = new Set();        // 记录已出现的音频 mode，用于唯一性校验
 
         (function validateApiConfigBase() {
-            console.debug('[validateApiConfigBase] 开始校验 apiConfigs...');
 
             if (!json.apiConfigs) {
                 addError('缺少必填字段 apiConfigs（必须存在，可为空对象 {}）');
@@ -529,7 +741,6 @@
 
             const apiConfigs = json.apiConfigs;
             for (const [id, config] of Object.entries(apiConfigs)) {
-                console.debug(`[validateApiConfigBase] 校验配置: id=${id}, type=${config.type}, source=${config.source}`);
 
                 if (id.trim() === '') {
                     addError(`apiConfigs 中存在空字符串作为 ID，不允许`);
@@ -561,7 +772,6 @@
 
                 // 文本类型：必须包含 mode 字段，且值必须为 "txt-txt"
                 if (config.type === 'text') {
-                    console.debug(`[validateApiConfigBase] 文本类型 ${id} 校验 mode 字段`);
                     if (!config.mode) {
                         addError(`apiConfigs.${id} 缺少必填字段 mode（当 type 为 text 时）`);
                     } else if (config.mode !== 'txt-txt') {
@@ -631,7 +841,6 @@
         const stageMap = {};
         if (json.workflowStages && Array.isArray(json.workflowStages)) {
             json.workflowStages.forEach((stage, index) => {
-                console.debug(`[validateConfig] 校验阶段: index=${index}, id=${stage.id}, name=${stage.name}`);
                 if (!stage.id || typeof stage.id !== 'string' || stage.id.trim() === '') {
                     addError(`workflowStages[${index}] 缺少必填字段 id 或 id 为空`);
                 } else {
@@ -670,7 +879,6 @@
         const roleCount = {};
 
         (function validateAgents() {
-            console.debug('[validateAgents] 开始校验 agents...');
 
             if (!json.agents || typeof json.agents !== 'object') {
                 addError('配置缺少 agents 对象或 agents 无效');
@@ -678,7 +886,6 @@
             }
 
             for (const [key, agent] of Object.entries(json.agents)) {
-                console.debug(`[validateAgents] 校验 Agent: key=${key}, name=${agent.name}, role=${agent.role}`);
 
                 const requiredFields = [
                     'name', 'displayName', 'hover', 'order', 'required',
@@ -886,7 +1093,6 @@
 
         // ---------- 7. 图像配置数量唯一性校验 ----------
         (function validateImageConfigCount() {
-            console.debug('[validateImageConfigCount] 校验图像配置数量...');
             const hasImageGenerator = roleCount['imageGenerator'] > 0;
             if (hasImageGenerator) {
                 if (imageConfigCount !== 1) {
@@ -901,7 +1107,6 @@
 
         // ---------- 8. 角色唯一性校验 ----------
         (function validateRoleUniqueness() {
-            console.debug('[validateRoleUniqueness] 校验角色唯一性...');
             const uniqueRoles = [
                 'finalChapter',
                 'optimizer',
@@ -929,7 +1134,6 @@
         if (errors.length > 0) {
             console.warn('[validateConfig] 校验失败，错误详情:', errors);
         } else {
-            console.debug('[validateConfig] 校验通过');
         }
         return { valid: errors.length === 0, errors };
     }
@@ -940,9 +1144,9 @@
     function loadConfigFromJson(json, fileName, fileSize) {
         const validation = validateConfig(json);
         if (!validation.valid) {
-            console.error('配置校验失败:', validation.errors);
+            console.error('[validateConfig] 配置校验失败:', validation.errors);
             const errorMessage = validation.errors.map(err => `• ${err}`).join('\n');
-            UI.showErrorPanel('配置文件校验失败：\n\n' + errorMessage);
+            UI.showErrorPanel(`配置文件校验失败：\n\n${errorMessage}`);
             return false;
         }
 
@@ -1046,57 +1250,16 @@
 
         const enforceUniqueBranches = json.enforceUniqueBranches === true; // 默认为 false
 
-        // 重新构建 WORKFLOW_STATE
-        WORKFLOW_STATE = {
-            isRunning: false,
-            currentStep: '',
-            outputs: {},
-            startTime: null,
-            currentChapter: 1,
-            shouldStop: false,
-            tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
-            discarded: false,
-            discardedChapter: null,
-            userInputCache: '',
-            progressLog: [],
-            currentProfile: 'standard',
-            enabledAgents: [],
-            agentExecutionOrder: [],
-            currentConfigFile: WORKFLOW_STATE.currentConfigFile,
-            selectionState: newSelection,
-            awaitingInput: false,
-            inputResolver: null,
-            pendingUserInput: '',
-            currentWaitingAgent: null,
-            currentWaitingInputIndex: null,
-            autoMode: false,
-            chapterMemory: {},
-            lastSerialOutput: null,
-            inputRequestQueue: [],
-            isProcessingInput: false,
-            currentUserInput: '',
-            lastInputCache: {},
-            pendingInputBySrc: {},
-            agentInputCache: {},
-            agentRawOutputs: {},
-            reflowInputCache: {},
-            reflowCacheStack: [],
-            currentReflowCache: null,
-            reflowMap: {},
-            reflowWaiting: {},
-            reflowTargetLastSource: {},
-            reflowTargetCount: {},
-            apiStatus: {},
-            activeChapterNum: undefined,
-            currentBranchStart: undefined,
-            currentBranchLatest: undefined,
-            galProject: null,
-            galProjectId: null,
-            enforceUniqueBranches: enforceUniqueBranches,
-            configVersion: json.version || CONFIG.VERSION,
-            configDescription: json.description || '',
-            configMode: json.mode || 'normal',
-        };
+        // 重置全部状态，然后写入本次配置相关的字段
+        // （使用 StateStore.reset 避免对 const Proxy 整体重赋值）
+        const _savedConfigFile = StateStore.get('currentConfigFile');
+        StateStore.reset();                                                    // 全量清零
+        StateStore.set('currentConfigFile', _savedConfigFile);            // 恢复刚写入的文件信息
+        StateStore.set('selectionState', newSelection);
+        StateStore.set('enforceUniqueBranches', enforceUniqueBranches);
+        StateStore.set('configVersion', json.version || CONFIG.VERSION);
+        StateStore.set('configDescription', json.description || '');
+        StateStore.set('configMode', json.mode || 'normal');
 
         Storage.saveSelectionState(newSelection);
         AgentStateManager.init();
@@ -1113,6 +1276,8 @@
     // ║  DB 常量 / openDB / loadFromIndexedDB / saveToIndexedDB          ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module IndexedDB — openDB / loadFromIndexedDB / saveToIndexedDB */
+
     // ==================== IndexedDB 初始化与辅助函数 ====================
 
     const DB_NAME = 'NovelCreatorDB';
@@ -1126,7 +1291,6 @@
      * @returns {Promise<IDBDatabase>}
      */
     function openDB() {
-        console.debug(`[openDB] 打开数据库 "${DB_NAME}" v${DB_VERSION}`);
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(DB_NAME, DB_VERSION);
             request.onerror = (event) => {
@@ -1138,7 +1302,6 @@
             };
             request.onsuccess = (event) => {
                 const db = event.target.result;
-                console.debug('[openDB] 数据库打开成功');
                 resolve(db);
             };
             request.onupgradeneeded = (event) => {
@@ -1187,7 +1350,6 @@
             };
             transaction.oncomplete = () => {
                 db.close();
-                console.debug('[loadFromIndexedDB] 事务完成，数据库已关闭');
             };
             transaction.onerror = (event) => {
                 const error = event.target.error;
@@ -1227,7 +1389,6 @@
             };
             transaction.oncomplete = () => {
                 db.close();
-                console.debug('[saveToIndexedDB] 事务完成，数据库已关闭');
             };
             transaction.onerror = (event) => {
                 const error = event.target.error;
@@ -1242,6 +1403,8 @@
     // ║  模块 07：存储层                                                 ║
     // ║  Storage — 内存缓存 + IndexedDB 写入队列                         ║
     // ╚══════════════════════════════════════════════════════════════════╝
+
+    /** @module Storage — 章节/设置/选择状态的 localStorage 持久化 */
 
     // ==================== 存储管理 ====================
 
@@ -1281,26 +1444,16 @@
             HISTORY_CACHE.lastUpdate = Date.now();
 
 
-            // 将写入操作加入队列
-            this._writeQueue = this._writeQueue.then(() => {
-                console.time('IndexedDB写入');
-                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
-                    .then(() => {
-                        console.timeEnd('IndexedDB写入');
-
-                    })
-                    .catch(err => {
-                        console.timeEnd('IndexedDB写入');
-                        console.error('[Storage.save] 异步写入 IndexedDB 失败', err);
-                        // 详细错误输出
-                        console.error(`[Storage.save] 失败详情: ${err.name} - ${err.message}`);
-                        if (err.stack) console.error(err.stack);
-                        Notify.error('章节数据保存失败，请检查浏览器存储权限。若持续失败，请导出备份后刷新页面。');
-                        // 虽然写入失败，但内存缓存仍在，后续操作可基于内存继续，但需用户手动处理
-                        // 这里不抛出异常，仅通知用户，保证队列继续
-                    });
+            // 将写入操作加入队列（async/await 风格）
+            this._writeQueue = this._writeQueue.then(async () => {
+                try {
+                    await saveToIndexedDB({ chapters: HISTORY_CACHE.chapters });
+                } catch (err) {
+                    console.error('[Storage.save] 异步写入 IndexedDB 失败:', err);
+                    Notify.error('章节数据保存失败，请检查浏览器存储权限。若持续失败，请导出备份后刷新页面。');
+                }
             }).catch(err => {
-                console.error('[Storage.save] 写入队列处理出错', err);
+                console.error('[Storage.save] 写入队列处理出错:', err);
             });
 
             return true;
@@ -1322,12 +1475,10 @@
          */
         _buildChapterPath(num, chapters) {
 
-            console.time(`_buildChapterPath_${num}`);
 
             const chapter = chapters.find(c => c.num === num);
             if (!chapter) {
                 console.warn(`[Storage._buildChapterPath] 章节 ${num} 不存在，返回 null`);
-                console.timeEnd(`_buildChapterPath_${num}`);
                 return null;
             }
 
@@ -1397,7 +1548,6 @@
             }
 
 
-            console.timeEnd(`_buildChapterPath_${num}`);
             return path;
         },
 
@@ -1409,12 +1559,9 @@
             const chapters = [...(HISTORY_CACHE.chapters || [])];
             const timestamp = new Date().toLocaleString('zh-CN');
 
-            // ---------- 修改点：不再自动添加标题行 ----------
-            // 直接使用传入的 content，保持原样
+            // 直接使用传入的 content，不自动添加标题行
             const content = chapterData.content || '无';
-            // ---------- 结束修改 ----------
 
-            // ========== 新增：计算来源路径 sourcePath ==========
             let sourcePath = null;
             if (parentNum) {
                 sourcePath = this._buildChapterPath(parentNum, chapters);
@@ -1423,7 +1570,6 @@
                 sourcePath = "1";
             }
 
-            // ========== 结束计算 ==========
 
             const entry = {
                 num: chapterNum,
@@ -1453,7 +1599,6 @@
             HISTORY_CACHE.lastUpdate = Date.now();
 
 
-            // ===== 新增：如果唯一性约束开启且有互动结果，记录映射 =====
             if (WORKFLOW_STATE.enforceUniqueBranches && parentNum && interactionResult) {
                 this._writeQueue = this._writeQueue.then(async () => {
                     try {
@@ -1464,24 +1609,16 @@
                     }
                 });
             }
-            // ===== 结束新增 =====
 
-            this._writeQueue = this._writeQueue.then(() => {
-                console.time('IndexedDB写入');
-                return saveToIndexedDB({ chapters: HISTORY_CACHE.chapters })
-                    .then(() => {
-                        console.timeEnd('IndexedDB写入');
-
-                    })
-                    .catch(err => {
-                        console.timeEnd('IndexedDB写入');
-                        console.error('[Storage.saveChapter] 异步写入 IndexedDB 失败', err);
-                        console.error(`[Storage.saveChapter] 失败详情: ${err.name} - ${err.message}`);
-                        if (err.stack) console.error(err.stack);
-                        Notify.error('章节数据保存失败，请检查浏览器存储权限');
-                    });
+            this._writeQueue = this._writeQueue.then(async () => {
+                try {
+                    await saveToIndexedDB({ chapters: HISTORY_CACHE.chapters });
+                } catch (err) {
+                    console.error('[Storage.saveChapter] 异步写入 IndexedDB 失败:', err);
+                    Notify.error('章节数据保存失败，请检查浏览器存储权限');
+                }
             }).catch(err => {
-                console.error('[Storage.saveChapter] 写入队列处理出错', err);
+                console.error('[Storage.saveChapter] 写入队列处理出错:', err);
             });
 
             return true;
@@ -1496,22 +1633,15 @@
             HISTORY_CACHE.lastUpdate = Date.now();
 
 
-            this._writeQueue = this._writeQueue.then(() => {
-                console.time('IndexedDB写入');
-                return saveToIndexedDB({ chapters: [] })
-                    .then(() => {
-                        console.timeEnd('IndexedDB写入');
-
-                    })
-                    .catch(err => {
-                        console.timeEnd('IndexedDB写入');
-                        console.error('[Storage.clear] 写入失败', err);
-                        console.error(`[Storage.clear] 失败详情: ${err.name} - ${err.message}`);
-                        if (err.stack) console.error(err.stack);
-                        Notify.error('清空章节失败');
-                    });
+            this._writeQueue = this._writeQueue.then(async () => {
+                try {
+                    await saveToIndexedDB({ chapters: [] });
+                } catch (err) {
+                    console.error('[Storage.clear] 写入 IndexedDB 失败:', err);
+                    Notify.error('清空章节失败');
+                }
             }).catch(err => {
-                console.error('[Storage.clear] 写入队列处理出错', err);
+                console.error('[Storage.clear] 写入队列处理出错:', err);
             });
             return true;
         },
@@ -1566,8 +1696,9 @@
 
         saveTokenStats(stats) {
             try {
-                localStorage.setItem('novel_creator_token_stats_v1', JSON.stringify(stats));
+                localStorage.setItem(CONFIG.TOKEN_STATS_KEY, JSON.stringify(stats));
             } catch (_) {
+                // localStorage 不可用（隐私模式/配额满）时静默忽略，token 统计不影响主流程
             }
         },
 
@@ -1642,7 +1773,8 @@
     // ║  MappingManager — 互动结果 <-> 章节号的持久化映射                 ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
-    // ==================== 新增：互动映射管理器 ====================
+    /** @module MappingManager — 互动选项→章节号 双向映射，IndexedDB 持久化 */
+
 
     const MappingManager = {
         DB_NAME: 'NovelCreatorMappingsDB',
@@ -1756,7 +1888,6 @@
                 };
                 transaction.oncomplete = () => {
                     db.close();
-                    console.debug('[MappingManager.recordMapping] 事务完成，数据库已关闭');
                 };
                 transaction.onerror = (event) => {
                     const error = event.target.error;
@@ -1823,7 +1954,6 @@
                 };
                 transaction.oncomplete = () => {
                     db.close();
-                    console.debug('[MappingManager.deleteMappingsByChapters] 事务完成，数据库已关闭');
                 };
                 transaction.onerror = (event) => {
                     const error = event.target.error;
@@ -1899,6 +2029,8 @@
     // ║  模块 09：世界书工具                                              ║
     // ║  状态书 / 图库 / 音频库 的读写、解析与更新                        ║
     // ╚══════════════════════════════════════════════════════════════════╝
+
+    /** @module WorldBook — 状态书读写 / 图片音频条目管理 / 状态模板加载 */
 
     function getInitialStateContent() {
         const timestamp = new Date().toLocaleString('zh-CN');
@@ -2040,8 +2172,8 @@
                     } else {
                         break; // 遇到不存在的状态书即停止
                     }
-                } catch (e) {
-
+                } catch (_) {
+                    // 读取状态书失败即视为该序号不存在，停止枚举
                     break;
                 }
                 index++;
@@ -2099,8 +2231,8 @@
 
                     break;
                 }
-            } catch (e) {
-
+            } catch (_) {
+                // 模板读取失败即视为末尾，停止枚举
                 break;
             }
             bookIndex++;
@@ -2491,7 +2623,7 @@
                     UI.updateProgress(`  ⚠️ 状态书 ${bookName} 创建可能未成功`, true);
                 }
             } catch (e) {
-                UI.updateProgress(`  ✗ 处理 ${bookName} 时发生异常: ${e.message}`, true);
+                UI.updateProgress(`  ❌ 处理 ${bookName} 时发生异常: ${e.message}`, true);
             }
         }
 
@@ -2654,7 +2786,7 @@
             if (modified) {
 
                 await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
-                UI.updateProgress(`  ✓ ${bookName} 已更新`);
+                UI.updateProgress(`  ✅ ${bookName} 已更新`);
             } else {
 
             }
@@ -2756,10 +2888,10 @@
 
             // 保存更新后的世界书
             await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
-            UI.updateProgress(`  ✓ 已重置 ${bookName} (${stateEntries.length} 个条目)`);
+            UI.updateProgress(`  ✅ 已重置 ${bookName} (${stateEntries.length} 个条目)`);
         }
 
-        UI.updateProgress('✓ 所有状态书重置完成');
+        UI.updateProgress('✅ 所有状态书重置完成');
         return true;
     }
 
@@ -2780,7 +2912,7 @@
             } else {
                 throw new Error('createWorldbook API 不可用');
             }
-            UI.updateProgress(`  ✓ 已创建 ${bookName}`);
+            UI.updateProgress(`  ✅ 已创建 ${bookName}`);
 
         } catch (e) {
             console.error(`[DEBUG][createAndActivateStateBook] 创建世界书失败: ${e.message}`, e);
@@ -2842,7 +2974,7 @@
             // 检查新书是否在激活列表中
             const isActivated = updatedGlobalBooks.includes(bookName);
             if (isActivated) {
-                UI.updateProgress(`  ✓ 已激活 ${bookName}`);
+                UI.updateProgress(`  ✅ 已激活 ${bookName}`);
 
             } else {
                 UI.updateProgress(`  ⚠️ ${bookName} 可能未成功激活`, true);
@@ -2852,7 +2984,7 @@
             // 返回更新后的全局世界书列表，供上层函数使用
             return { success: true, globalBooks: updatedGlobalBooks };
         } catch (e) {
-            UI.updateProgress(`  ✗ 激活失败: ${e.message}`, true);
+            UI.updateProgress(`  ❌ 激活失败: ${e.message}`, true);
             console.error(`[DEBUG][createAndActivateStateBook] 激活世界书失败: ${e.message}`, e);
             throw e;
         }
@@ -2863,6 +2995,8 @@
     // ║  模块 10：分支系统辅助函数                                        ║
     // ║  extractImageIds / extractOtherFileIds / extractAudioIds / collectDescendants / buildTreeMaps / getBranchPath║
     // ╚══════════════════════════════════════════════════════════════════╝
+
+    /** @module BranchSystem — collectDescendants / buildTreeMaps / getBranchPath */
 
     // ==================== 分支系统辅助函数 ====================
 
@@ -3049,45 +3183,26 @@
 
     // ╔══════════════════════════════════════════════════════════════════╗
     // ║  模块 11：Agent 状态管理                                          ║
-    // ║  AgentStateManager / getAgentDisplayName / getAgentHoverText     ║
+    // ║  AgentStateManager — StateStore.agent 的向后兼容外观              ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
-    // ==================== Agent状态管理 ====================
-
+    /**
+     * @module AgentStateManager
+     * @deprecated 新代码请直接使用 StateStore.agent
+     * 此对象是 StateStore.agent 的薄包装，保持旧调用点不改动。
+     *
+     * 状态值（AgentStatus）:
+     *   'idle' | 'running' | 'pending' | 'waiting_input'
+     *   'reflow_processing' | 'reflow_waiting' | 'completed' | 'error'
+     */
     const AgentStateManager = {
-        states: {},
+        /** @returns {Object} 当前所有 agent 状态快照（只读） */
+        get states() { return StateStore.agent.snapshot(); },
 
-        init() {
-            // 保护性检查：如果 CONFIG.AGENTS 不存在或不是对象，则初始化为空对象
-            if (!CONFIG.AGENTS || typeof CONFIG.AGENTS !== 'object') {
-                console.warn('CONFIG.AGENTS 无效，已重置为空对象');
-                this.states = {};
-                return;
-            }
-            Object.keys(CONFIG.AGENTS).forEach(key => {
-                this.states[key] = 'idle';
-            });
-        },
-
-        setState(agentKey, state) {
-            if (CONFIG.AGENTS[agentKey]) {
-                if (this.states[agentKey] !== state) { // 仅当状态变化时才更新
-                    this.states[agentKey] = state;
-                    UI.updateAgentStatusButton(agentKey);
-                }
-            }
-        },
-
-        getState(agentKey) {
-            return this.states[agentKey] || 'idle';
-        },
-
-        reset() {
-            Object.keys(CONFIG.AGENTS).forEach(key => {
-                this.states[key] = 'idle';
-            });
-            UI.updateAllAgentStatusButtons();
-        },
+        init() { StateStore.agent.init(); },
+        setState(agentKey, status) { StateStore.agent.setState(agentKey, status); },
+        getState(agentKey) { return StateStore.agent.getState(agentKey); },
+        reset() { StateStore.agent.reset(); },
     };
 
     // ==================== 前置检测 ====================
@@ -3100,7 +3215,6 @@
             console.warn(`[getAgentDisplayName] 未找到 agentKey="${agentKey}"`);
             return agentKey;
         }
-        console.debug(`[getAgentDisplayName] ${agentKey} => "${agent.displayName}"`);
         return agent.displayName; // 可能为空字符串
     }
 
@@ -3112,7 +3226,6 @@
             console.warn(`[getAgentHoverText] 未找到 agentKey="${agentKey}"`);
             return '';
         }
-        console.debug(`[getAgentHoverText] ${agentKey} hover="${(agent.hover || '').substring(0, 40)}"`);
         return agent.hover || ''; // 若 hover 为 undefined/null 则返回空字符串
     }
 
@@ -3121,6 +3234,8 @@
     // ║  模块 12：API 适配层                                              ║
     // ║  API 对象 + testAPIConnection — TavernHelper 封装与外部 API 测试  ║
     // ╚══════════════════════════════════════════════════════════════════╝
+
+    /** @module API — TavernHelper 封装 + 外部 LLM/图像/音频 API 调用 */
 
     // ==================== API 适配层 ====================
 
@@ -3196,14 +3311,12 @@
      * @returns {Promise<{ok: boolean, error?: string}>}
      */
     async function testAPIConnection(config) {
-        console.debug(`[DEBUG][testAPIConnection] 开始测试: type=${config.type}, source=${config.source}, url=${config.apiUrl}, model=${config.model}`);
 
         const { type, source, apiUrl, key, model } = config;
         const url = apiUrl.replace(/\/+$/, ''); // 去除末尾多余的斜杠
 
         // 连通性测试使用固定10秒超时
         const testTimeout = 10000;
-        console.debug(`[DEBUG][testAPIConnection] 测试超时: ${testTimeout}ms`);
 
         // 检查密钥是否包含非ASCII字符（中文等）
         if (/[^\x00-\x7F]/.test(key)) {
@@ -3235,7 +3348,6 @@
                 }
             }
 
-            // ===== 在 Gemini 分支之后，文心一言之前插入 =====
             if (source === 'doubao') {
                 // 豆包测试：发送最小对话请求
                 const testUrl = url; // 假设 url 已是完整的 base URL，如 https://ark.cn-beijing.volces.com/api/v3
@@ -3271,7 +3383,7 @@
             // ----- 文心一言 (wenxin) 特殊处理 -----
             if (source === 'wenxin') {
                 // 文心一言的测试：直接发送一个最小对话请求
-                const testUrl = url; // 假设 url 已经是完整的 chat/completions 地址
+                const testUrl = url;
                 const testBody = {
                     messages: [{ role: "user", content: "hi" }],
                     max_tokens: 1
@@ -3531,7 +3643,6 @@
                     testUrl = url + '/user/info?GroupId=' + (config.group_id || 'test');
                     break;
                 case 'mureka':
-                    // 假设有健康检查端点
                     testUrl = url + '/health';
                     break;
                 case 'mubert':
@@ -3572,7 +3683,7 @@
                     testUrl = url + '/cognitiveservices/voices/list';
                     break;
                 case 'google-tts':
-                    testUrl = url + '/voices?key=' + encodeURIComponent(key);
+                    testUrl = url + `/voices?key=${encodeURIComponent(key)}`;
                     headers = {};
                     break;
                 case 'stableaudio':
@@ -3622,7 +3733,6 @@
             throw new Error('请先填写 API URL 和密钥');
         }
         const url = apiUrl.replace(/\/+$/, ''); // 去除末尾多余的斜杠
-
 
 
         try {
@@ -3763,7 +3873,6 @@
 
                 // Picsart
                 if (source === 'picsart') {
-                    // 假设有模型列表接口
                     const response = await fetch(`${url}/models`, {
                         headers: { 'Authorization': `Bearer ${key}` }
                     });
@@ -3860,6 +3969,7 @@
                         }
                         const listUrl = config.apiUrl.replace(/\/+$/, '') + '/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491EF6C';
                         const edgeRes = await fetch(listUrl);
+                        if (!edgeRes.ok) throw new Error(`EdgeTTS 声音列表请求失败 (${edgeRes.status})`);
                         const edgeVoices = await edgeRes.json();
                         return edgeVoices.map(v => ({ id: v.ShortName, description: v.FriendlyName }));
 
@@ -3927,6 +4037,8 @@
     // ║  模块 13：前置检测                                               ║
     // ║  PreCheck — 运行前环境验证（状态书 / 配置 / API 连通性）          ║
     // ╚══════════════════════════════════════════════════════════════════╝
+
+    /** @module PreCheck — 启动前系统检测：角色卡/世界书/API 可用性 */
 
     // ==================== 前置检测 ====================
 
@@ -4165,6 +4277,8 @@
     // ║  Notify — toastr 封装                                            ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module Notify — toastr 封装：success / error / warning / info */
+
     // ==================== 通知 ====================
 
     const Notify = {
@@ -4206,6 +4320,8 @@
     // ║  ModalStack — 管理多层模态框的 ESC 关闭顺序                       ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module ModalStack — 多级模态框管理，支持 Escape 关闭最顶层 */
+
     // ==================== 模态框栈 ====================
 
     const ModalStack = {
@@ -4237,6 +4353,8 @@
     // ║  模块 16：状态快照                                                ║
     // ║  Snapshot — 世界书快照的创建与恢复                                ║
     // ╚══════════════════════════════════════════════════════════════════╝
+
+    /** @module Snapshot — 章节状态书快照：保存/恢复 */
 
     // ==================== 状态快照 ====================
 
@@ -4310,7 +4428,7 @@
                         throw new Error('deleteWorldbook API 不可用');
                     }
                 } catch (e) {
-                    UI.updateProgress(`    ✗ 删除失败: ${e.message}`, true);
+                    UI.updateProgress(`    ❌ 删除失败: ${e.message}`, true);
                 }
             }
 
@@ -4329,7 +4447,7 @@
                     // 写入条目（snapshot.books[bookName] 已是完整的嵌套结构）
                     await API.updateWorldbook(bookName, () => snapshot.books[bookName], { render: 'immediate' });
                 } catch (e) {
-                    UI.updateProgress(`    ✗ 重建失败: ${e.message}`, true);
+                    UI.updateProgress(`    ❌ 重建失败: ${e.message}`, true);
                 }
             }
 
@@ -4349,7 +4467,7 @@
                 UI.updateProgress(`  ⚠️ 重新激活世界书失败: ${e.message}`, true);
             }
 
-            UI.updateProgress('✓ 状态书彻底回滚完成');
+            UI.updateProgress('✅ 状态书彻底回滚完成');
             return true;
         }
     };
@@ -4359,6 +4477,8 @@
     // ║  模块 17：媒体文件存储                                           ║
     // ║  ImageStore / OtherFileStore / AudioStore — 独立 IndexedDB 存储  ║
     // ╚══════════════════════════════════════════════════════════════════╝
+
+    /** @module MediaStorage — ImageStore / AudioStore / OtherFileStore — IndexedDB 媒体管理 */
 
     // ==================== 图片存储管理器 ====================
 
@@ -4398,6 +4518,7 @@
             if (typeof imageData === 'string' && imageData.startsWith('data:')) {
                 try {
                     const response = await fetch(imageData);
+                    if (!response.ok) throw new Error(`data URL 获取失败 (${response.status})`);
                     blob = await response.blob();
 
                 } catch (err) {
@@ -4436,7 +4557,6 @@
                 };
                 transaction.oncomplete = () => {
                     db.close();
-                    console.debug('[ImageStore.save] 事务完成，数据库已关闭');
                 };
                 transaction.onerror = (event) => {
                     const error = event.target.error;
@@ -4509,7 +4629,6 @@
                 };
                 transaction.oncomplete = () => {
                     db.close();
-                    console.debug('[ImageStore.delete] 事务完成，数据库已关闭');
                 };
                 transaction.onerror = (event) => {
                     const error = event.target.error;
@@ -4548,7 +4667,6 @@
                 };
                 transaction.oncomplete = () => {
                     db.close();
-                    console.debug('[ImageStore.clear] 事务完成，数据库已关闭');
                 };
                 transaction.onerror = (event) => {
                     const error = event.target.error;
@@ -4882,6 +5000,8 @@
     // ║  injectStyles — 所有 UI 的 CSS 注入                               ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module Styles — injectStyles() — 全部 UI CSS + 响应式断点注入 <head> */
+
     // ==================== 样式注入（修改版）====================
 
     function injectStyles() {
@@ -4910,6 +5030,19 @@
 
         style.textContent = `
         /* 原有样式保持不变，仅替换 .nc-workflow-agent-btn[data-state] 部分 */
+        /* ── 响应式颜色变量（供 JS 内联样式使用） ─── */
+        :root {
+            --nc-color-amber:    #ffaa00;
+            --nc-color-inactive: #4a4a6a;
+            --nc-color-text:     #eaeaea;
+            --nc-color-border:   #3a3a5a;
+            --nc-color-panel:    #1a1a2e;
+            --nc-color-card:     #2a2a3a;
+            --nc-color-dark-bg:  #1e1e2e;
+            --nc-color-red-alt:  #e74c3c;
+            --nc-color-blue-alt: #3498db;
+        }
+
         @keyframes nc-fade-in {
             from { opacity: 0; transform: scale(.95); }
             to   { opacity: 1; transform: scale(1); }
@@ -6340,7 +6473,6 @@
         }
 
 
-
         /* ── 按钮色彩主题 ──────────────────────────────── */
         /* 工具栏琥珀色实色按钮（检测配置） */
         .nc-btn--amber-solid { background: #ffaa00; border-color: #ffaa00; color: white; }
@@ -6798,8 +6930,7 @@
         .nc-grid--source-header { display:grid; grid-template-columns:1fr 90px 70px 1fr 30px; gap:8px; margin-bottom:8px; padding:0 4px; color:#888; font-size:12px; font-weight:500; text-transform:uppercase; }
 
         /* ── 显示/隐藏 ──────────────────────────────── */
-        /* 默认隐藏（要求/中断等按钮，JS控制） */
-        .nc-hidden { display:none; }
+        /* .nc-hidden 已在基础CSS中定义为 display:none !important；JS 侧请用 classList.toggle */
         /* 模型选择容器（默认隐藏，点击获取后显示） */
         .nc-hidden--model-select { display:none; margin-bottom:16px; }
         /* 预览面板（默认隐藏，切换后显示） */
@@ -7044,6 +7175,8 @@
     // ║  UI 对象 — 面板 / 事件绑定 / 工作流预览 / 文件管理 / 配置复制     ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module UI — 主面板 / 工作流可视化 / 文件管理 / 配置复制 / 响应式选项卡 */
+
     // ==================== UI - 主界面 ====================
 
     const UI = {
@@ -7088,7 +7221,7 @@
                     this.customStyleElement = style;
                     Notify.success(`配色样式已加载: ${file.name}`, '', { timeOut: 2000 });
                 } catch (err) {
-                    Notify.error('读取CSS文件失败: ' + err.message);
+                    Notify.error(`读取CSS文件失败: ${err.message}`);
                 } finally {
                     fileInput.remove();
                 }
@@ -7183,12 +7316,10 @@
                 overlayEl.remove();
 
 
-                // ===== 新增：如果栈为空且主面板不存在，则重新创建主面板 =====
                 if (ModalStack._stack.length === 0 && !document.getElementById(CONFIG.UI.panelId)) {
 
                     UI.createPanel();
                 }
-                // ===== 结束新增 =====
             }, 200);
         },
 
@@ -7198,34 +7329,31 @@
             let viewReqBtn = document.getElementById('nc-view-requirement');
 
             if (!submitBtn || !chapterBtn || !viewReqBtn) {
-                console.warn('updateSubmitButtons: 部分元素未找到，50ms后重试');
+                console.warn('[UI.updateSubmitButtons] 部分元素未找到，50ms后重试');
                 setTimeout(() => {
                     this.updateSubmitButtons(mode);
                 }, 50);
                 return;
             }
 
-            // ===== 新增：处理 mode 为 null 或 undefined 的情况 =====
             if (mode == null) {
                 submitBtn.disabled = true;
                 chapterBtn.disabled = true;
-                viewReqBtn.style.display = 'none';
+                viewReqBtn.classList.add('nc-hidden');
                 return;
             }
-            // ===== 结束新增 =====
 
             if (mode === 'txt') {
                 submitBtn.disabled = false;
                 chapterBtn.disabled = true;
                 chapterBtn.textContent = '📚 章节状态';
-                viewReqBtn.style.display = 'inline-flex';
+                viewReqBtn.classList.remove('nc-hidden');
             } else if (mode === 'status' || mode === 'chapter' || mode === 'all') {
                 submitBtn.disabled = true;
                 chapterBtn.disabled = false;
                 chapterBtn.textContent = '📚 章节状态';
-                viewReqBtn.style.display = 'inline-flex';
+                viewReqBtn.classList.remove('nc-hidden');
             }
-            // ========== 新增：read_ 和 save_ 模式 ==========
             else if (mode.startsWith('read_')) {
                 submitBtn.disabled = true;
                 chapterBtn.disabled = false;
@@ -7236,7 +7364,7 @@
                 else if (fileType === 'html') btnText = '🌐 读取 HTML';
                 else if (fileType === 'js') btnText = '📜 读取 JS';
                 chapterBtn.textContent = btnText;
-                viewReqBtn.style.display = 'inline-flex';
+                viewReqBtn.classList.remove('nc-hidden');
             } else if (mode.startsWith('save_')) {
                 submitBtn.disabled = true;
                 chapterBtn.disabled = false;
@@ -7247,13 +7375,12 @@
                 else if (fileType === 'html') btnText = '🌐 保存 HTML';
                 else if (fileType === 'js') btnText = '📜 保存 JS';
                 chapterBtn.textContent = btnText;
-                viewReqBtn.style.display = 'inline-flex';
+                viewReqBtn.classList.remove('nc-hidden');
             }
-            // ========== 结束新增 ==========
             else {
                 submitBtn.disabled = true;
                 chapterBtn.disabled = true;
-                viewReqBtn.style.display = 'none';
+                viewReqBtn.classList.add('nc-hidden');
             }
         },
 
@@ -7289,31 +7416,7 @@
 
             modal.querySelector('.nc-modal-copy-btn').addEventListener('click', async () => {
                 const textToCopy = content;
-                try {
-                    await navigator.clipboard.writeText(textToCopy);
-                    Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
-                } catch (err) {
-                    // 降级方案：使用 execCommand
-                    try {
-                        const textarea = document.createElement('textarea');
-                        textarea.value = textToCopy;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（使用降级方案）', '', { timeOut: 2000 });
-                    } catch (err2) {
-                        Notify.error('复制失败，请手动选择文本后复制');
-                        UI.showMarkdownModal('复制失败，请手动复制以下内容', textToCopy, {
-                            maxWidth: '600px',
-                            fontFamily: 'monospace',
-                            lineHeight: '1.5',
-                            accentColor: '#dc3545'
-                        });
-                    }
-                }
+                await copyToClipboard(textToCopy, '内容已复制到剪贴板');
             });
 
             return overlay;
@@ -7341,7 +7444,7 @@
                 lines[0] = configLine;
                 fullError = lines.join('\n');
             } else {
-                fullError = configLine + (errorMessage ? '\n' + errorMessage : '');
+                fullError = configLine + (errorMessage ? `\n${errorMessage}` : '');
             }
 
             // 保存失败信息到全局状态
@@ -7418,7 +7521,7 @@
                         await openPanelWithCheck();
                     } catch (err) {
                         console.error('[错误面板] 加载配置文件失败:', err);
-                        Notify.error('加载配置文件失败: ' + String(err));
+                        Notify.error(`加载配置文件失败: ${err}`);
                     }
                 };
                 fileInput.click();
@@ -7430,11 +7533,7 @@
             existing.forEach(el => el.remove());
             ModalStack._stack = [];  // 直接清空栈
 
-            // 清除API监控定时器
-            // if (UI.apiCheckInterval) {
-            //     clearInterval(UI.apiCheckInterval);
-            //     UI.apiCheckInterval = null;
-            // }
+
         },
 
         createFloatButton() {
@@ -7552,15 +7651,11 @@
 
             const chapters = Storage.loadChapters();
             const latestNum = chapters.length > 0 ? Math.max(...chapters.map(c => c.num)) : 0;
-            // 在 UI.createPanel 开头，加载 settings 后添加
             const settings = Storage.loadSettings();
             WORKFLOW_STATE.currentProfile = settings.profile || 'standard';
-            // ===== 新增：加载唯一分支开关状态 =====
             if (settings.enforceUniqueBranches !== undefined) {
                 WORKFLOW_STATE.enforceUniqueBranches = settings.enforceUniqueBranches;
             }
-            // ===== 结束新增 =====
-            WORKFLOW_STATE.currentProfile = settings.profile || 'standard';
 
             // 加载保存的预选状态
             const savedSelection = Storage.loadSelectionState();
@@ -7607,65 +7702,6 @@
                 this._renderAPIStatus(panel);
             });
 
-            // ===== 新增：启动API状态定时检查（每30秒） =====
-            // if (UI.apiCheckInterval) clearInterval(UI.apiCheckInterval);
-            // UI.apiCheckInterval = setInterval(async () => {
-
-            //     if (!document.getElementById(CONFIG.UI.panelId)) {
-
-            //         return;
-            //     }
-
-            //     const apiConfigs = CONFIG.apiConfigs || {};
-            //     if (Object.keys(apiConfigs).length === 0) {
-
-            //         return;
-            //     }
-
-            //     const newStatus = {};
-            //     for (const [id, config] of Object.entries(apiConfigs)) {
-
-            //         const result = await testAPIConnection(config);
-            //         newStatus[id] = {
-            //             ok: result.ok,
-            //             error: result.error,
-            //             lastTest: Date.now(),
-            //         };
-
-            //     }
-            //     WORKFLOW_STATE.apiStatus = newStatus;
-
-            //     const unavailable = Object.entries(newStatus).filter(([_, s]) => !s.ok).map(([id]) => id);
-            //     if (unavailable.length > 0) {
-            //         console.warn('[API监控] 不可用API:', unavailable);
-            //         if (WORKFLOW_STATE.isRunning) {
-
-            //             Workflow.stop();
-            //             UI.updateProgress(`❌ API连接丢失 (${unavailable.join(', ')})，工作流已中断`, true);
-            //             Notify.error(`API连接丢失 (${unavailable.join(', ')})，工作流已中断`);
-            //         } else {
-            //             const startBtn = document.getElementById('nc-start-btn');
-            //             if (startBtn) {
-            //                 startBtn.disabled = true;
-            //                 startBtn.title = `API不可用: ${unavailable.join(', ')}`;
-            //             }
-            //             UI.updateProgress(`⚠️ API连接异常 (${unavailable.join(', ')})，请检查后重试`, true);
-            //         }
-            //     } else {
-
-            //         if (!WORKFLOW_STATE.isRunning) {
-            //             const startBtn = document.getElementById('nc-start-btn');
-            //             if (startBtn) {
-            //                 startBtn.disabled = false;
-            //                 startBtn.title = '';
-            //             }
-            //         }
-            //     }
-
-            //     UI._renderAPIStatus(panel);
-            // }, 300000);
-            // ===== 结束新增 =====
-
             // 渲染完成后，检查是否处于等待输入状态，并更新按钮
             if (WORKFLOW_STATE.awaitingInput) {
                 const mode = WORKFLOW_STATE.pendingInputMode || 'txt';
@@ -7674,11 +7710,9 @@
                 UI.updateSubmitButtons(null);
             }
 
-            // ===== 新增：成功打开主面板，清除失败缓存 =====
             WORKFLOW_STATE.lastCheckFailed = false;
             WORKFLOW_STATE.lastCheckErrorMessage = '';
 
-            // ===== 结束新增 =====
         },
 
         // ==================== 生成启动层HTML ====================
@@ -8052,7 +8086,7 @@
                         UI.closeAll();
                         await openPanelWithCheck();
                     } catch (err) {
-                        Notify.error('加载配置文件失败: ' + String(err));
+                        Notify.error(`加载配置文件失败: ${err}`);
                     }
                 };
                 fileInput.click();
@@ -8088,7 +8122,7 @@
                         try {
                             if (typeof TavernHelper?.deleteWorldbook === 'function') {
                                 await TavernHelper.deleteWorldbook(bookName);
-                                UI.updateProgress(`    ✓ 已删除 ${bookName}`);
+                                UI.updateProgress(`    ✅ 已删除 ${bookName}`);
                             } else if (typeof window.deleteWorldbook === 'function') {
                                 await window.deleteWorldbook(bookName);
                             } else {
@@ -8096,7 +8130,7 @@
                             }
                             await API.sleep(50);
                         } catch (e) {
-                            UI.updateProgress(`    ✗ 删除 ${bookName} 失败: ${e.message}`, true);
+                            UI.updateProgress(`    ❌ 删除 ${bookName} 失败: ${e.message}`, true);
                         }
                     }
 
@@ -8105,12 +8139,12 @@
                     try {
                         if (typeof TavernHelper?.rebindGlobalWorldbooks === 'function') {
                             await TavernHelper.rebindGlobalWorldbooks([]);
-                            UI.updateProgress('    ✓ 已清空全局激活列表');
+                            UI.updateProgress('    ✅ 已清空全局激活列表');
                         } else {
                             UI.updateProgress('    ⚠️ rebindGlobalWorldbooks 不可用，请手动取消激活', true);
                         }
                     } catch (e) {
-                        UI.updateProgress(`    ✗ 取消激活失败: ${e.message}`, true);
+                        UI.updateProgress(`    ❌ 取消激活失败: ${e.message}`, true);
                     }
 
                     // 清空图片库
@@ -8125,46 +8159,11 @@
                     const oldSelectionState = WORKFLOW_STATE.selectionState;
                     const oldConfigMode = WORKFLOW_STATE.configMode;  // <-- 新增：保存原有的配置模式
 
-                    WORKFLOW_STATE = {
-                        isRunning: false,
-                        currentStep: '',
-                        startTime: null,
-                        currentChapter: 1,
-                        shouldStop: false,
-                        tokenStats: { totalInput: 0, totalOutput: 0, lastInput: 0, lastOutput: 0 },
-                        discarded: false,
-                        discardedChapter: null,
-                        userInputCache: '',
-                        progressLog: [],
-                        currentProfile: 'standard',
-                        enabledAgents: [],
-                        agentExecutionOrder: [],
-                        currentConfigFile: oldConfigFile,           // 保留配置文件信息
-                        selectionState: oldSelectionState,           // 保留预选状态
-                        configMode: oldConfigMode,                   // <-- 新增：保留配置模式（如 interactive）
-                        awaitingInput: false,
-                        inputResolver: null,
-                        pendingUserInput: '',
-                        currentWaitingAgent: null,
-                        currentWaitingInputIndex: null,
-                        autoMode: false,
-                        chapterMemory: {},
-                        lastSerialOutput: null,
-                        inputRequestQueue: [],
-                        isProcessingInput: false,
-                        currentUserInput: '',
-                        lastInputCache: {},
-                        pendingInputBySrc: {},
-                        agentInputCache: {},
-                        reflowInputCache: {},
-                        reflowCacheStack: [],
-                        currentReflowCache: null,
-                        reflowMap: {},
-                        reflowWaiting: {},
-                        reflowTargetLastSource: {},
-                        reflowTargetCount: {},
-                        apiStatus: {},
-                    };
+                    // 全量清零，再恢复需要保留的三个字段
+                    StateStore.reset();
+                    StateStore.set('currentConfigFile', oldConfigFile);    // 保留配置文件信息
+                    StateStore.set('selectionState', oldSelectionState); // 保留预选状态
+                    StateStore.set('configMode', oldConfigMode);     // 保留配置模式
 
                     AgentStateManager.reset();
                     stateTemplatesByBook = {};
@@ -8218,7 +8217,6 @@
                 const mode = WORKFLOW_STATE.pendingInputMode;
                 if (!mode || mode === 'txt') return;
 
-                // ========== 新增：read_ 和 save_ 模式 ==========
                 if (mode.startsWith('read_') || mode.startsWith('save_')) {
                     const isRead = mode.startsWith('read_');
                     const fileType = mode.substring(isRead ? 5 : 5); // 'read_' 或 'save_' 都是 5 个字符
@@ -8267,7 +8265,7 @@
                                 }
                             } catch (err) {
                                 console.error('[文件读取] 失败:', err);
-                                Notify.error('文件读取失败: ' + err.message);
+                                Notify.error(`文件读取失败: ${err}`.message);
                                 fileInput.remove();
                             }
                         } else {
@@ -8282,7 +8280,7 @@
                                 fileInput.remove();
                             } catch (err) {
                                 console.error('[文件保存] 失败:', err);
-                                Notify.error('文件保存失败: ' + err.message);
+                                Notify.error(`文件保存失败: ${err}`.message);
                                 fileInput.remove();
                             }
                         }
@@ -8291,7 +8289,6 @@
                     fileInput.click();
                     return;
                 }
-                // ========== 结束新增 ==========
 
                 HistoryUI.showChapterSelectionModal((selectedChapters) => {
                     if (!selectedChapters || selectedChapters.length === 0) {
@@ -9137,7 +9134,6 @@
                     UI.createPanel(); // 重新打开主界面
                 }
             });
-            // ========== 结束修改 ==========
         },
 
         // 在 UI 对象中添加
@@ -9408,7 +9404,7 @@
             modal.className = 'nc-modal nc-scroll';
             modal.style.maxWidth = '900px';
             modal.style.width = 'auto';
-            modal.style.background = '#1a1a2e';
+            modal.style.background = 'var(--nc-color-panel)';
 
             // 用于存储生成的图片 URL 及其对应的对象，以便关闭时释放
             const imageUrls = [];
@@ -9547,21 +9543,7 @@
                 } else {
                     textToCopy = rawOutput;
                 }
-                try {
-                    await navigator.clipboard.writeText(textToCopy);
-                    Notify.success('已复制到剪贴板', '', { timeOut: 2000 });
-                } catch (err) {
-                    // 降级方案
-                    const textarea = document.createElement('textarea');
-                    textarea.value = textToCopy;
-                    textarea.style.position = 'fixed';
-                    textarea.style.opacity = '0';
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(textarea);
-                    Notify.success('已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
-                }
+                await copyToClipboard(textToCopy);
             });
 
             // 关闭按钮
@@ -9730,7 +9712,7 @@
                 btn.classList.toggle('nc-btn--loading', isLoading);
             }
             if (stopBtn) {
-                stopBtn.style.display = isLoading ? 'inline-flex' : 'none';
+                stopBtn.classList.toggle('nc-hidden', !isLoading); // classList，绕开 !important
             }
 
             // 禁用/启用左侧树形菜单和Agent复选框
@@ -9860,14 +9842,14 @@
                     data: { chapters }
                 };
                 zip.file('chapters.json', JSON.stringify(chapterBackup, null, 2));
-                UI.updateProgress(`  ✓ 章节数据已打包 (共 ${chapters.length} 章)`);
+                UI.updateProgress(`  ✅ 章节数据已打包 (共 ${chapters.length} 章)`);
 
                 // ========== 2.5 导出映射表 ==========
                 UI.updateProgress('  正在导出映射表...');
                 try {
                     const mappings = await MappingManager.exportAll();
                     zip.file('mappings.json', JSON.stringify(mappings, null, 2));
-                    UI.updateProgress(`  ✓ 已导出映射表 (${mappings.length} 条)`);
+                    UI.updateProgress(`  ✅ 已导出映射表 (${mappings.length} 条)`);
                 } catch (e) {
                     console.error('[导出] 导出映射表时出错:', e);
                     UI.updateProgress(`  ⚠️ 映射表导出失败: ${e.message}`, true);
@@ -9882,7 +9864,7 @@
                     try {
                         allBooks = await TavernHelper.getAllWorldbookNames();
 
-                        UI.updateProgress(`✓ 通过 getAllWorldbookNames 获取到 ${allBooks.length} 本世界书`);
+                        UI.updateProgress(`✅ 通过 getAllWorldbookNames 获取到 ${allBooks.length} 本世界书`);
                     } catch (e) {
                         console.warn('[导出] 调用 TavernHelper.getAllWorldbookNames 失败:', e);
                     }
@@ -9922,7 +9904,6 @@
 
                 // 合并并去重
                 allBooks = [...new Set([...allBooks, ...stateBooks])];
-                // ===== 结束增强 =====
 
                 UI.updateProgress(`  发现 ${allBooks.length} 本世界书`);
 
@@ -9949,7 +9930,7 @@
                                 settings: settings,
                                 exportTime: new Date().toISOString()
                             }, null, 2));
-                            UI.updateProgress(`  ✓ ${bookName} 已导出 (${entries.length} 个条目)`);
+                            UI.updateProgress(`  ✅ ${bookName} 已导出 (${entries.length} 个条目)`);
 
                         } catch (e) {
                             console.error(`[导出] 导出 ${bookName} 失败:`, e);
@@ -9972,7 +9953,7 @@
                     chapterMemory: WORKFLOW_STATE.chapterMemory || {},
                 };
                 zip.file('workflow_outputs.json', JSON.stringify(workflowExport, null, 2));
-                UI.updateProgress('  ✓ 工作流输出记录已打包');
+                UI.updateProgress('  ✅ 工作流输出记录已打包');
 
 
                 // ========== 4. 导出所有图片 ==========
@@ -9991,9 +9972,9 @@
                             const fileName = `${id}.${ext}`;
                             imageFolder.file(fileName, blob, { binary: true });
                         }
-                        UI.updateProgress(`  ✓ 已导出 ${allImages.length} 张图片`);
+                        UI.updateProgress(`  ✅ 已导出 ${allImages.length} 张图片`);
                     } else {
-                        UI.updateProgress('  ✓ 无图片需要导出');
+                        UI.updateProgress('  ✅ 无图片需要导出');
                     }
                 } catch (e) {
                     console.error('[导出] 导出图片时出错:', e);
@@ -10015,9 +9996,9 @@
                             const fileName = `${id}.${ext}`;
                             textFolder.file(fileName, text, { binary: false });
                         }
-                        UI.updateProgress(`  ✓ 已导出 ${allTexts.length} 个文本文件`);
+                        UI.updateProgress(`  ✅ 已导出 ${allTexts.length} 个文本文件`);
                     } else {
-                        UI.updateProgress('  ✓ 无文本文件需要导出');
+                        UI.updateProgress('  ✅ 无文本文件需要导出');
                     }
                 } catch (e) {
                     console.error('[导出] 导出文本时出错:', e);
@@ -10040,9 +10021,9 @@
                             const fileName = `${id}.${ext}`;
                             audioFolder.file(fileName, blob, { binary: true });
                         }
-                        UI.updateProgress(`  ✓ 已导出 ${allAudios.length} 个音频文件`);
+                        UI.updateProgress(`  ✅ 已导出 ${allAudios.length} 个音频文件`);
                     } else {
-                        UI.updateProgress('  ✓ 无音频需要导出');
+                        UI.updateProgress('  ✅ 无音频需要导出');
                     }
                 } catch (e) {
                     console.error('[导出] 导出音频时出错:', e);
@@ -10135,7 +10116,6 @@
                     oldScript.parentNode.replaceChild(newScript, oldScript);
 
                 });
-                // ========== 结束脚本执行 ==========
 
                 // 禁用蒙版点击关闭
                 overlay.onclick = null;
@@ -10152,23 +10132,7 @@
 
                     const content = modal.querySelector('#nc-interaction-content');
                     const textToCopy = content.innerText || content.textContent;
-                    try {
-                        await navigator.clipboard.writeText(textToCopy);
-                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
-
-                    } catch (err) {
-                        console.warn('[UI.renderAndWaitForInteraction] 剪贴板API失败，使用降级方案:', err);
-                        const textarea = document.createElement('textarea');
-                        textarea.value = textToCopy;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
-
-                    }
+                    await copyToClipboard(textToCopy, '内容已复制到剪贴板');
                 });
 
                 // 绑定跳过按钮
@@ -10461,23 +10425,7 @@
             // 复制按钮
             copyBtn.addEventListener('click', async () => {
 
-                try {
-                    await navigator.clipboard.writeText(content);
-
-                    Notify.success('已复制到剪贴板');
-                } catch (err) {
-                    console.warn('[UI._showHtmlPreviewModal] 剪贴板API失败，使用降级方案:', err);
-                    const textarea = document.createElement('textarea');
-                    textarea.value = content;
-                    textarea.style.position = 'fixed';
-                    textarea.style.opacity = '0';
-                    document.body.appendChild(textarea);
-                    textarea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(textarea);
-
-                    Notify.success('已复制到剪贴板（降级方案）');
-                }
+                await copyToClipboard(content);
             });
 
             // 关闭按钮
@@ -10524,7 +10472,6 @@
             modal.style.width = '100%';
             modal.style.height = '80vh';
 
-            // ========== 修改点：将“其余文件库”按钮的 id 从 nc-file-tab-texts 改为 nc-file-tab-other ==========
             modal.innerHTML = `
         <div class="nc-modal-header">
             <h2 class="nc-modal-title--primary">📁 文件管理器</h2>
@@ -11345,7 +11292,7 @@
                             });
                         });
                     } catch (err) {
-
+                        console.error('[UI.openFileManager] 文件保存对话框出错:', err);
                         fileInput.remove();
                         return;
                     }
@@ -11441,7 +11388,7 @@
             modal.style.padding = '0';
             modal.style.display = 'flex';
             modal.style.flexDirection = 'column';
-            modal.style.background = '#1a1a2e';
+            modal.style.background = 'var(--nc-color-panel)';
 
             // 标题栏（已调整按钮顺序并添加显示指示线复选框）
             const header = document.createElement('div');
@@ -12278,7 +12225,7 @@
                     try {
                         thumbnail = editor.canvas.toDataURL('image/jpeg', 0.5);
                     } catch (e) {
-                        console.warn('缩略图生成失败', e);
+                        console.warn('[Galgame._buildNode] 缩略图生成失败', e);
                     }
 
                     const project = {
@@ -12731,7 +12678,7 @@
                                     const fn = new Function('vars', 'result', script);
                                     return fn(variables, result);
                                 } catch (e) {
-                                    console.error('脚本执行错误:', e);
+                                    console.error('[Galgame.playNode] 脚本执行错误:', e);
                                     return undefined;
                                 }
                             }
@@ -13583,7 +13530,7 @@
                     textarea = document.createElement('textarea');
                     textarea.style.width = '100%';
                     textarea.style.height = '100%';
-                    textarea.style.background = '#1e1e2e';
+                    textarea.style.background = 'var(--nc-color-dark-bg)';
                     textarea.style.color = '#eaeaea';
                     textarea.style.border = '1px solid #667eea';
                     textarea.style.fontFamily = 'monospace';
@@ -13641,7 +13588,7 @@
                     textarea = document.createElement('textarea');
                     textarea.style.width = '100%';
                     textarea.style.height = '100%';
-                    textarea.style.background = '#1e1e2e';
+                    textarea.style.background = 'var(--nc-color-dark-bg)';
                     textarea.style.color = '#eaeaea';
                     textarea.style.border = '1px solid #667eea';
                     textarea.style.fontFamily = 'monospace';
@@ -14143,14 +14090,30 @@
                 align-items: center;
             }
             .nc-config-editor .source-row input,
-            .nc-config-editor .source-row select {
+            .nc-config-editor .source-row select,
+            .nc-config-editor .source-src,
+            .nc-config-editor .source-auto,
+            .nc-config-editor .source-prompt,
+            .nc-config-editor .source-mode {
                 background: #1e1e2f;
                 border: 1px solid #3a3a5a;
                 border-radius: 6px;
                 padding: 6px 8px;
                 color: #eaeaea;
                 font-size: 11px;
+                width: 100%;
+                box-sizing: border-box;
             }
+            .nc-config-editor .source-src:focus,
+            .nc-config-editor .source-auto:focus,
+            .nc-config-editor .source-prompt:focus,
+            .nc-config-editor .source-mode:focus {
+                border-color: #667eea;
+                outline: none;
+                box-shadow: 0 0 0 2px rgba(102,126,234,0.2);
+            }
+            .nc-config-editor .source-auto { width: 70px; }
+            .nc-config-editor .source-mode { width: 90px; }
             .nc-config-editor .source-row input:focus,
             .nc-config-editor .source-row select:focus {
                 border-color: #667eea;
@@ -14226,7 +14189,7 @@
             modal.style.padding = '0';
             modal.style.display = 'flex';
             modal.style.flexDirection = 'column';
-            modal.style.background = '#1a1a2e';
+            modal.style.background = 'var(--nc-color-panel)';
             modal.style.borderRadius = '16px';
             modal.style.overflow = 'hidden';
 
@@ -14648,7 +14611,6 @@
             });
         },
 
-        // ==================== 新增：获取当前配置的深拷贝（用于编辑器） ====================
 
         _getCurrentConfigForEditor: function () {
 
@@ -14747,6 +14709,8 @@
     // ║  ConfigEditor 类 — 可视化 Agent 配置图编辑器                      ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module ConfigEditor — 可视化 JSON 配置编辑器：阶段/Agent/API/分类/选项 */
+
     // ==================== ConfigEditor 类 ====================
 
     class ConfigEditor {
@@ -14828,11 +14792,9 @@
             this.roleRectHeight = 24;   // 角色框高度
             this.roleTopMargin = 6;     // 角色框与节点顶部的间距
 
-            // ===== 新增：order 区域高度和边距 =====
             this.orderRectHeight = 24;
             this.orderTopMargin = 6;
 
-            // ===== 新增：未分配区边框额外边距 =====
             this.unassignedAreaTopPadding = 40;
             this.unassignedAreaBottomPadding = 40;
 
@@ -16024,7 +15986,6 @@
             ctx.fillText(roleText, roleRectX + agentWidth / 2, roleRectY + roleRectHeight / 2);
             ctx.textAlign = 'left';
             ctx.textBaseline = 'alphabetic';
-            // ========== 结束角色框绘制 ==========
 
             // ========== 第三行：彩色标记 + order 数字 ==========
             const markerY = y + 56;
@@ -16073,7 +16034,6 @@
                 ctx.fillText(String(agent.order), cursorX, markerY);
             }
             ctx.textBaseline = 'alphabetic';
-            // ========== 结束第三行绘制 ==========
 
             ctx.restore();
         }
@@ -16345,7 +16305,6 @@
         }
 
         _renderApiProperties(apiId) {
-            console.debug(`[ConfigEditor._renderApiProperties] 开始渲染 API 属性: ${apiId}`);
 
             const api = this.config.apiConfigs[apiId];
             if (!api) {
@@ -16440,7 +16399,6 @@
 
             // ==================== 辅助函数 ====================
             const updateField = (field, value) => {
-                console.debug(`[ConfigEditor._renderApiProperties] 更新字段 ${field}=${value} (id=${apiId})`);
                 this.config.apiConfigs[apiId][field] = value;
                 if (this.callbacks.onConfigChange) this.callbacks.onConfigChange(this.getConfig());
             };
@@ -16514,7 +16472,6 @@
                 let newSource = sources.includes(currentSource) ? currentSource : (sources[0] || '');
 
 
-
                 sourceSelect.innerHTML = sources.map(s => `<option value="${s}" ${newSource === s ? 'selected' : ''}>${s}</option>`).join('');
 
                 if (api.source !== newSource) {
@@ -16538,7 +16495,6 @@
                 } else {
                     console.warn('[updateSourceOptions] urlInput 未找到');
                 }
-                // ===== 结束修复 =====
 
                 // 主动触发 source 的 change 事件，确保后续处理（如重新渲染额外字段）执行
                 sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -17596,10 +17552,8 @@
                 conditions.forEach((cond, index) => {
                     html += `
                 <div class="nc-flex--row-6-mb6-mid">
-                    <input type="text" class="reflow-condition-item" data-index="${index}" value="${this._escapeHtml(cond)}"
-                        class="nc-source-input--flex">
-                    <button class="delete-reflow-condition" data-index="${index}"
-                        class="nc-gal-btn--remove-32">✖</button>
+                    <input type="text" class="reflow-condition-item nc-source-input--flex" data-index="${index}" value="${this._escapeHtml(cond)}">
+                    <button class="delete-reflow-condition" data-index="${index}">✖</button>
                 </div>
             `;
                 });
@@ -17750,16 +17704,14 @@
                 <div class="source-card nc-card--source-card" data-index="${index}">
                     <div class="nc-flex--row-8-middle-mb8">
                         <div class="nc-flex-item--relative">
-                            <input type="text" class="source-src" data-index="${index}" value="${this._escapeHtml(item.src)}"
+                            <input type="text" class="source-src nc-source-input--main" data-index="${index}" value="${this._escapeHtml(item.src)}"
                                 placeholder="源标识符 (可输入或选择)"
-                                list="${listId}"
-                                class="nc-source-input--main">
+                                list="${listId}">
                             <datalist id="${listId}">
                                 ${uniqueCandidates.map(s => `<option value="${s}">`).join('')}
                             </datalist>
                         </div>
-                        <button class="delete-source" data-index="${index}"
-                                class="nc-gal-btn--remove-36">✖</button>
+                        <button class="delete-source" data-index="${index}">✖</button>
                     </div>
                     <div class="nc-flex--row-8-mb8">
                         <select class="source-mode nc-source-select--flex" data-index="${index}">
@@ -17768,14 +17720,12 @@
                             <option value="chapter" ${item.mode === 'chapter' ? 'selected' : ''}>chapter</option>
                             <option value="all" ${item.mode === 'all' ? 'selected' : ''}>all</option>
                         </select>
-                        <input type="number" class="source-auto" data-index="${index}" value="${item.auto}" min="0" step="1"
-                            placeholder="auto"
-                            class="nc-source-input--type">
+                        <input type="number" class="source-auto nc-source-input--type" data-index="${index}" value="${item.auto}" min="0" step="1"
+                            placeholder="auto">
                     </div>
                     <div>
-                        <input type="text" class="source-prompt" data-index="${index}" value="${this._escapeHtml(item.prompt)}"
-                            placeholder="提示词"
-                            class="nc-source-input--main">
+                        <input type="text" class="source-prompt nc-source-input--main" data-index="${index}" value="${this._escapeHtml(item.prompt)}"
+                            placeholder="提示词">
                     </div>
                 </div>
             `;
@@ -18296,7 +18246,7 @@
                         characterNames = context.characters.map(c => c.name || c.data?.name).filter(Boolean);
                     }
                 } catch (e) {
-                    console.warn('无法获取角色卡列表', e);
+                    console.warn('[ConfigEditor._renderAgentProperties] 无法获取角色卡列表', e);
                 }
 
                 const defaultName = characterNames.length > 0 ? characterNames[0] : '';
@@ -18349,7 +18299,6 @@
             });
         }
 
-        // ========== 新增：Agent键名更新辅助方法 ==========
         _updateAgentKey(oldKey, newKey) {
 
 
@@ -18430,6 +18379,8 @@
     // ║  模块 21：Galgame 编辑器与播放器                                  ║
     // ║  GalgameEditor / GalgamePlayer — 视觉小说制作与播放               ║
     // ╚══════════════════════════════════════════════════════════════════╝
+
+    /** @module GalgameEditor — 节点图编辑器 + 分支播放器 */
 
     // ==================== Galgame 编辑器类 ====================
 
@@ -19784,6 +19735,8 @@
     // ║  HistoryUI — 章节历史、分支树、章节操作（含分支核心操作）         ║
     // ╚══════════════════════════════════════════════════════════════════╝
 
+    /** @module HistoryUI — 历史章节树形浏览 / 回滚 / 分支 / 状态书查看 */
+
     // ==================== 历史记录UI ====================
 
     const HistoryUI = {
@@ -20238,7 +20191,7 @@
                         stateTemplatesByBook[t.bookIndex] = t.categoryMap;
                     });
                 } catch (e) {
-                    console.warn('加载状态模板失败', e);
+                    console.warn('[HistoryUI._openChapterModal] 加载状态模板失败', e);
                 }
             }
         },
@@ -20405,7 +20358,6 @@
                     metaHtml += '</div>';
                 }
 
-                // ========== 修改点：优化源码/预览按钮样式 ==========
                 let viewToggleHtml = '';
                 if (isHtml) {
                     viewToggleHtml = `
@@ -20415,7 +20367,6 @@
                 </div>
             `;
                 }
-                // ========== 结束修改 ==========
 
                 bodyHTML = `
             <div class="nc-modal-header">
@@ -20497,10 +20448,10 @@
                 };
 
                 if (isHtml) {
-                    // 默认显示预览
-                    sourceContainer.style.display = 'none';
-                    previewContainer.style.display = 'block';
-                    loadingDiv.style.display = 'none';
+                    // 默认显示预览（classList，配合 nc-hidden !important）
+                    sourceContainer.classList.add('nc-hidden');
+                    previewContainer.classList.remove('nc-hidden');
+                    loadingDiv.classList.add('nc-hidden');
                     await renderPreview();
 
                     // 初始高亮预览按钮（因为默认显示预览）
@@ -20511,32 +20462,32 @@
 
                     sourceBtn.addEventListener('click', () => {
 
-                        sourceContainer.style.display = 'block';
-                        previewContainer.style.display = 'none';
+                        sourceContainer.classList.remove('nc-hidden');
+                        previewContainer.classList.add('nc-hidden');
                         // 高亮源码按钮
                         sourceBtn.style.opacity = '1';
                         sourceBtn.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.6)';
                         previewBtn.style.opacity = '0.7';
                         previewBtn.style.boxShadow = 'none';
-                        if (refreshBtn) refreshBtn.style.display = 'none';
+                        if (refreshBtn) refreshBtn.classList.add('nc-hidden');
                     });
                     previewBtn.addEventListener('click', async () => {
 
-                        sourceContainer.style.display = 'none';
-                        previewContainer.style.display = 'block';
+                        sourceContainer.classList.add('nc-hidden');
+                        previewContainer.classList.remove('nc-hidden');
                         // 高亮预览按钮
                         previewBtn.style.opacity = '1';
                         previewBtn.style.boxShadow = '0 4px 12px rgba(78, 205, 196, 0.6)';
                         sourceBtn.style.opacity = '0.7';
                         sourceBtn.style.boxShadow = 'none';
-                        if (refreshBtn) refreshBtn.style.display = 'none';
+                        if (refreshBtn) refreshBtn.classList.add('nc-hidden');
                         // 重新渲染（保证最新）
                         await renderPreview();
                     });
                 } else {
                     // 纯文本：直接显示预览（即渲染后的markdown）
-                    loadingDiv.style.display = 'none';
-                    previewContainer.style.display = 'block';
+                    loadingDiv.classList.add('nc-hidden');
+                    previewContainer.classList.remove('nc-hidden');
                     await renderPreview();
                 }
 
@@ -20544,21 +20495,7 @@
                 const copyBtn = modal.querySelector('.nc-modal-copy-btn');
                 copyBtn.addEventListener('click', async () => {
 
-                    try {
-                        await navigator.clipboard.writeText(chapter.content);
-                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
-                    } catch (err) {
-                        // 降级方案
-                        const textarea = document.createElement('textarea');
-                        textarea.value = chapter.content;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
-                    }
+                    await copyToClipboard(chapter.content, '内容已复制到剪贴板');
                 });
 
                 // 关闭按钮
@@ -20678,21 +20615,7 @@
                 copyBtn.addEventListener('click', async () => {
 
                     const textToCopy = `# ${editTitle.value}\n\n${editContent.value}`;
-                    try {
-                        await navigator.clipboard.writeText(textToCopy);
-                        Notify.success('内容已复制到剪贴板', '', { timeOut: 2000 });
-                    } catch (err) {
-                        // 降级
-                        const textarea = document.createElement('textarea');
-                        textarea.value = textToCopy;
-                        textarea.style.position = 'fixed';
-                        textarea.style.opacity = '0';
-                        document.body.appendChild(textarea);
-                        textarea.select();
-                        document.execCommand('copy');
-                        document.body.removeChild(textarea);
-                        Notify.success('内容已复制到剪贴板（降级方案）', '', { timeOut: 2000 });
-                    }
+                    await copyToClipboard(textToCopy, '内容已复制到剪贴板');
                 });
 
                 // 切换模式
@@ -20954,11 +20877,9 @@
                 return;
             }
             if (Storage.clear()) {
-                // ===== 新增：清空图片库 =====
                 await ImageStore.clear();
                 await OtherFileStore.clear();
                 await AudioStore.clear();
-                // ===== 结束 =====
 
                 Notify.success('历史章节已清空，状态书已清空', '', { timeOut: 2000 });
                 if (document.getElementById(CONFIG.UI.panelId)) {
@@ -21024,7 +20945,7 @@
                                         UI.updateProgress(`    ⚠️ 图片 ${fileName} 恢复失败`, true);
                                     }
                                 }
-                                UI.updateProgress(`  ✓ 图片恢复完成`);
+                                UI.updateProgress(`  ✅ 图片恢复完成`);
                             } else {
 
                             }
@@ -21047,7 +20968,7 @@
                                         UI.updateProgress(`    ⚠️ 音频 ${fileName} 恢复失败`, true);
                                     }
                                 }
-                                UI.updateProgress(`  ✓ 音频恢复完成`);
+                                UI.updateProgress(`  ✅ 音频恢复完成`);
                             } else {
 
                             }
@@ -21072,7 +20993,7 @@
                                         UI.updateProgress(`    ⚠️ 其余文件 ${fileName} 恢复失败`, true);
                                     }
                                 }
-                                UI.updateProgress(`  ✓ 其余文件恢复完成`);
+                                UI.updateProgress(`  ✅ 其余文件恢复完成`);
                             } else {
 
                             }
@@ -21087,7 +21008,7 @@
                                     const mappings = JSON.parse(mappingsJson);
 
                                     await MappingManager.importAll(mappings);
-                                    UI.updateProgress(`  ✓ 已恢复 ${mappings.length} 条映射`);
+                                    UI.updateProgress(`  ✅ 已恢复 ${mappings.length} 条映射`);
                                 } catch (e) {
                                     console.error('[HistoryUI.importBackup] 恢复映射表失败:', e);
                                     UI.updateProgress(`  ⚠️ 映射表恢复失败: ${e.message}`, true);
@@ -21121,13 +21042,12 @@
                                     const uniqueMappings = Array.from(uniqueMap.values());
 
                                     await MappingManager.importAll(uniqueMappings);
-                                    UI.updateProgress(`  ✓ 从章节数据重建了 ${uniqueMappings.length} 条映射`);
+                                    UI.updateProgress(`  ✅ 从章节数据重建了 ${uniqueMappings.length} 条映射`);
                                 } catch (e) {
                                     console.error('[HistoryUI.importBackup] 重建映射失败:', e);
                                     UI.updateProgress(`  ⚠️ 重建映射失败: ${e.message}`, true);
                                 }
                             }
-                            // ========== 结束映射恢复 ==========
 
                             // 2. 恢复章节
                             const chaptersFile = zip.file('chapters.json');
@@ -21140,7 +21060,7 @@
 
                                     // 直接覆盖存储
                                     if (Storage.save(chaptersData.data)) {
-                                        UI.updateProgress(`  ✓ 已恢复 ${chaptersData.data.chapters.length} 章`);
+                                        UI.updateProgress(`  ✅ 已恢复 ${chaptersData.data.chapters.length} 章`);
                                     } else {
                                         UI.updateProgress(`  ⚠️ 章节恢复失败`, true);
                                     }
@@ -21181,9 +21101,8 @@
                                     try {
                                         await API.getWorldbook(bookName);
                                         exists = true;
-
-                                    } catch (e) {
-
+                                    } catch (_) {
+                                        // 读取失败 = 世界书不存在，exists 保持 false
                                     }
                                     if (!exists) {
                                         if (typeof TavernHelper?.createWorldbook === 'function') {
@@ -21196,14 +21115,13 @@
                                     }
                                     await API.updateWorldbook(bookName, () => bookData.entries, { render: 'immediate' });
 
-                                    UI.updateProgress(`  ✓ 已恢复世界书 ${bookName}`);
+                                    UI.updateProgress(`  ✅ 已恢复世界书 ${bookName}`);
                                 } catch (err) {
                                     console.error(`[HistoryUI.importBackup] 恢复世界书 ${fileName} 失败:`, err);
                                     UI.updateProgress(`  ❌ 恢复世界书 ${fileName} 失败: ${err.message}`, true);
                                 }
                             }
 
-                            // ========== 新增：激活所有恢复的世界书 ==========
                             if (restoredBooks.size > 0) {
 
                                 UI.updateProgress('  正在激活恢复的世界书...');
@@ -21224,7 +21142,7 @@
                                     if (typeof TavernHelper?.rebindGlobalWorldbooks === 'function') {
                                         await TavernHelper.rebindGlobalWorldbooks(newGlobalBooks);
 
-                                        UI.updateProgress(`  ✓ 已激活 ${restoredBooks.size} 本世界书`);
+                                        UI.updateProgress(`  ✅ 已激活 ${restoredBooks.size} 本世界书`);
                                     } else {
                                         console.warn('[HistoryUI.importBackup] rebindGlobalWorldbooks 不可用，跳过激活');
                                     }
@@ -21235,7 +21153,6 @@
                             } else {
 
                             }
-                            // ========== 结束新增 ==========
 
                             // 4. 工作流输出（可选，仅恢复内存？这里只记录）
                             const workflowFile = zip.file('workflow_outputs.json');
@@ -21279,7 +21196,7 @@
                                     UI.updateProgress(`正在恢复状态书到第${last.num}章结束时的状态...`);
 
                                     const ok = await Snapshot.restore(last.snapshot);
-                                    UI.updateProgress(ok ? '✓ 状态书状态已恢复' : '❌ 状态书状态恢复失败', !ok);
+                                    UI.updateProgress(ok ? '✅ 状态书状态已恢复' : '❌ 状态书状态恢复失败', !ok);
                                     if (!ok) Notify.warning('状态书状态恢复失败，但章节数据已导入', '', { timeOut: 2000 });
                                 } else {
                                     UI.updateProgress('导入章节无快照，清空状态书...');
@@ -21554,7 +21471,6 @@
                 // 实时模式：获取所有存在的状态书
                 books = await getAllStateBooks();
             }
-            // ========== 结束修改 ==========
 
             // 如果没有书籍，则关闭模态框并提示
             if (!books || books.length === 0) {
@@ -21682,7 +21598,6 @@
                         // 使用实时加载的全局模板
                         templateMap = stateTemplatesByBook[bookIndex] || {};
                     }
-                    // ===== 结束修改 =====
 
                     body.innerHTML = '';
 
@@ -21972,7 +21887,7 @@
 
                         // 保存到实时世界书
                         await API.updateWorldbook(bookName, () => entries, { render: 'immediate' });
-                        UI.updateProgress(`✓ 已更新 ${bookName}`);
+                        UI.updateProgress(`✅ 已更新 ${bookName}`);
                     }
 
                     // 如果是历史章节，更新该章节的快照
@@ -21982,7 +21897,7 @@
                         if (chapter) {
                             chapter.snapshot = await Snapshot.create();
                             Storage.save({ chapters });
-                            UI.updateProgress(`✓ 已更新第${chapterNum}章的快照`);
+                            UI.updateProgress(`✅ 已更新第${chapterNum}章的快照`);
                         }
                     }
 
@@ -22123,9 +22038,7 @@
                 }
             }
 
-            // ===== 新增：清理相关映射 =====
             await MappingManager.deleteMappingsByChapters(toDeleteNums);
-            // ===== 结束新增 =====
 
             // 保存剩余章节
             Storage.save({ chapters: remainingChapters });
@@ -22274,8 +22187,36 @@
     // ║  openPanelWithCheck / activateAllExistingStateBooks / Workflow — 主执行引擎║
     // ╚══════════════════════════════════════════════════════════════════╝
 
-    // ==================== 打开面板检测函数 ====================
+    /** @module Workflow — 核心执行引擎：多 Agent 串/并行、回流、人工审核 */
 
+    // ╔══════════════════════════════════════════════════════════════════╗
+    // ║  模块 23a：面板控制器                                             ║
+    // ║  PanelController — 面板开启前置检测 + 状态书激活工具              ║
+    // ╚══════════════════════════════════════════════════════════════════╝
+
+    /**
+     * @module PanelController
+     * 负责"打开主面板"的完整流程：
+     *   1. 前置检测（PreCheck.checkAll）
+     *   2. 加载状态模板
+     *   3. 调用 UI.createPanel
+     *
+     * 同时提供世界书激活工具方法。
+     */
+    const PanelController = {
+        /**
+         * 打开主面板，含前置检测
+         * @param {boolean} [force=false] 强制重新检测（忽略上次缓存结果）
+         */
+        async openWithCheck(force = false) { return openPanelWithCheck(force); },
+
+        /**
+         * 激活所有已存在的状态书（世界书）
+         */
+        async activateStateBooks() { return activateAllExistingStateBooks(); },
+    };
+
+    // ── 保持原有全局函数名（被大量调用点引用） ────────────────────────
     async function openPanelWithCheck(force = false) {
 
 
@@ -22408,28 +22349,10 @@
 
             WORKFLOW_STATE.enabledAgents = calculatedAgents;
 
-            // 重置本章开始前的状态
-            WORKFLOW_STATE.outputs = {};
-            WORKFLOW_STATE.agentRawOutputs = {};
-            WORKFLOW_STATE.reflowCacheStack = [];
-            WORKFLOW_STATE.currentReflowCache = null;
-            WORKFLOW_STATE.reflowMap = {};
-            WORKFLOW_STATE.reflowWaiting = {};
-            WORKFLOW_STATE.discarded = false;
-            WORKFLOW_STATE.discardedChapter = null;
-            WORKFLOW_STATE.currentWaitingAgent = null;
-            WORKFLOW_STATE.awaitingInput = false;
-            WORKFLOW_STATE.inputResolver = null;
-            WORKFLOW_STATE.pendingInputMode = null;
-            WORKFLOW_STATE.lastStateContents = null;
-            WORKFLOW_STATE.currentUserInput = '';
-            WORKFLOW_STATE.lastInputCache = {};
-            WORKFLOW_STATE.agentInputCache = {};
-            WORKFLOW_STATE.pendingInputBySrc = {};
-            WORKFLOW_STATE.reflowInputCache = {};
-            WORKFLOW_STATE.reflowTargetLastSource = {};
-            WORKFLOW_STATE.reflowTargetCount = {};
-            WORKFLOW_STATE.currentInteractionResult = null;   // 新增：重置本章互动结果
+            // 重置本章开始前的状态（chapter / input / reflow 三个分组全部清零）
+            StateStore.reset('chapter');
+            StateStore.reset('input');
+            StateStore.reset('reflow');
 
             AgentStateManager.reset();
 
@@ -22437,7 +22360,8 @@
             if (WORKFLOW_STATE.abortController) {
                 try {
                     WORKFLOW_STATE.abortController.abort();
-                } catch (e) {
+                } catch (_) {
+                    // 重复 abort() 是安全的，浏览器有时仍抛出；静默忽略
                 }
             }
             WORKFLOW_STATE.abortController = new AbortController();
@@ -22460,7 +22384,6 @@
             }
             // 存入临时状态，供 executeWorkflow 使用
             WORKFLOW_STATE.currentParentNum = parentNum;
-            // ===== 结束 =====
 
             // 显示章节开始分隔线
             UI.updateProgress(`=== 开始第 ${nextChapterNum} 章 ===`);
@@ -22544,10 +22467,8 @@
             // 重置Agent状态管理器
             AgentStateManager.reset();
 
-            // ====== 新增：设置数据化模式标志并立即更新UI ======
             this.isDataficationMode = true;
             UI.updateWorkflowViz();  // 立即刷新工作流预览，显示“数据化模式”横幅
-            // ====== 结束新增 ======
 
             this.dataficationChapters = chapters;
             this.dataficationCurrentIndex = 0;
@@ -22606,16 +22527,13 @@
         },
 
         _resetStateBooksForDatafication: async function () {
-            console.debug('[Workflow._resetStateBooksForDatafication] ========== 开始重置状态书并取消激活所有世界书 ==========');
             let allBooks = [];
 
             // 获取所有世界书列表（尝试多种方法）
             // 尝试1: TavernHelper.getAllWorldbookNames
             if (typeof TavernHelper?.getAllWorldbookNames === 'function') {
                 try {
-                    console.debug('[Workflow._resetStateBooksForDatafication] 尝试使用 TavernHelper.getAllWorldbookNames()');
                     allBooks = await TavernHelper.getAllWorldbookNames();
-                    console.debug('[Workflow._resetStateBooksForDatafication] 通过 getAllWorldbookNames 获取到', allBooks.length, '本世界书:', allBooks);
                 } catch (e) {
                     console.warn('[Workflow._resetStateBooksForDatafication] 调用 TavernHelper.getAllWorldbookNames 失败:', e);
                     allBooks = [];
@@ -22625,13 +22543,10 @@
             // 尝试2: 从 context.worldInfo 提取
             if (allBooks.length === 0) {
                 try {
-                    console.debug('[Workflow._resetStateBooksForDatafication] 尝试从 context.worldInfo 获取');
                     const context = API.getContext();
                     if (context.worldInfo && Array.isArray(context.worldInfo)) {
                         allBooks = context.worldInfo.map(w => w.name).filter(Boolean);
-                        console.debug('[Workflow._resetStateBooksForDatafication] 从 context.worldInfo 获取到', allBooks.length, '本世界书:', allBooks);
                     } else {
-                        console.debug('[Workflow._resetStateBooksForDatafication] context.worldInfo 无效或不存在');
                     }
                 } catch (e) {
                     console.warn('[Workflow._resetStateBooksForDatafication] 尝试获取 context.worldInfo 失败:', e);
@@ -22643,13 +22558,9 @@
                 console.warn('[Workflow._resetStateBooksForDatafication] 无法获取所有世界书列表，将尝试从激活列表中获取（可能不完整）');
                 try {
                     if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
-                        console.debug('[Workflow._resetStateBooksForDatafication] 尝试 TavernHelper.getGlobalWorldbookNames()');
                         allBooks = await TavernHelper.getGlobalWorldbookNames();
-                        console.debug('[Workflow._resetStateBooksForDatafication] 从全局激活列表获取到', allBooks.length, '本世界书:', allBooks);
                     } else if (typeof window.getGlobalWorldbookNames === 'function') {
-                        console.debug('[Workflow._resetStateBooksForDatafication] 尝试 window.getGlobalWorldbookNames()');
                         allBooks = await window.getGlobalWorldbookNames();
-                        console.debug('[Workflow._resetStateBooksForDatafication] 从 window 获取到', allBooks.length, '本世界书:', allBooks);
                     }
                 } catch (e) {
                     console.warn('[Workflow._resetStateBooksForDatafication] 获取激活列表失败:', e);
@@ -22665,41 +22576,33 @@
             // 分类：状态书 和 其他书（仅用于统计）
             const stateBooks = allBooks.filter(name => name && name.startsWith(CONFIG.STATE_BOOK_PREFIX));
             const nonStateBooks = allBooks.filter(name => name && !name.startsWith(CONFIG.STATE_BOOK_PREFIX));
-            console.debug('[Workflow._resetStateBooksForDatafication] 状态书列表:', stateBooks);
-            console.debug('[Workflow._resetStateBooksForDatafication] 非状态书列表:', nonStateBooks);
 
             // 1. 删除所有状态书
             let deletedCount = 0;
             for (const bookName of stateBooks) {
                 UI.updateProgress(`  删除状态书: ${bookName}...`);
-                console.debug(`[Workflow._resetStateBooksForDatafication] 尝试删除状态书: ${bookName}`);
 
                 try {
                     let success = false;
                     if (typeof TavernHelper?.deleteWorldbook === 'function') {
-                        console.debug(`[Workflow._resetStateBooksForDatafication] 调用 TavernHelper.deleteWorldbook(${bookName})`);
                         const result = await TavernHelper.deleteWorldbook(bookName);
                         success = result === true;
-                        console.debug(`[Workflow._resetStateBooksForDatafication] deleteWorldbook 返回:`, result);
                     } else if (typeof window.deleteWorldbook === 'function') {
-                        console.debug(`[Workflow._resetStateBooksForDatafication] 调用 window.deleteWorldbook(${bookName})`);
                         const result = await window.deleteWorldbook(bookName);
                         success = result === true;
-                        console.debug(`[Workflow._resetStateBooksForDatafication] deleteWorldbook 返回:`, result);
                     } else {
                         throw new Error('deleteWorldbook API 不可用');
                     }
 
                     if (success) {
-                        UI.updateProgress(`    ✓ 已删除 ${bookName}`);
+                        UI.updateProgress(`    ✅ 已删除 ${bookName}`);
                         deletedCount++;
-                        console.debug(`[Workflow._resetStateBooksForDatafication] 成功删除 ${bookName}`);
                     } else {
                         UI.updateProgress(`    ⚠️ ${bookName} 删除失败（可能不存在）`, true);
                         console.warn(`[Workflow._resetStateBooksForDatafication] ${bookName} 删除失败，可能不存在`);
                     }
                 } catch (e) {
-                    UI.updateProgress(`    ✗ 删除 ${bookName} 时出错: ${e.message}`, true);
+                    UI.updateProgress(`    ❌ 删除 ${bookName} 时出错: ${e.message}`, true);
                     console.error(`[Workflow._resetStateBooksForDatafication] 删除 ${bookName} 时发生异常:`, e);
                 }
                 await API.sleep(100);
@@ -22709,9 +22612,7 @@
             let currentGlobalBooks = [];
             try {
                 if (typeof TavernHelper?.getGlobalWorldbookNames === 'function') {
-                    console.debug('[Workflow._resetStateBooksForDatafication] 获取当前全局激活列表（用于统计）');
                     currentGlobalBooks = await TavernHelper.getGlobalWorldbookNames();
-                    console.debug('[Workflow._resetStateBooksForDatafication] 当前全局激活列表:', currentGlobalBooks);
                 }
             } catch (e) {
                 console.warn('[Workflow._resetStateBooksForDatafication] 获取当前激活列表失败（不影响后续取消激活）:', e);
@@ -22720,16 +22621,13 @@
             const deactivatedCount = currentGlobalBooks.length;
 
             // 调用专用的取消激活函数
-            console.debug('[Workflow._resetStateBooksForDatafication] 调用 _deactivateAllWorldbooks 取消激活所有世界书...');
             try {
                 await this._deactivateAllWorldbooks();
-                console.debug('[Workflow._resetStateBooksForDatafication] _deactivateAllWorldbooks 执行成功');
             } catch (e) {
                 console.error('[Workflow._resetStateBooksForDatafication] 调用 _deactivateAllWorldbooks 时出错:', e);
                 UI.updateProgress(`  ⚠️ 取消激活世界书时出错: ${e.message}`, true);
             }
 
-            console.debug('[Workflow._resetStateBooksForDatafication] 完成，deletedCount=', deletedCount, 'deactivatedCount=', deactivatedCount);
             return { deletedCount, deactivatedCount };
         },
 
@@ -22881,7 +22779,7 @@
             if (finalAgentKey) {
                 WORKFLOW_STATE.outputs[finalAgentKey] = Workflow.dataficationChapterContent;
                 AgentStateManager.setState(finalAgentKey, 'completed');
-                UI.updateProgress(`✓ ${getAgentDisplayName(finalAgentKey)} (跳过生成，使用原始章节)`);
+                UI.updateProgress(`✅ ${getAgentDisplayName(finalAgentKey)} (跳过生成，使用原始章节)`);
             } else {
                 console.error(`[DEBUG][_executeDataficationChapter] 未找到 finalChapter 角色，数据化可能失败`);
                 UI.updateProgress(`❌ 未找到最终章节师角色，无法继续`, true);
@@ -23046,7 +22944,6 @@
                 }
             }
 
-            // ===== 新增：清除上次执行的错误状态 =====
             WORKFLOW_STATE.lastAgentError = {};
 
 
@@ -23064,7 +22961,8 @@
             if (WORKFLOW_STATE.abortController) {
                 try {
                     WORKFLOW_STATE.abortController.abort();
-                } catch (e) {
+                } catch (_) {
+                    // 重复 abort() 静默忽略
                 }
             }
             WORKFLOW_STATE.abortController = new AbortController();
@@ -23114,17 +23012,17 @@
 
                     // ✅ 新增：根据 result 类型显示不同消息
                     if (result && result.branchConflict) {
-                        UI.updateProgress('✗ 因分支冲突，本章创作已中断', true);
+                        UI.updateProgress('❌ 因分支冲突，本章创作已中断', true);
                         break;
                     } else if (result && result.aborted) {
-                        UI.updateProgress('✗ 因连续回流超限，本章强制终止并回滚', true);
+                        UI.updateProgress('❌ 因连续回流超限，本章强制终止并回滚', true);
                         break;
                     } else if (!result || !result.success) {
                         // 一般错误
                         if (WORKFLOW_STATE.autoMode) {
-                            UI.updateProgress('✗ 章节创作失败，自动模式已停止', true);
+                            UI.updateProgress('❌ 章节创作失败，自动模式已停止', true);
                         } else {
-                            UI.updateProgress('✗ 章节创作失败', true);
+                            UI.updateProgress('❌ 章节创作失败', true);
                         }
                         break;
                     }
@@ -23161,7 +23059,7 @@
                         errorMsg = `${agentName} 执行出错: ${e.message}`;
                     }
                     if (!e.message.includes('Agent') && !e.message.includes('调用失败')) {
-                        UI.updateProgress(`✗ 工作流错误: ${errorMsg}`, true);
+                        UI.updateProgress(`❌ 工作流错误: ${errorMsg}`, true);
                         Notify.error(errorMsg, '工作流错误');
                     }
                 }
@@ -23469,11 +23367,9 @@
                     const userChoice = await UI.renderAndWaitForInteraction(mergedHtml);
 
 
-                    // ===== 新增：用户交互完成提示 =====
-                    UI.updateProgress(`✓ 用户交互完成，选择: ${userChoice}`);
+                    UI.updateProgress(`✅ 用户交互完成，选择: ${userChoice}`);
                     Notify.success('交互已响应', '', { timeOut: 2000 });
 
-                    // ===== 新增：唯一性检查 =====
                     if (WORKFLOW_STATE.enforceUniqueBranches && WORKFLOW_STATE.currentParentNum) {
                         const parentNum = WORKFLOW_STATE.currentParentNum;
 
@@ -23490,12 +23386,9 @@
 
                         }
                     }
-                    // ===== 结束新增 =====
 
-                    // ===== 新增：存储互动结果用于后续保存 =====
                     WORKFLOW_STATE.currentInteractionResult = userChoice;
 
-                    // ===== 结束新增 =====
 
                     // 构建最终的输入数组
                     const finalInputs = [];
@@ -23547,7 +23440,6 @@
                     console.log(`[DEBUG][_executeAgent] 调用 callAgent 后，WORKFLOW_STATE.outputs[${agentKey}] =`,
                         WORKFLOW_STATE.outputs[agentKey] ? `存在，长度 ${WORKFLOW_STATE.outputs[agentKey].length}` : '不存在');
 
-                    // ========== 新增：人工审核 ==========
                     if (!WORKFLOW_STATE.shouldStop && agent.review === true) {
 
 
@@ -23657,7 +23549,6 @@
                 console.log(`[DEBUG][_executeAgent] 调用 callAgent 后，WORKFLOW_STATE.outputs[${agentKey}] =`,
                     WORKFLOW_STATE.outputs[agentKey] ? `存在，长度 ${WORKFLOW_STATE.outputs[agentKey].length}` : '不存在');
 
-                // ========== 新增：人工审核 ==========
                 if (!WORKFLOW_STATE.shouldStop && agent.review === true) {
 
 
@@ -23744,7 +23635,7 @@
                     const titleMatch = bestContent.match(/^第\d+章\s+(.+)$/m);
                     const title = titleMatch ? titleMatch[0] : `第${WORKFLOW_STATE.currentChapter}章`;
                     WORKFLOW_STATE.discardedChapter = { title, content: bestContent };
-                    UI.updateProgress(`✗ Agent ${getAgentDisplayName(agentKey)} 执行出错，已保存最佳内容作为废章`, true);
+                    UI.updateProgress(`❌ Agent ${getAgentDisplayName(agentKey)} 执行出错，已保存最佳内容作为废章`, true);
                 }
                 throw enhancedError;
             }
@@ -23840,7 +23731,6 @@
             if (immediate) {
                 WORKFLOW_STATE.currentReflowCache = {};
             }
-            // ========== 结束 ==========
 
             try {
                 const sourceAgent = CONFIG.AGENTS[sourceKey];
@@ -23859,12 +23749,10 @@
                         continue;
                     }
 
-                    // ===== 新增：跳过历史源（.last），它们不应触发回流 =====
                     if (src.endsWith('.last')) {
 
                         continue;
                     }
-                    // ===== 结束新增 =====
 
                     // ===== 处理 before 源 =====
                     if (src === 'before') {
@@ -23876,7 +23764,6 @@
                         }
                         continue;
                     }
-                    // ===== 结束处理 =====
 
                     let targetKey = src;
                     // 注意：虽然上面跳过了.last，但这里保留以防万一（实际上不会执行到）
@@ -23942,7 +23829,6 @@
                     // 记录触发源的输出（剔除图片）
                     let sourceOutput = this._stripImagePlaceholders(WORKFLOW_STATE.outputs[sourceKey] || '');
 
-                    // ===== 新增：如果触发源有用户反馈，则附加到输出中 =====
                     if (WORKFLOW_STATE.reflowMap[sourceKey] && WORKFLOW_STATE.reflowMap[sourceKey].userFeedback) {
                         const fb = WORKFLOW_STATE.reflowMap[sourceKey].userFeedback;
                         let feedbackText = `【用户打回建议】\n${fb.suggestion}\n\n`;
@@ -23954,7 +23840,6 @@
                         sourceOutput += '\n\n' + feedbackText;
 
                     }
-                    // ===== 结束新增 =====
 
                     if (!WORKFLOW_STATE.reflowMap[target].sources.includes(sourceKey)) {
                         WORKFLOW_STATE.reflowMap[target].sources.push(sourceKey);
@@ -23994,7 +23879,6 @@
                     delete WORKFLOW_STATE.outputs[target];
 
                 }
-                // ========== 结束新增 ==========
 
                 // 如果 immediate 为 true，立即启动回流处理
                 if (immediate) {
@@ -24143,7 +24027,6 @@
             let aborted = false;
 
             try {
-                // ===== 修改点：阶段循环，使用 stage.mode 决定串行/并行，不再依赖 agent.parallel =====
                 for (const stage of sortedStages) {
                     const stageAgents = stage.agents.filter(key => agents.includes(key));
                     if (stageAgents.length === 0) continue;
@@ -24210,7 +24093,6 @@
                         throw new UserInterruptError();
                     }
                 }
-                // ===== 结束修改 =====
 
                 if (WORKFLOW_STATE.shouldStop) throw new UserInterruptError();
                 if (WORKFLOW_STATE.discarded) throw new AbortChapterError();
@@ -24273,7 +24155,6 @@
                         }
                     }
                 }
-                // ========== 结束多 saver 拼接 ==========
 
                 if (contentToSave && !WORKFLOW_STATE.discarded) {
                     // ---------- 新增：去除外层代码块标记 ----------
@@ -24318,12 +24199,10 @@
                     // ===== 分支系统：获取父章节号 =====
                     const parentNum = WORKFLOW_STATE.currentParentNum;
 
-                    // ===== 结束 =====
 
                     // ===== 获取互动结果 =====
                     const interactionResult = WORKFLOW_STATE.currentInteractionResult;
 
-                    // ===== 结束 =====
 
                     const saveSuccess = Storage.saveChapter(chapterData, nextChapterNum, snapshot, parentNum, interactionResult);
                     if (saveSuccess) {
@@ -24336,7 +24215,6 @@
                             WORKFLOW_STATE.currentBranchLatest = nextChapterNum;
 
                         }
-                        // ===== 结束 =====
                     } else {
                         UI.updateProgress(`⚠️ 第${nextChapterNum}章保存可能失败`, true);
                         console.warn('[DEBUG][executeWorkflow] 章节保存失败');
@@ -24394,11 +24272,11 @@
                     let restored;
                     if (WORKFLOW_STATE.currentChapter === 1) {
                         restored = await resetWorldStateToInitial();
-                        UI.updateProgress(restored ? '✓ 状态书已清空（第一章废章）' : '❌ 状态书清空失败', !restored);
+                        UI.updateProgress(restored ? '✅ 状态书已清空（第一章废章）' : '❌ 状态书清空失败', !restored);
                     } else {
                         restored = await Snapshot.restore(preSnapshot);
                         const snapshotTime = preSnapshot.timestamp ? new Date(preSnapshot.timestamp).toLocaleString() : '未知时间';
-                        UI.updateProgress(restored ? `✓ 状态书已回滚至 ${snapshotTime}` : '❌ 状态书回滚失败', !restored);
+                        UI.updateProgress(restored ? `✅ 状态书已回滚至 ${snapshotTime}` : '❌ 状态书回滚失败', !restored);
                     }
 
                     if (WORKFLOW_STATE.discardReason !== 'existing_branch') {
@@ -25053,7 +24931,6 @@
             UI.updateProgress(`  解析优化师输出...`);
             const actions = parseOptimizerOutput(response);
 
-            // ========== 新增：收集旧内容 ==========
             const oldContents = {}; // 键: `${bookIndex}-${uid}`，值: content
             if (actions.length > 0) {
                 UI.updateProgress(`  正在收集受影响条目的旧内容...`);
@@ -25074,7 +24951,6 @@
                     }
                 }
             }
-            // ========== 结束新增 ==========
 
             if (actions.length > 0) {
                 new Set(actions.map(a => a.bookIndex));
@@ -25096,9 +24972,7 @@
                 UI.updateProgress(`  ✅ 状态书优化完成`);
             }
 
-            // ========== 新增：将旧内容存入全局状态 ==========
             WORKFLOW_STATE.lastStateContents = oldContents;
-            // ========== 结束新增 ==========
 
             AgentStateManager.setState(agentKey, 'completed');
         },
@@ -25132,7 +25006,7 @@
             UI.updateProgress(`  状态书: ${booksToProcess.join(', ') || '无'} (共 ${booksToProcess.length} 本)`);
 
             if (booksToProcess.length === 0) {
-                UI.updateProgress(`  ✗ 没有可用的状态书，维护师无法执行（请检查优化师是否已创建并激活状态书）`, true);
+                UI.updateProgress(`  ❌ 没有可用的状态书，维护师无法执行（请检查优化师是否已创建并激活状态书）`, true);
                 AgentStateManager.setState(agentKey, 'error');
                 WORKFLOW_STATE.discarded = true;
                 const bestContent = this._getBestOutputForSaving();
@@ -25155,7 +25029,7 @@
                 try {
                     book = await API.getWorldbook(bookName);
                 } catch (e) {
-                    UI.updateProgress(`    ✗ 无法读取状态书 ${bookName}: ${e.message}`, true);
+                    UI.updateProgress(`    ❌ 无法读取状态书 ${bookName}: ${e.message}`, true);
                     console.error(`[DEBUG][_executeUpdater] 读取世界书失败:`, e);
                     hasAnyError = true;
                     continue;
@@ -25187,7 +25061,7 @@
                 try {
                     response = await this.callAgent(agentKey, updaterPrompt);
                 } catch (e) {
-                    UI.updateProgress(`    ✗ 调用失败: ${e.message}`, true);
+                    UI.updateProgress(`    ❌ 调用失败: ${e.message}`, true);
                     console.error(`[DEBUG][_executeUpdater] 调用维护师失败:`, e);
                     hasAnyError = true;
                     continue;
@@ -25217,12 +25091,12 @@
                             hasAnyError = true;
                         }
                     } catch (e) {
-                        UI.updateProgress(`    ✗ 更新状态书时出错: ${e.message}`, true);
+                        UI.updateProgress(`    ❌ 更新状态书时出错: ${e.message}`, true);
                         console.error(`[DEBUG][_executeUpdater] 更新状态书出错:`, e);
                         hasAnyError = true;
                     }
                 } else {
-                    UI.updateProgress(`    ✗ 协议解析失败: ${parseResult.error}`, true);
+                    UI.updateProgress(`    ❌ 协议解析失败: ${parseResult.error}`, true);
                     console.warn(`[DEBUG][_executeUpdater] 协议解析失败:`, parseResult.error);
                     hasAnyError = true;
                 }
@@ -26544,8 +26418,7 @@
                     const parsed = JSON.parse(agentResponse);
                     tasks = Array.isArray(parsed) ? parsed : [parsed];
                 } catch (e) {
-                    // 降级：将整个输出作为单个任务的 prompt
-                    console.warn('[MusicGenerator] 输出非JSON，使用降级处理');
+                    console.warn('[MusicGenerator._executeMusicGenerator] Agent输出非JSON，降级处理:', e.message);
                     tasks = [{
                         name: '默认音乐',
                         params: { prompt: agentResponse }
@@ -26822,7 +26695,7 @@
                     const parsed = JSON.parse(agentResponse);
                     tasks = Array.isArray(parsed) ? parsed : [parsed];
                 } catch (e) {
-                    // 降级：将整个输出作为 params 中的 prompt
+                    console.warn('[AudioEditor._executeAudioEditor] Agent输出非JSON，降级处理:', e.message);
                     tasks = [{
                         name: '编辑结果',
                         params: { prompt: agentResponse }
@@ -27429,7 +27302,6 @@
                 }
 
 
-
                 try {
                     const response = await fetch(sdApiUrl, {
                         method: 'POST',
@@ -27480,7 +27352,6 @@
                 }
 
 
-
                 try {
                     const response = await fetch(`${url}${endpoint}`, {
                         method: 'POST',
@@ -27498,6 +27369,7 @@
                             return `data:image/png;base64,${data.data[0].b64_json}`;
                         } else if (data.data[0].url) {
                             const imgRes = await fetch(data.data[0].url, { signal: combinedSignal });
+                            if (!imgRes.ok) throw new Error(`图像下载失败 (${imgRes.status})`);
                             const blob = await imgRes.blob();
                             return await this._blobToBase64(blob);
                         }
@@ -27558,7 +27430,6 @@
                 if (mergedParams.seed !== undefined) formData.append('seed', String(mergedParams.seed));
                 if (mergedParams.cfg_scale) formData.append('cfg_scale', String(mergedParams.cfg_scale));
                 if (mergedParams.style_preset) formData.append('style_preset', mergedParams.style_preset);
-
 
 
                 try {
@@ -27930,7 +27801,7 @@
 
                     const savedId = await ImageStore.save(`data:image/png;base64,${resultBase64}`, 'png', step.saveAs);
                     resultMap[step.saveAs] = savedId;
-                    UI.updateProgress(`  ✓ 生成控制图 ${step.saveAs}`);
+                    UI.updateProgress(`  ✅ 生成控制图 ${step.saveAs}`);
 
                 } catch (err) {
                     console.error('[Preprocessing] 请求或处理过程中发生异常:', err);
@@ -28919,7 +28790,7 @@
                         WORKFLOW_STATE.inputRejector = null;
 
                         UI.updateSubmitButtons(null);
-                        UI.updateProgress(`✓ 文件上传成功，ID: ${uploadResult.fileId}`);
+                        UI.updateProgress(`✅ 文件上传成功，ID: ${uploadResult.fileId}`);
                         Notify.success('文件已上传', '', { timeOut: 2000 });
 
                         AgentStateManager.setState(agentKey, 'running');
@@ -29063,7 +28934,7 @@
                                         resolve(savedId);
                                     } catch (err) {
                                         console.error('[processInputQueue] 保存文件失败:', err);
-                                        Notify.error('文件保存失败: ' + err.message);
+                                        Notify.error(`文件保存失败: ${err}`.message);
                                         // 不关闭模态框，让用户重试
                                     }
                                 };
@@ -29125,7 +28996,7 @@
                         WORKFLOW_STATE.inputRejector = null;
 
                         UI.updateSubmitButtons(null);
-                        UI.updateProgress(`✓ 文件保存完成，ID: ${fileId}`);
+                        UI.updateProgress(`✅ 文件保存完成，ID: ${fileId}`);
                         Notify.success('文件已保存', '', { timeOut: 2000 });
 
                         const textarea = document.getElementById('nc-user-input');
@@ -29167,8 +29038,7 @@
                         pending.result = userInput;
                         pending.resolve(userInput);
 
-                        // ===== 新增：用户输入完成提示 =====
-                        UI.updateProgress(`✓ 用户输入已提交，内容长度: ${userInput.length} 字符`);
+                        UI.updateProgress(`✅ 用户输入已提交，内容长度: ${userInput.length} 字符`);
                         Notify.success('用户输入已接收', '', { timeOut: 2000 });
 
                         if (!isReflow) {
@@ -29470,7 +29340,6 @@
             const timeout = config.timeout || 3600000;
             const timeoutSignal = AbortSignal.timeout(timeout);
             const combinedSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
-
 
 
             // 定义 OpenAI 兼容平台列表（支持 /files 上传，返回 id）
@@ -30498,19 +30367,12 @@
                 const confirmed = await UI.showConfirmModal('确定要中断当前创作流程吗？', '确认');
                 if (!confirmed) return;
                 WORKFLOW_STATE.shouldStop = true;
+                // 通知 SillyTavern 停止当前生成
                 try {
                     API.stopGeneration();
                 } catch (e) {
+                    console.error('[Workflow.stop] API.stopGeneration 调用失败:', e);
                 }
-
-                // ===== 调用增强后的 API.stopGeneration =====
-                try {
-                    API.stopGeneration();
-
-                } catch (e) {
-                    console.error('[Workflow.stop] 调用 API.stopGeneration 失败:', e);
-                }
-                // ===== 结束 =====
 
                 // 中止所有图像API请求
                 if (WORKFLOW_STATE.abortController) {
@@ -30526,7 +30388,8 @@
                     WORKFLOW_STATE.inputResolver = null;
                     try {
                         rejector(new UserInterruptError());
-                    } catch (e) {
+                    } catch (_) {
+                        // rejector 已被调用或 Promise 已解决，忽略重复拒绝
                     }
                 }
 
@@ -30538,24 +30401,22 @@
                     if (pending && !pending.resolved) {
                         try {
                             pending.reject(new UserInterruptError());
-                        } catch (e) {
+                        } catch (_) {
+                            // 已解决的 Promise 拒绝是 no-op，静默忽略
                         }
                     }
-                    // ===== 新增：拒绝回流缓存中的 Promise =====
                     const reflowPending = WORKFLOW_STATE.currentReflowCache?.[req.src];
                     if (reflowPending && !reflowPending.resolved) {
                         try {
                             reflowPending.reject(new UserInterruptError());
-                        } catch (e) {
+                        } catch (_) {
+                            // 已解决的回流 Promise，静默忽略
                         }
                     }
-                    // ===== 结束新增 =====
                 }
 
-                WORKFLOW_STATE.awaitingInput = false;
-                WORKFLOW_STATE.pendingInputMode = null;
-                WORKFLOW_STATE.currentWaitingAgent = null;
-                WORKFLOW_STATE.currentWaitingInputIndex = null;
+                // 清零输入等待状态
+                StateStore.reset('input');
 
                 // 重置Agent状态
                 for (const key of Object.keys(CONFIG.AGENTS)) {
@@ -30583,7 +30444,10 @@
     // ╔══════════════════════════════════════════════════════════════════╗
     // ║  模块 24：全局暴露与初始化                                        ║
     // ║  window.NovelCreator / baseInit / 启动守卫                       ║
+    // ║  入口：baseInit() → injectStyles → Storage.init → UI.createPanel ║
     // ╚══════════════════════════════════════════════════════════════════╝
+
+    /** @module Init — window.NovelCreator 暴露 + baseInit 启动守卫 */
 
     // ==================== 全局暴露 ====================
 
@@ -30626,9 +30490,10 @@
         }
 
         try {
-            const saved = localStorage.getItem('novel_creator_token_stats_v1');
+            const saved = localStorage.getItem(CONFIG.TOKEN_STATS_KEY);
             if (saved) WORKFLOW_STATE.tokenStats = JSON.parse(saved);
         } catch (_) {
+            // localStorage 损坏或不可用，使用默认 tokenStats，不影响启动
         }
 
         // 加载保存的预选状态（此时可能为空）
@@ -30643,20 +30508,17 @@
             HISTORY_CACHE = { chapters: [], lastUpdate: Date.now() };
         }
 
-        // ===== 新增：加载映射表 =====
         try {
             await MappingManager.loadAll();
 
         } catch (e) {
             console.error('[baseInit] 加载映射表失败', e);
         }
-        // ===== 结束新增 =====
 
         const settings = Storage.loadSettings();
         WORKFLOW_STATE.currentProfile = settings.profile || 'standard';
 
         WORKFLOW_STATE.autoMode = Storage.loadAutoMode();
-        // [MODIFIED] 移除了错误的 autoCheckbox 事件绑定，该绑定已在面板创建时完成
 
         if (!CONFIG.AGENTS || typeof CONFIG.AGENTS !== 'object') {
             CONFIG.AGENTS = {};
