@@ -1,0 +1,102 @@
+{
+  "name": "novel-creator",
+  "productName": "自动化小说创作系统",
+  "version": "1.0.0",
+  "description": "基于 SillyTavern + 酒馆助手的自动化小说创作系统",
+  "main": "main.js",
+  "author": "nosay137",
+  "license": "MIT",
+  "scripts": {
+    "start":       "electron .",
+    "dev":         "electron . --dev",
+    "build:win":   "electron-builder --win --x64",
+    "build:mac":   "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "setup":       "node scripts/setup.js",
+    "download-node": "node scripts/download-node.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron":         "^29.4.6",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.nosay137.novelcreator",
+    "productName": "自动化小说创作系统",
+    "copyright": "Copyright © 2025 nosay137",
+
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+
+    "files": [
+      "main.js",
+      "preload.js",
+      "auto.js",
+      "vendor/**/*",
+      "!node_modules",
+      "!sillytavern",
+      "!resources"
+    ],
+
+    "extraResources": [
+      {
+        "from": "sillytavern",
+        "to":   "sillytavern",
+        "filter": [
+          "**/*",
+          "!.git/**",
+          "!.github/**",
+          "!*.md",
+          "!test/**",
+          "!coverage/**"
+        ]
+      },
+      {
+        "from": "resources/node",
+        "to":   "node"
+      }
+    ],
+
+    "asar": true,
+    "asarUnpack": [
+      "preload.js",
+      "auto.js",
+      "vendor/**/*"
+    ],
+
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+
+    "nsis": {
+      "oneClick":              false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName":          "自动化小说创作系统",
+      "installerHeader":       "build/installerHeader.bmp",
+      "installerSidebar":      "build/installerSidebar.bmp",
+      "deleteAppDataOnUninstall": false
+    },
+
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "Utility"
+    },
+
+    "compression": "maximum"
+  }
+}
