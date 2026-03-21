@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 440px;
+            height: 280px;
+            background: #080c18;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: "Microsoft YaHei", system-ui, sans-serif;
+            overflow: hidden;
+            -webkit-app-region: drag;
+            user-select: none;
+        }
+
+        .glow-a {
+            position: absolute;
+            top: -60px;
+            right: -60px;
+            width: 240px;
+            height: 240px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(99, 82, 255, .14) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .glow-b {
+            position: absolute;
+            bottom: -40px;
+            left: -40px;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(56, 189, 248, .10) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .logo-wrap {
+            position: relative;
+            width: 72px;
+            height: 72px;
+            margin-bottom: 20px;
+            flex-shrink: 0;
+        }
+
+        .ring {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            animation: spin-a 3s linear infinite;
+        }
+
+        .ring-inner {
+            position: absolute;
+            inset: 6px;
+            width: calc(100% - 12px);
+            height: calc(100% - 12px);
+            animation: spin-b 5s linear infinite;
+        }
+
+        .icon-center {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #e2e8f0;
+            letter-spacing: .5px;
+            margin-bottom: 5px;
+            animation: fade-in .5s .1s both ease-out;
+        }
+
+        .version {
+            font-size: 11px;
+            color: gray;
+            letter-spacing: .4px;
+            margin-bottom: 24px;
+            animation: fade-in .5s .25s both ease-out;
+        }
+
+        .progress-wrap {
+            width: 220px;
+            animation: fade-in .5s .35s both ease-out;
+        }
+
+        .progress-track {
+            height: 2px;
+            background: #111827;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-bar {
+            height: 100%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, #6352ff, #38bdf8);
+            width: 0%;
+            animation: prog 3s ease-out forwards;
+        }
+
+        .dots-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #6352ff;
+        }
+
+        .dot:nth-child(1) {
+            animation: pulse 1.8s .0s ease-in-out infinite;
+        }
+
+        .dot:nth-child(2) {
+            animation: pulse 1.8s .3s ease-in-out infinite;
+        }
+
+        .dot:nth-child(3) {
+            animation: pulse 1.8s .6s ease-in-out infinite;
+        }
+
+        #status-text {
+            font-size: 11px;
+            color: gray;
+        }
+
+        @keyframes spin-a {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes spin-b {
+            to {
+                transform: rotate(-360deg);
+            }
+        }
+
+        @keyframes prog {
+            0% {
+                width: 0%
+            }
+
+            40% {
+                width: 45%
+            }
+
+            70% {
+                width: 62%
+            }
+
+            100% {
+                width: 76%
+            }
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: .25
+            }
+
+            50% {
+                opacity: 1
+            }
+        }
+
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+                transform: translateY(6px)
+            }
+
+            to {
+                opacity: 1;
+                transform: none
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="glow-a"></div>
+    <div class="glow-b"></div>
+
+    <div class="logo-wrap">
+        <svg class="ring" viewBox="0 0 72 72" fill="none">
+            <circle cx="36" cy="36" r="32" stroke="rgba(99,82,255,.22)" stroke-width="1.5" />
+            <circle cx="36" cy="36" r="32" stroke="#6352ff" stroke-width="1.5" stroke-dasharray="42 160"
+                stroke-linecap="round" />
+        </svg>
+        <svg class="ring-inner" viewBox="0 0 60 60" fill="none">
+            <circle cx="30" cy="30" r="26" stroke="rgba(56,189,248,.18)" stroke-width="1" />
+            <circle cx="30" cy="30" r="26" stroke="#38bdf8" stroke-width="1" stroke-dasharray="24 139"
+                stroke-linecap="round" />
+        </svg>
+        <div class="icon-center">
+            <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+                <rect x="3" y="3" width="8" height="8" rx="2" fill="#6352ff" />
+                <rect x="15" y="3" width="8" height="8" rx="2" fill="#38bdf8" opacity=".75" />
+                <rect x="3" y="15" width="8" height="8" rx="2" fill="#38bdf8" opacity=".75" />
+                <rect x="15" y="15" width="8" height="8" rx="2" fill="#6352ff" opacity=".5" />
+            </svg>
+        </div>
+    </div>
+
+    <div class="title">自动化小说创作系统</div>
+    <div class="version">Novel Creator &nbsp;·&nbsp; v1.0</div>
+
+    <div class="progress-wrap">
+        <div class="progress-track">
+            <div class="progress-bar"></div>
+        </div>
+        <div class="dots-row">
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <div class="dot"></div>
+            <span id="status-text">正在启动 SillyTavern 环境...</span>
+        </div>
+    </div>
+</body>
+
+</html>

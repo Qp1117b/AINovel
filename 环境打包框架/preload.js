@@ -1,165 +1,213 @@
 /**
  * preload.js — Electron 预加载脚本
- * 运行于渲染进程（BrowserWindow），但可访问 Node.js API（fs、path）
  *
- * 职责：
- *   1. 等待 SillyTavern 页面 DOM 就绪
- *   2. 顺序加载三个外部依赖库（marked / jszip / gpt-tokenizer）
- *   3. 等待 TavernHelper（酒馆助手扩展）在页面上暴露全局对象
- *   4. 最后注入 auto.js 脚本
+ * 关键原则：contextIsolation=true 下，preload 运行在 isolated world。
+ * 页面里的全局变量（如 TavernHelper、SillyTavern）在 isolated world 中
+ * 完全不可见，直接读 window.TavernHelper 永远是 undefined。
  *
- * 注意：contextIsolation=true，此文件在 isolated world 运行。
- * 通过 contextBridge 暴露给页面的内容才可在 main world 访问。
- * 由于 auto.js 是通过 script 标签注入 main world 的，
- * 我们用 webContents.executeJavaScript 或动态 script 标签来注入。
+ * 正确做法：
+ *   用 Node.js（preload 可用）读取本地文件内容，
+ *   然后把"等待 TavernHelper + 注入 auto.js"的整套逻辑
+ *   打包为一个字符串，通过 <script> 标签注入到页面 main world。
+ *   <script> 标签在 main world 执行，可以正常访问 TavernHelper。
  */
 
 const { contextBridge, ipcRenderer } = require('electron');
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
 
-// ─── 向页面暴露有限的 Electron API ─────────────────────────────
+// ─── 暴露有限 API 给页面 ──────────────────────────────────────
 contextBridge.exposeInMainWorld('electronAPI', {
-  getVersion:   () => ipcRenderer.invoke('app-version'),
+  getVersion: () => ipcRenderer.invoke('app-version'),
   openDevTools: () => ipcRenderer.invoke('open-devtools'),
 });
 
-// ─── 工具函数 ──────────────────────────────────────────────────
-
-/** 动态加载外部脚本，返回 Promise */
-function loadExternalScript(url) {
-  return new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = url;
-    s.onload  = () => { console.log(`[preload] 已加载: ${url}`); resolve(); };
-    s.onerror = () => reject(new Error(`外部脚本加载失败: ${url}`));
-    document.head.appendChild(s);
-  });
-}
-
-/** 注入本地脚本内容（string），返回 Promise */
-function injectInlineScript(code, id) {
-  return new Promise((resolve, reject) => {
-    try {
-      const s = document.createElement('script');
-      if (id) s.id = id;
-      s.textContent = code;
-      document.head.appendChild(s);
-      resolve();
-    } catch (e) {
-      reject(e);
-    }
-  });
-}
-
-/**
- * 轮询等待 window[key] 满足 condition
- * @param {string} key     - window 上的属性名
- * @param {Function} cond  - 判断函数，默认检查是否存在
- * @param {number} timeout - 最大等待毫秒
- */
-function waitForGlobal(key, cond = (v) => !!v, timeout = 60000) {
-  return new Promise((resolve, reject) => {
-    const start = Date.now();
-    const check = () => {
-      const val = window[key];
-      if (cond(val)) return resolve(val);
-      if (Date.now() - start > timeout) {
-        return reject(new Error(`等待 window.${key} 超时 (${timeout}ms)`));
-      }
-      setTimeout(check, 500);
-    };
-    check();
-  });
-}
-
-// ─── auto.js 所需的三个外部依赖（原 @require 头） ─────────────
-// 优先从本地 vendor 目录加载（离线），降级到 CDN
+// ─── 读取本地文件（Node.js 侧） ────────────────────────────────
 const VENDOR_DIR = path.join(__dirname, 'vendor');
+const AUTO_JS_PATH = path.join(__dirname, 'auto.js');
 
+function readLocalFile(filePath) {
+  try {
+    if (fs.existsSync(filePath)) return fs.readFileSync(filePath, 'utf8');
+  } catch (e) {
+    console.error(`[preload] 读取文件失败: ${filePath}`, e.message);
+  }
+  return null;
+}
+
+// 依赖库：优先本地 vendor，降级 CDN（CDN 地址作为字符串嵌入 bootstrap）
 const DEPS = [
   {
     local: path.join(VENDOR_DIR, 'marked.min.js'),
-    cdn:   'https://cdn.jsdelivr.net/npm/marked/marked.min.js',
-    name:  'marked',
+    cdn: 'https://cdn.jsdelivr.net/npm/marked/marked.min.js',
+    name: 'marked',
   },
   {
     local: path.join(VENDOR_DIR, 'jszip.min.js'),
-    cdn:   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
-    name:  'JSZip',
+    cdn: 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+    name: 'JSZip',
   },
   {
     local: path.join(VENDOR_DIR, 'gpt-tokenizer.js'),
-    cdn:   'https://unpkg.com/gpt-tokenizer',
-    name:  'GPTTokenizer',
+    cdn: 'https://unpkg.com/gpt-tokenizer',
+    name: 'GPTTokenizer',
   },
 ];
 
-async function loadDependency(dep) {
-  // 优先本地 vendor
-  if (fs.existsSync(dep.local)) {
-    const code = fs.readFileSync(dep.local, 'utf8');
-    await injectInlineScript(code, `dep-${dep.name}`);
-    console.log(`[preload] 本地依赖已注入: ${dep.name}`);
-  } else {
-    // 降级 CDN
-    await loadExternalScript(dep.cdn);
+// ─── 构建注入脚本（在 main world 执行） ───────────────────────
+function buildBootstrapScript() {
+  const parts = [];
+
+  // 1. 内联依赖库（已下载到 vendor），或记录需要 CDN 加载的列表
+  const cdnDeps = [];
+
+  for (const dep of DEPS) {
+    const code = readLocalFile(dep.local);
+    if (code) {
+      // 用 IIFE 包裹，避免变量污染
+      parts.push(`/* vendor: ${dep.name} */\n(function(){\n${code}\n})();`);
+      console.log(`[preload] 内联本地依赖: ${dep.name}`);
+    } else {
+      // 没有本地文件，记录 CDN 地址，运行时动态加载
+      cdnDeps.push({ name: dep.name, url: dep.cdn });
+      console.log(`[preload] 将从 CDN 加载: ${dep.name}`);
+    }
   }
+
+  // 2. 读取 auto.js，去除 UserScript 头
+  let autoCode = readLocalFile(AUTO_JS_PATH);
+  if (!autoCode) {
+    console.error('[preload] ❌ 找不到 auto.js，请确认文件存在于:', AUTO_JS_PATH);
+    return null;
+  }
+  autoCode = autoCode.replace(
+    /\/\/\s*==UserScript==[\s\S]*?\/\/\s*==\/UserScript==/m, ''
+  ).trim();
+
+  // 3. 把所有逻辑组合为一个在 main world 执行的 bootstrap 函数
+  //    这里的代码在页面 main world 中运行，可以正常访问 TavernHelper
+  const cdnDepsJson = JSON.stringify(cdnDeps);
+
+  const bootstrap = `
+(function() {
+  'use strict';
+
+  // ── 工具：动态加载 <script src> ──────────────────────────────
+  function loadScript(url) {
+    return new Promise(function(resolve, reject) {
+      var s = document.createElement('script');
+      s.src = url;
+      s.onload  = resolve;
+      s.onerror = function() { reject(new Error('CDN 加载失败: ' + url)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  // ── 工具：注入内联脚本 ────────────────────────────────────────
+  function injectCode(code, id) {
+    var s = document.createElement('script');
+    if (id) s.id = id;
+    s.textContent = code;
+    document.head.appendChild(s);
+  }
+
+  // ── 工具：轮询等待 window 上的值就绪 ─────────────────────────
+  // 运行在 main world，可以直接访问页面的全局变量
+  function waitFor(checkFn, timeout, label) {
+    return new Promise(function(resolve, reject) {
+      var start = Date.now();
+      var timer = setInterval(function() {
+        try {
+          if (checkFn()) {
+            clearInterval(timer);
+            resolve();
+          } else if (Date.now() - start > timeout) {
+            clearInterval(timer);
+            reject(new Error(label + ' 等待超时 (' + (timeout/1000) + 's)'));
+          }
+        } catch(e) {
+          clearInterval(timer);
+          reject(e);
+        }
+      }, 500);
+    });
+  }
+
+  // ── 错误横幅 ─────────────────────────────────────────────────
+  function showError(msg) {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:99999;' +
+      'background:#dc2626;color:#fff;padding:12px 16px;border-radius:8px;' +
+      'font-family:monospace;font-size:12px;max-width:420px;' +
+      'box-shadow:0 4px 12px rgba(0,0,0,.4);white-space:pre-wrap';
+    d.textContent = '[NovelCreator] ' + msg;
+    document.body && document.body.appendChild(d);
+    setTimeout(function(){ d.remove(); }, 15000);
+  }
+
+  // ── 主流程 ───────────────────────────────────────────────────
+  async function main() {
+    console.log('[NovelCreator] bootstrap 启动（main world）');
+
+    // 1. 加载 CDN 依赖（本地 vendor 已在上方内联）
+    var cdnList = ${cdnDepsJson};
+    for (var i = 0; i < cdnList.length; i++) {
+      console.log('[NovelCreator] 从 CDN 加载:', cdnList[i].name);
+      await loadScript(cdnList[i].url);
+    }
+
+    // 2. 等待 SillyTavern 上下文就绪
+    console.log('[NovelCreator] 等待 SillyTavern 上下文...');
+    await waitFor(function() {
+      return typeof window.SillyTavern !== 'undefined' &&
+             typeof window.SillyTavern.getContext === 'function';
+    }, 120000, 'SillyTavern.getContext');
+    console.log('[NovelCreator] SillyTavern 上下文就绪');
+
+    // 3. 等待 TavernHelper（酒馆助手）就绪
+    console.log('[NovelCreator] 等待 TavernHelper...');
+    await waitFor(function() {
+      return typeof window.TavernHelper !== 'undefined' &&
+             typeof window.TavernHelper.getWorldbook        === 'function' &&
+             typeof window.TavernHelper.updateWorldbookWith === 'function' &&
+             typeof window.TavernHelper.generate            === 'function' &&
+             typeof window.TavernHelper.triggerSlash        === 'function' &&
+             typeof window.TavernHelper.stopAllGeneration   === 'function';
+    }, 120000, 'TavernHelper');
+    console.log('[NovelCreator] TavernHelper 就绪');
+
+    // 4. 注入 auto.js（已在构建时读取内容，直接内联）
+    injectCode(${JSON.stringify(autoCode)}, 'novel-creator-auto');
+    console.log('[NovelCreator] ✅ auto.js 注入成功');
+  }
+
+  main().catch(function(err) {
+    console.error('[NovelCreator] ❌ 加载失败:', err.message);
+    showError('加载失败: ' + err.message);
+  });
+})();
+`;
+
+  // 把内联依赖和 bootstrap 逻辑合并
+  parts.push(bootstrap);
+  return parts.join('\n\n');
 }
 
-// ─── 主注入流程 ────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', async () => {
-  console.log('[preload] DOM 就绪，开始注入流程');
+// ─── 在页面加载完成后注入 bootstrap ──────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  console.log('[preload] DOMContentLoaded，开始构建 bootstrap...');
 
-  try {
-    // 1. 加载三个依赖库
-    for (const dep of DEPS) {
-      await loadDependency(dep);
-    }
-    console.log('[preload] 所有依赖加载完毕');
-
-    // 2. 等待酒馆助手（JS-Slash-Runner）暴露 TavernHelper
-    //    酒馆助手初始化需要等 ST 扩展系统加载完毕，可能需要较长时间
-    console.log('[preload] 等待 TavernHelper (酒馆助手) 就绪…');
-    await waitForGlobal('TavernHelper', (v) => {
-      return v
-        && typeof v.getWorldbook          === 'function'
-        && typeof v.updateWorldbookWith   === 'function'
-        && typeof v.generate              === 'function'
-        && typeof v.triggerSlash          === 'function'
-        && typeof v.stopAllGeneration     === 'function';
-    }, 120000); // 最多等 2 分钟
-    console.log('[preload] TavernHelper 已就绪');
-
-    // 3. 读取并注入 auto.js
-    const autoJsPath = path.join(__dirname, 'auto.js');
-    if (!fs.existsSync(autoJsPath)) {
-      throw new Error(`找不到 auto.js: ${autoJsPath}`);
-    }
-    let autoCode = fs.readFileSync(autoJsPath, 'utf8');
-
-    // 去除 UserScript 元数据头（==UserScript== ... ==/UserScript==）
-    autoCode = autoCode.replace(
-      /\/\/\s*==UserScript==[\s\S]*?\/\/\s*==\/UserScript==/m,
-      ''
-    ).trim();
-
-    await injectInlineScript(autoCode, 'novel-creator-auto');
-    console.log('[preload] ✅ auto.js 注入成功，NovelCreator 已启动');
-
-  } catch (err) {
-    console.error('[preload] ❌ 注入失败:', err.message);
-    // 在页面右下角显示错误提示，不影响 ST 主界面
-    const banner = document.createElement('div');
-    banner.style.cssText = `
-      position: fixed; bottom: 16px; right: 16px; z-index: 99999;
-      background: #dc2626; color: #fff;
-      padding: 12px 16px; border-radius: 8px;
-      font-family: monospace; font-size: 12px;
-      max-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-    `;
-    banner.textContent = `[NovelCreator] 加载失败: ${err.message}`;
-    document.body.appendChild(banner);
-    setTimeout(() => banner.remove(), 10000);
+  const bootstrapCode = buildBootstrapScript();
+  if (!bootstrapCode) {
+    console.error('[preload] bootstrap 构建失败，放弃注入');
+    return;
   }
+
+  // 注入一个 <script> 标签到 main world 执行
+  const script = document.createElement('script');
+  script.id = 'novel-creator-bootstrap';
+  script.textContent = bootstrapCode;
+  document.head.appendChild(script);
+
+  console.log('[preload] bootstrap 已注入 main world');
 });
