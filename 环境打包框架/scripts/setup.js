@@ -125,7 +125,7 @@ async function setupTavernHelper() {
   const helperPkg = path.join(HELPER_DIR, 'package.json');
   if (fs.existsSync(helperPkg)) {
     console.log('安装酒馆助手依赖…');
-    run('npm install --omit=dev', HELPER_DIR);
+    run('npm install --omit=dev --legacy-peer-deps', HELPER_DIR);
   }
 
   console.log('✅ 酒馆助手就绪');
@@ -243,14 +243,15 @@ Electron 打包时需要在 resources/node/ 放一份便携版 node.exe。
 
     console.log('\n╔══════════════════════════════════════════╗');
     console.log('║   初始化完成！                             ║');
-    console.log('║                                           ║');
-    console.log('║   下一步：                                ║');
+    console.log('║                                            ║');
+    console.log('║   下一步：                                 ║');
     console.log('║   1. 将 auto.js 放入项目根目录             ║');
     console.log('║   2. 准备 resources/node/node.exe          ║');
     console.log('║   3. npm install                           ║');
     console.log('║   4. npm start  （开发测试）               ║');
-    console.log('║   5. npm run build:win  （打包 exe）        ║');
-    console.log('╚══════════════════════════════════════════╝\n');
+    console.log('║   5. npm run build:win  （打包 exe）       ║');
+    console.log('╚════════════════════════════════════════════╝\n');
+    process.exit(0);
   } catch (err) {
     console.error('\n❌ 初始化失败:', err.message);
     process.exit(1);
