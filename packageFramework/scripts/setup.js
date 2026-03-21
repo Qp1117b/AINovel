@@ -21,7 +21,8 @@ const VENDOR_DIR = path.join(ROOT, 'vendor');
 const EXT_DIR = path.join(ST_DIR, 'public', 'scripts', 'extensions', 'third-party');
 const HELPER_DIR = path.join(EXT_DIR, 'JS-Slash-Runner');
 
-const ST_REPO = 'https://github.com/SillyTavern/SillyTavern.git';
+// const ST_REPO = 'https://github.com/SillyTavern/SillyTavern.git';
+const ST_REPO = 'https://gitee.com/boomer001/SillyTavern';
 const HELPER_REPO = 'https://github.com/N0VI028/JS-Slash-Runner.git';
 
 const CDN_DEPS = [
