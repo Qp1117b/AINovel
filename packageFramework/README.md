@@ -80,6 +80,7 @@ node scripts/download-node.js
 ## 开发测试
 
 ```bash
+npm install
 npm start
 ```
 
