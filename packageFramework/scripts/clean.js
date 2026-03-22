@@ -26,6 +26,7 @@ const KEEP_FILES = [
 // 保留的文件夹（白名单）
 const KEEP_DIRS = [
   'scripts',
+  'download'
 ];
 
 function deleteItem(itemPath, isDir) {
@@ -43,7 +44,7 @@ function deleteItem(itemPath, isDir) {
 }
 
 console.log('╔══════════════════════════════════════════╗');
-console.log('║   清理项目                                ║');
+console.log('║   清理项目                               ║');
 console.log('╚══════════════════════════════════════════╝');
 console.log('');
 
