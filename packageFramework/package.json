@@ -6,13 +6,14 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win --x64",
-    "setup": "node scripts/setup.js",
-    "download-node": "node scripts/download-node.js"
+    "build:win": "electron-builder --win --x64"
   },
   "devDependencies": {
     "electron": "^29.4.6",
     "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "electron-log": "^5.0.1"
   },
   "build": {
     "appId": "com.nosay137.novelcreator",
@@ -26,38 +27,14 @@
       "preload.js",
       "auto.js",
       "splash.html",
-      "vendor/**/*",
-      "!resources",
-      "!node_modules",
-      "!scripts"
+      "!resources"
     ],
-    "extraResources": [
-      {
-        "from": "resources/sillytavern",
-        "to": "sillytavern",
-        "filter": [
-          "**/*",
-          "!.git/**",
-          "!.github/**",
-          "!test/**",
-          "!*.md"
-        ]
-      },
-      {
-        "from": "resources/sillytavern/node_modules",
-        "to": "sillytavern/node_modules"
-      },
-      {
-        "from": "resources/node",
-        "to": "node"
-      }
-    ],
+    "extraResources": [],
     "asar": true,
     "asarUnpack": [
       "preload.js",
       "auto.js",
-      "splash.html",
-      "vendor/**/*"
+      "splash.html"
     ],
     "win": {
       "target": [

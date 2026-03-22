@@ -17,10 +17,13 @@ const fs = require('fs');
 const path = require('path');
 
 // ─── 暴露有限 API 给页面 ──────────────────────────────────────
-contextBridge.exposeInMainWorld('electronAPI', {
-  getVersion: () => ipcRenderer.invoke('app-version'),
-  openDevTools: () => ipcRenderer.invoke('open-devtools'),
-});
+const api = {};
+
+api.getVersion = () => ipcRenderer.invoke('app-version');
+api.openDevTools = () => ipcRenderer.invoke('open-devtools');
+api.onLogMessage = (callback) => ipcRenderer.on('log-message', (event, data) => callback(data));
+
+contextBridge.exposeInMainWorld('electronAPI', api);
 
 // ─── 读取本地文件（Node.js 侧） ────────────────────────────────
 const VENDOR_DIR = path.join(__dirname, 'vendor');
@@ -57,6 +60,7 @@ const DEPS = [
 // ─── 构建注入脚本（在 main world 执行） ───────────────────────
 function buildBootstrapScript() {
   const parts = [];
+  console.log(`[preload] 构建 bootstrap，auto.js 路径: ${AUTO_JS_PATH}`);
 
   // 1. 内联依赖库（已下载到 vendor），或记录需要 CDN 加载的列表
   const cdnDeps = [];
@@ -64,11 +68,9 @@ function buildBootstrapScript() {
   for (const dep of DEPS) {
     const code = readLocalFile(dep.local);
     if (code) {
-      // 用 IIFE 包裹，避免变量污染
       parts.push(`/* vendor: ${dep.name} */\n(function(){\n${code}\n})();`);
       console.log(`[preload] 内联本地依赖: ${dep.name}`);
     } else {
-      // 没有本地文件，记录 CDN 地址，运行时动态加载
       cdnDeps.push({ name: dep.name, url: dep.cdn });
       console.log(`[preload] 将从 CDN 加载: ${dep.name}`);
     }
@@ -85,14 +87,12 @@ function buildBootstrapScript() {
   ).trim();
 
   // 3. 把所有逻辑组合为一个在 main world 执行的 bootstrap 函数
-  //    这里的代码在页面 main world 中运行，可以正常访问 TavernHelper
   const cdnDepsJson = JSON.stringify(cdnDeps);
 
   const bootstrap = `
 (function() {
   'use strict';
 
-  // ── 工具：动态加载 <script src> ──────────────────────────────
   function loadScript(url) {
     return new Promise(function(resolve, reject) {
       var s = document.createElement('script');
@@ -103,7 +103,6 @@ function buildBootstrapScript() {
     });
   }
 
-  // ── 工具：注入内联脚本 ────────────────────────────────────────
   function injectCode(code, id) {
     var s = document.createElement('script');
     if (id) s.id = id;
@@ -111,8 +110,6 @@ function buildBootstrapScript() {
     document.head.appendChild(s);
   }
 
-  // ── 工具：轮询等待 window 上的值就绪 ─────────────────────────
-  // 运行在 main world，可以直接访问页面的全局变量
   function waitFor(checkFn, timeout, label) {
     return new Promise(function(resolve, reject) {
       var start = Date.now();
@@ -133,7 +130,6 @@ function buildBootstrapScript() {
     });
   }
 
-  // ── 错误横幅 ─────────────────────────────────────────────────
   function showError(msg) {
     var d = document.createElement('div');
     d.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:99999;' +
@@ -145,18 +141,15 @@ function buildBootstrapScript() {
     setTimeout(function(){ d.remove(); }, 15000);
   }
 
-  // ── 主流程 ───────────────────────────────────────────────────
   async function main() {
     console.log('[NovelCreator] bootstrap 启动（main world）');
 
-    // 1. 加载 CDN 依赖（本地 vendor 已在上方内联）
     var cdnList = ${cdnDepsJson};
     for (var i = 0; i < cdnList.length; i++) {
       console.log('[NovelCreator] 从 CDN 加载:', cdnList[i].name);
       await loadScript(cdnList[i].url);
     }
 
-    // 2. 等待 SillyTavern 上下文就绪
     console.log('[NovelCreator] 等待 SillyTavern 上下文...');
     await waitFor(function() {
       return typeof window.SillyTavern !== 'undefined' &&
@@ -164,7 +157,6 @@ function buildBootstrapScript() {
     }, 120000, 'SillyTavern.getContext');
     console.log('[NovelCreator] SillyTavern 上下文就绪');
 
-    // 3. 等待 TavernHelper（酒馆助手）就绪
     console.log('[NovelCreator] 等待 TavernHelper...');
     await waitFor(function() {
       return typeof window.TavernHelper !== 'undefined' &&
@@ -176,7 +168,6 @@ function buildBootstrapScript() {
     }, 120000, 'TavernHelper');
     console.log('[NovelCreator] TavernHelper 就绪');
 
-    // 4. 注入 auto.js（已在构建时读取内容，直接内联）
     injectCode(${JSON.stringify(autoCode)}, 'novel-creator-auto');
     console.log('[NovelCreator] ✅ auto.js 注入成功');
   }
@@ -188,7 +179,6 @@ function buildBootstrapScript() {
 })();
 `;
 
-  // 把内联依赖和 bootstrap 逻辑合并
   parts.push(bootstrap);
   return parts.join('\n\n');
 }
@@ -203,7 +193,6 @@ window.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // 注入一个 <script> 标签到 main world 执行
   const script = document.createElement('script');
   script.id = 'novel-creator-bootstrap';
   script.textContent = bootstrapCode;
