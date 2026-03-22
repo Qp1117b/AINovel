@@ -27,7 +27,8 @@
       "preload.js",
       "auto.js",
       "splash.html",
-      "!resources"
+      "!resources",
+      "!node_modules"
     ],
     "extraResources": [],
     "asar": true,
