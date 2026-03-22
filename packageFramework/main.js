@@ -7,16 +7,16 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const { spawn, spawnSync, execSync } = require('child_process');
 const http = require('http');
-const https = require('https');
 const fs = require('fs');
 const os = require('os');
+
+// ─── 引入统一下载模块 ─────────────────────────────────────────
+const downloader = require('./scripts/downloader');
 
 // ─── 全局配置 ─────────────────────────────────────────────────
 let ST_PORT = 8000;
 const ST_PORT_RANGE_START = 18000;
 const ST_PORT_RANGE_END = 18100;
-const NODE_VERSION = '20.18.1';
-const ST_REPO_ZIP = 'https://ghproxy.com/https://github.com/SillyTavern/SillyTavern/archive/refs/heads/release.zip';
 
 // ─── 查找可用端口 ─────────────────────────────────────────────
 function findAvailablePort(startPort, endPort) {
@@ -146,405 +146,6 @@ function cleanupOrphanProcess() {
     clearPID();
   }
   if (process.platform === 'win32') killByPort(ST_PORT);
-}
-
-// ─── 系统 Node.js 检测 ─────────────────────────────────────────
-function detectSystemNode() {
-  log('Setup', '开始检测系统 Node.js...');
-  try {
-    const result = spawnSync('node', ['--version'], {
-      encoding: 'utf8',
-      stdio: 'pipe',
-      shell: true
-    });
-    if (result.status === 0 && result.stdout) {
-      const version = result.stdout.trim();
-      log('Setup', `系统 Node.js 版本: ${version}`);
-      const majorMatch = version.match(/^v?(\d+)/);
-      if (majorMatch && parseInt(majorMatch[1]) >= 18) {
-        const whichResult = spawnSync('where', ['node'], {
-          encoding: 'utf8',
-          stdio: 'pipe',
-          shell: true
-        });
-        if (whichResult.status === 0 && whichResult.stdout) {
-          const nodePath = whichResult.stdout.trim().split('\n')[0].trim();
-          log('Setup', `系统 Node.js 路径: ${nodePath}`);
-          systemNodePath = nodePath;
-          return nodePath;
-        }
-      } else {
-        log('Setup', `系统 Node.js 版本过低 (${version})，需要 >= v18`);
-      }
-    }
-  } catch (e) {
-    log('Setup', `系统 Node.js 检测失败: ${e.message}`);
-  }
-  log('Setup', '系统未找到合适的 Node.js');
-  return null;
-}
-
-// ─── 下载文件（带进度）────────────────────────────────────────
-function downloadFile(url, dest, onProgress) {
-  return new Promise((resolve, reject) => {
-    const proto = url.startsWith('https') ? https : http;
-    const tmpDest = dest + '.tmp';
-    const dir = path.dirname(dest);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    let downloaded = 0;
-    let total = 0;
-    const doRequest = (requestUrl) => {
-      log('Download', `请求: ${requestUrl}`);
-      const req = proto.get(requestUrl, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          log('Download', `重定向到: ${res.headers.location}`);
-          return doRequest(res.headers.location);
-        }
-        if (res.statusCode !== 200) {
-          return reject(new Error(`HTTP ${res.statusCode}`));
-        }
-        total = parseInt(res.headers['content-length'] || '0', 10);
-        const file = fs.createWriteStream(tmpDest);
-        res.on('data', (chunk) => {
-          downloaded += chunk.length;
-          file.write(chunk);
-          if (onProgress && total > 0) {
-            const pct = ((downloaded / total) * 100).toFixed(1);
-            onProgress(downloaded, total, pct);
-          }
-        });
-        res.on('end', () => {
-          file.close(() => {
-            try {
-              fs.renameSync(tmpDest, dest);
-              resolve();
-            } catch (e) {
-              reject(e);
-            }
-          });
-        });
-        res.on('error', (e) => {
-          file.close();
-          try { fs.unlinkSync(tmpDest); } catch (_) { }
-          reject(e);
-        });
-      });
-      req.on('error', (e) => {
-        try { fs.unlinkSync(tmpDest); } catch (_) { }
-        reject(e);
-      });
-      req.setTimeout(60000, () => {
-        req.destroy();
-        try { fs.unlinkSync(tmpDest); } catch (_) { }
-        reject(new Error('下载超时'));
-      });
-    };
-    doRequest(url);
-  });
-}
-
-// ─── 下载并解压 Node.js ──────────────────────────────────────
-async function downloadNode(onProgress) {
-  if (isDev) {
-    log('Setup', '开发模式：跳过 Node.js 下载，使用系统 Node');
-    return systemNodePath;
-  }
-
-  log('Setup', `开始下载 Node.js v${NODE_VERSION}...`);
-
-  if (fs.existsSync(NODE_BIN)) {
-    try {
-      const v = execSync(`"${NODE_BIN}" --version`, { encoding: 'utf8', stdio: 'pipe' }).trim();
-      log('Setup', `Node.js 已存在: ${v}`);
-      return NODE_BIN;
-    } catch (_) {
-      log('Setup', '已存在但无法运行，重新下载...');
-      try { fs.rmSync(NODE_DIR, { recursive: true, force: true }); } catch (_) { }
-    }
-  }
-
-  const nodeZipUrl = `https://npmmirror.com/mirrors/node/v${NODE_VERSION}/node-v${NODE_VERSION}-win-x64.zip`;
-  const nodeZipMirror = `https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-win-x64.zip`;
-  const zipPath = path.join(DOWNLOAD_DIR, 'node.zip');
-
-  const urls = [nodeZipUrl, nodeZipMirror];
-
-  for (const url of urls) {
-    try {
-      log('Setup', `尝试下载: ${url}`);
-      let lastLogPct = 0;
-      await downloadFile(url, zipPath, (current, total, pct) => {
-        if (onProgress) onProgress(`下载 Node.js: ${pct}%`);
-        const pctNum = parseFloat(pct);
-        if (pctNum - lastLogPct >= 1) {
-          log('Download', `进度: ${pct}% (${(current / 1024 / 1024).toFixed(1)}MB)`);
-          lastLogPct = pctNum;
-        }
-      });
-
-      log('Setup', '解压 Node.js...');
-      if (!fs.existsSync(NODE_DIR)) fs.mkdirSync(NODE_DIR, { recursive: true });
-
-      try {
-        const psScript = path.join(DOWNLOAD_DIR, '_extract_node.ps1');
-        fs.writeFileSync(psScript, `Expand-Archive -Path '${zipPath.replace(/'/g, "''")}' -DestinationPath '${NODE_DIR.replace(/'/g, "''")}' -Force`);
-        execSync(`powershell -ExecutionPolicy Bypass -File "${psScript}"`, { stdio: 'pipe' });
-        try { fs.unlinkSync(psScript); } catch (_) { }
-
-        const extractedFolders = fs.readdirSync(NODE_DIR).filter(f => f.startsWith('node-v'));
-        if (extractedFolders.length > 0) {
-          const extractedDir = path.join(NODE_DIR, extractedFolders[0]);
-          const files = fs.readdirSync(extractedDir);
-          for (const file of files) {
-            const src = path.join(extractedDir, file);
-            const dest = path.join(NODE_DIR, file);
-            if (fs.existsSync(dest)) {
-              if (fs.statSync(dest).isDirectory()) {
-                fs.rmSync(dest, { recursive: true, force: true });
-              } else {
-                fs.unlinkSync(dest);
-              }
-            }
-            fs.renameSync(src, dest);
-          }
-          fs.rmdirSync(extractedDir);
-        }
-
-        try { fs.unlinkSync(zipPath); } catch (_) { }
-
-        const v = execSync(`"${NODE_BIN}" --version`, { encoding: 'utf8', stdio: 'pipe' }).trim();
-        log('Setup', `Node.js 安装成功: ${v}`);
-        return NODE_BIN;
-      } catch (e) {
-        log('Setup', `解压失败: ${e.message}`);
-        throw e;
-      }
-    } catch (e) {
-      log('Setup', `下载失败: ${e.message}`);
-      try { fs.unlinkSync(zipPath); } catch (_) { }
-    }
-  }
-
-  throw new Error('所有 Node.js 下载源均失败');
-}
-
-// ─── 下载并解压 SillyTavern ──────────────────────────────────
-async function downloadSillyTavern(onProgress) {
-  if (isDev) {
-    if (fs.existsSync(ST_SERVER)) {
-      log('Setup', `开发模式：使用本地 SillyTavern @ ${ST_DIR}`);
-      return ST_DIR;
-    }
-    throw new Error(`开发模式：找不到 SillyTavern\n路径: ${ST_SERVER}\n请先运行: npm run setup`);
-  }
-
-  log('Setup', '开始下载 SillyTavern...');
-
-  if (fs.existsSync(ST_SERVER)) {
-    log('Setup', 'SillyTavern 已存在');
-    return ST_DIR;
-  }
-
-  const zipPath = path.join(DOWNLOAD_DIR, 'sillytavern.zip');
-  const extractDir = path.join(DOWNLOAD_DIR, 'st-extract');
-
-  if (fs.existsSync(zipPath)) {
-    log('Setup', '发现已下载的压缩包，直接解压...');
-    await extractSillyTavern(zipPath, extractDir);
-    return ST_DIR;
-  }
-
-  const urls = [
-    'https://ghproxy.com/https://github.com/SillyTavern/SillyTavern/archive/refs/heads/release.zip',
-    'https://gh-proxy.com/https://github.com/SillyTavern/SillyTavern/archive/refs/heads/release.zip',
-    'https://ghps.cc/https://github.com/SillyTavern/SillyTavern/archive/refs/heads/release.zip',
-    ST_REPO_ZIP,
-  ];
-
-  for (const url of urls) {
-    try {
-      log('Setup', `尝试下载: ${url}`);
-      let lastLogPct = 0;
-      await downloadFile(url, zipPath, (current, total, pct) => {
-        if (onProgress) onProgress(`下载 SillyTavern: ${pct}%`);
-        const pctNum = parseFloat(pct);
-        if (pctNum - lastLogPct >= 1) {
-          log('Download', `进度: ${pct}% (${(current / 1024 / 1024).toFixed(1)}MB)`);
-          lastLogPct = pctNum;
-        }
-      });
-
-      await extractSillyTavern(zipPath, extractDir);
-      return ST_DIR;
-    } catch (e) {
-      log('Setup', `下载失败: ${e.message}`);
-      try { fs.unlinkSync(zipPath); } catch (_) { }
-    }
-  }
-
-  throw new Error('所有 SillyTavern 下载源均失败');
-}
-
-// ─── 解压 SillyTavern ─────────────────────────────────────────
-async function extractSillyTavern(zipPath, extractDir) {
-  try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch (_) { }
-  if (!fs.existsSync(extractDir)) fs.mkdirSync(extractDir, { recursive: true });
-
-  log('Setup', '解压 SillyTavern...');
-  try {
-    const psScript = path.join(DOWNLOAD_DIR, '_extract.ps1');
-    fs.writeFileSync(psScript, `Expand-Archive -Path '${zipPath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}' -Force`);
-    execSync(`powershell -ExecutionPolicy Bypass -File "${psScript}"`, { stdio: 'pipe' });
-    try { fs.unlinkSync(psScript); } catch (_) { }
-
-    const extractedFolders = fs.readdirSync(extractDir);
-    if (extractedFolders.length > 0) {
-      const stFolder = path.join(extractDir, extractedFolders[0]);
-      try { fs.rmSync(ST_DIR, { recursive: true, force: true }); } catch (_) { }
-      fs.renameSync(stFolder, ST_DIR);
-      log('Setup', `SillyTavern 已安装: ${ST_DIR}`);
-    }
-
-    try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch (_) { }
-
-    if (!fs.existsSync(ST_SERVER)) {
-      throw new Error('server.js 不存在');
-    }
-
-    log('Setup', 'SillyTavern 安装成功');
-  } catch (e) {
-    log('Setup', `解压失败: ${e.message}`);
-    try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch (_) { }
-    throw e;
-  }
-}
-
-// ─── 下载安装酒馆助手 ─────────────────────────────────────────
-async function setupTavernHelper(onProgress) {
-  if (isDev) {
-    log('Setup', '开发模式：跳过酒馆助手安装');
-    return;
-  }
-
-  const EXT_DIR = path.join(ST_DIR, 'public', 'scripts', 'extensions', 'third-party');
-  const HELPER_DIR = path.join(EXT_DIR, 'JS-Slash-Runner');
-  const HELPER_REPO_ZIP = 'https://github.com/N0VI028/JS-Slash-Runner/archive/refs/heads/main.zip';
-  const HELPER_REPO_ZIP_MIRROR = 'https://ghproxy.com/https://github.com/N0VI028/JS-Slash-Runner/archive/refs/heads/main.zip';
-
-  if (fs.existsSync(path.join(HELPER_DIR, 'package.json'))) {
-    log('Setup', '酒馆助手已存在，跳过安装');
-    return;
-  }
-
-  log('Setup', '开始下载酒馆助手...');
-  if (onProgress) onProgress('下载酒馆助手...');
-
-  const zipPath = path.join(DOWNLOAD_DIR, 'tavern-helper.zip');
-  const extractDir = path.join(DOWNLOAD_DIR, 'tavern-helper-extract');
-
-  const urls = [HELPER_REPO_ZIP_MIRROR, HELPER_REPO_ZIP];
-
-  for (const url of urls) {
-    try {
-      await downloadFile(url, zipPath, (current, total, pct) => {
-        if (onProgress) onProgress(`下载酒馆助手: ${pct}%`);
-      });
-
-      log('Setup', '解压酒馆助手...');
-      try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch (_) { }
-      if (!fs.existsSync(extractDir)) fs.mkdirSync(extractDir, { recursive: true });
-
-      const psScript = path.join(DOWNLOAD_DIR, '_extract_helper.ps1');
-      fs.writeFileSync(psScript, `Expand-Archive -Path '${zipPath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}' -Force`);
-      execSync(`powershell -ExecutionPolicy Bypass -File "${psScript}"`, { stdio: 'pipe' });
-      try { fs.unlinkSync(psScript); } catch (_) { }
-
-      const extractedFolders = fs.readdirSync(extractDir);
-      if (extractedFolders.length > 0) {
-        const helperFolder = path.join(extractDir, extractedFolders[0]);
-        if (!fs.existsSync(EXT_DIR)) fs.mkdirSync(EXT_DIR, { recursive: true });
-        try { fs.rmSync(HELPER_DIR, { recursive: true, force: true }); } catch (_) { }
-        fs.renameSync(helperFolder, HELPER_DIR);
-        log('Setup', `酒馆助手已安装: ${HELPER_DIR}`);
-      }
-
-      try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch (_) { }
-      try { fs.unlinkSync(zipPath); } catch (_) { }
-
-      const extStateDir = path.join(ST_DIR, 'data', 'default-user', 'extensions');
-      if (!fs.existsSync(extStateDir)) fs.mkdirSync(extStateDir, { recursive: true });
-      fs.writeFileSync(path.join(extStateDir, 'JS-Slash-Runner.json'), JSON.stringify({ enabled: true }, null, 2));
-
-      log('Setup', '酒馆助手安装完成');
-      return;
-    } catch (e) {
-      log('Setup', `酒馆助手下载失败: ${e.message}`);
-      try { fs.unlinkSync(zipPath); } catch (_) { }
-    }
-  }
-
-  log('Setup:ERR', '酒馆助手下载失败，但不影响主程序运行');
-}
-
-// ─── 安装 SillyTavern 依赖 ───────────────────────────────────
-async function installSTDependencies(onProgress) {
-  if (isDev) {
-    log('Setup', '开发模式：跳过依赖安装');
-    return;
-  }
-
-  const nodeModulesDir = path.join(ST_DIR, 'node_modules');
-  if (fs.existsSync(nodeModulesDir)) {
-    log('Setup', 'SillyTavern 依赖已存在，跳过安装');
-    return;
-  }
-
-  const nodeBin = systemNodePath || NODE_BIN;
-  log('Setup', '安装 SillyTavern 依赖...');
-  log('Setup', `使用 Node: ${nodeBin}`);
-  if (onProgress) onProgress('安装 SillyTavern 依赖...');
-
-  return new Promise((resolve, reject) => {
-    const isUsingDownloadedNode = !systemNodePath;
-    const npmCmd = isUsingDownloadedNode ? `"${nodeBin}" npm` : 'npm';
-    const npmArgs = ['install', '--omit=dev', '--registry', 'https://registry.npmmirror.com'];
-
-    log('Setup', `npm 命令: ${npmCmd} ${npmArgs.join(' ')}`);
-
-    const npmProcess = spawn(npmCmd, npmArgs, {
-      cwd: ST_DIR,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
-      env: {
-        ...process.env,
-        NODE_ENV: 'production',
-        PATH: isUsingDownloadedNode ? `${NODE_DIR};${process.env.PATH}` : process.env.PATH
-      }
-    });
-
-    npmProcess.stdout.on('data', (d) => {
-      const line = d.toString('utf8').trim();
-      if (line) log('npm', line);
-    });
-
-    npmProcess.stderr.on('data', (d) => {
-      const line = d.toString('utf8').trim();
-      if (line) log('npm:ERR', line);
-    });
-
-    npmProcess.on('close', (code) => {
-      if (code === 0) {
-        log('Setup', '依赖安装完成');
-        resolve();
-      } else {
-        reject(new Error(`npm install 退出码: ${code}`));
-      }
-    });
-
-    npmProcess.on('error', (e) => {
-      reject(new Error(`npm install 失败: ${e.message}`));
-    });
-  });
 }
 
 // ─── 修补 ST 配置 ─────────────────────────────────────────────
@@ -748,9 +349,9 @@ function launchSillyTavern() {
     log('ST', `Node:   ${nodeBin}`);
     log('ST', `Server: ${ST_SERVER}`);
     log('ST', `CWD:    ${ST_DIR}`);
-    log('ST', `数据:   ${DATA_DIR}`);
 
-    stProcess = spawn(nodeBin, [ST_SERVER, '--port', String(ST_PORT), '--no-csrf', '--dataRoot', DATA_DIR], {
+    // 数据存放在 ST 原目录下的 data 文件夹
+    stProcess = spawn(nodeBin, [ST_SERVER, '--port', String(ST_PORT), '--no-csrf'], {
       cwd: ST_DIR,
       env: {
         ...process.env,
@@ -907,27 +508,74 @@ app.whenReady().then(async () => {
     await createSplashWindow();
     setSplashStatus('正在初始化...');
 
+    // 1. 检测/下载 Node.js
     setSplashStatus('检测系统环境...');
-    const systemNode = detectSystemNode();
+    const systemNode = downloader.detectSystemNode();
 
     if (systemNode) {
-      log('Setup', `使用系统 Node.js: ${systemNode}`);
+      systemNodePath = systemNode.path;
+      log('Setup', `使用系统 Node.js: ${systemNode.version} @ ${systemNode.path}`);
       setSplashStatus('使用系统 Node.js');
+    } else if (isDev) {
+      log('Setup:ERR', '开发模式需要系统安装 Node.js (>= v18)');
+      throw new Error('开发模式需要系统安装 Node.js (>= v18)');
     } else {
       log('Setup', '系统未检测到 Node.js，准备下载...');
       setSplashStatus('下载 Node.js...');
-      await downloadNode((status) => setSplashStatus(status));
+      const nodeBin = await downloader.downloadNode(NODE_DIR, DOWNLOAD_DIR, (msg) => {
+        log('Download', msg);
+        setSplashStatus(msg);
+      });
+      if (!nodeBin) {
+        throw new Error('Node.js 下载失败');
+      }
+      systemNodePath = nodeBin;
     }
 
+    // 2. 下载/检查 SillyTavern
     setSplashStatus('检查 SillyTavern...');
-    await downloadSillyTavern((status) => setSplashStatus(status));
+    if (isDev && !fs.existsSync(ST_SERVER)) {
+      throw new Error(`开发模式：找不到 SillyTavern\n路径: ${ST_SERVER}\n请先运行: npm run setup`);
+    }
+    const stSuccess = await downloader.downloadSillyTavern(ST_DIR, DOWNLOAD_DIR, (msg) => {
+      log('Setup', msg);
+      setSplashStatus(msg);
+    });
+    if (!stSuccess && !fs.existsSync(ST_SERVER)) {
+      throw new Error('SillyTavern 下载失败');
+    }
 
-    setSplashStatus('安装依赖...');
-    await installSTDependencies((status) => setSplashStatus(status));
+    // 3. 安装依赖
+    if (!isDev) {
+      setSplashStatus('安装依赖...');
+      await downloader.installDependencies(ST_DIR, systemNodePath, 'https://registry.npmmirror.com', (msg) => {
+        log('npm', msg);
+        setSplashStatus(msg);
+      });
+    }
 
-    setSplashStatus('检查酒馆助手...');
-    await setupTavernHelper((status) => setSplashStatus(status));
+    // 4. 下载酒馆助手
+    if (!isDev) {
+      setSplashStatus('检查酒馆助手...');
+      await downloader.downloadTavernHelper(ST_DIR, DOWNLOAD_DIR, (msg) => {
+        log('Setup', msg);
+        setSplashStatus(msg);
+      });
+    }
 
+    // 5. 下载 CDN 依赖
+    if (!isDev) {
+      setSplashStatus('下载前端依赖...');
+      await downloader.downloadVendorDeps(VENDOR_DIR, (msg) => {
+        log('Download', msg);
+        setSplashStatus(msg);
+      });
+    }
+
+    // 6. 创建配置
+    downloader.createDefaultConfig(ST_DIR, ST_PORT);
+
+    // 6. 启动 SillyTavern
     setSplashStatus('启动 SillyTavern...');
     await launchSillyTavern();
     await waitForST();

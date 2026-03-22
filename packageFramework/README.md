@@ -1,4 +1,4 @@
-# 自动化小说创作系统 — Electron 打包方案
+# 自动化小说创作系统 — 绿色免安装版
 
 将 SillyTavern + 酒馆助手（JS-Slash-Runner）+ auto.js 打包为独立 `.exe`，用户无需单独安装任何依赖。
 
@@ -7,73 +7,67 @@
 ## 架构说明
 
 ```
-Electron (.exe)
-├── Main Process (main.js)
-│   ├── 启动 SillyTavern 服务器子进程（使用内置 node.exe）
-│   └── 等待 HTTP:8000 就绪后创建 BrowserWindow
+应用目录（exe同级）
+├── 自动化小说创作系统.exe    ← 主程序
+├── auto.js                  ← 自动化脚本
+├── splash.html              ← 启动画面
+├── preload.js               ← 预加载脚本
 │
-├── BrowserWindow
-│   ├── 加载 http://127.0.0.1:8000（SillyTavern 界面）
-│   └── preload.js 注入：
-│       ├── vendor/marked.min.js
-│       ├── vendor/jszip.min.js
-│       ├── vendor/gpt-tokenizer.js
-│       ├── 等待 TavernHelper 全局对象（酒馆助手）
-│       └── auto.js（你的脚本，去除 UserScript 头）
+├── resources/               ← 运行时资源
+│   ├── sillytavern/         ← ST 源码 + node_modules
+│   │   ├── data/            ← ST 用户数据（自动生成）
+│   │   └── public/scripts/extensions/third-party/
+│   │       └── JS-Slash-Runner/  ← 酒馆助手
+│   └── node/                ← Node.js（系统无时下载）
+│       └── node.exe
 │
-└── Resources（打包内）
-    ├── sillytavern/          ← ST 完整源码 + node_modules
-    │   └── public/scripts/extensions/third-party/
-    │       └── JS-Slash-Runner/  ← 酒馆助手扩展
-    └── node/
-        └── node.exe          ← 便携版 Node.js（子进程专用）
+├── vendor/                  ← 前端依赖
+│   ├── marked.min.js
+│   ├── jszip.min.js
+│   └── gpt-tokenizer.js
+│
+├── download/                ← 下载缓存（保留zip）
+│   ├── sillytavern.zip
+│   ├── tavern-helper.zip
+│   └── node.zip
+└── data/                    ← 应用运行日志
+    └── launcher.log
 ```
 
 ---
 
-## 快速开始（四步）
+## 快速开始（三步）
 
 ### 第一步：克隆本项目
 
 ```bash
-git clone <此项目仓库> xxx
-cd xxx
+git clone <仓库地址>
+cd packageFramework
 ```
 
 ### 第二步：放入 auto.js
 
-将你的 `auto.js`（`自动化小说创作系统` UserScript）复制到项目根目录：
+将你的 `auto.js` 复制到项目根目录：
 
 ```
-xxx/
-└── auto.js   ← 放在这里，UserScript 头保留或删除均可
+packageFramework/
+└── auto.js   ← 放在这里
 ```
 
-### 第三步：一键初始化环境
+### 第三步：一键初始化
 
 ```bash
-npm install
 npm run setup
 ```
 
 `setup` 脚本会自动完成：
 
-- 克隆 SillyTavern（release 分支）到 `./sillytavern/`
-- 安装 ST 的 npm 依赖
-- 克隆 JS-Slash-Runner（酒馆助手）到 ST 扩展目录
-- 修改 ST 配置（关闭 CSRF、禁止自动打开浏览器）
-- 下载三个前端依赖到 `./vendor/`
-
-### 第四步：准备便携 Node.js
-
-```bash
-# 自动下载（需要网络）
-node scripts/download-node.js
-
-# 或手动：
-# 1. 从 https://nodejs.org/dist/v20.18.1/win-x64/node.exe 下载
-# 2. 放到 resources/node/node.exe
-```
+1. 检测系统 Node.js（有则使用，无则下载）
+2. 下载 SillyTavern（zip 解压）
+3. 下载酒馆助手（JS-Slash-Runner）
+4. 创建默认配置
+5. 下载前端依赖（marked, jszip, gpt-tokenizer）
+6. 安装 npm 依赖
 
 ---
 
@@ -91,51 +85,42 @@ npm start
 ## 打包为 exe
 
 ```bash
-npm run build:win
+npm run build
 ```
 
-生成文件：`dist/自动化小说创作系统 Setup 1.0.0.exe`
+生成文件：
+- `dist/自动化小说创作系统 Setup 1.0.0.exe` - 安装包
+- `dist/win-unpacked/` - 免安装版
 
-用户安装后，桌面出现快捷方式，双击直接运行，无需安装 Node.js 或 Git。
+### 打包版特性
+
+- 绿色免安装，所有数据在 exe 同级目录
+- 自动检测系统 Node.js，无则下载
+- 首次运行自动下载 SillyTavern 和酒馆助手
+- 下载成功后保留 zip，下次启动直接解压
+- 动态分配端口（18000-18100），支持多实例
 
 ---
 
-## 目录结构（完整）
+## 清理
 
+```bash
+npm run clean
 ```
-xxx/
-├── main.js              ← Electron 主进程
-├── preload.js           ← 脚本注入逻辑
-├── auto.js              ← 你的创作系统脚本 ← 你放这里
-├── package.json         ← 项目配置 + electron-builder 配置
-│
-├── scripts/
-│   ├── setup.js         ← 一键初始化（克隆 ST + 酒馆助手）
-│   └── download-node.js ← 下载便携版 node.exe
-│
-├── vendor/              ← 前端依赖（离线备用，由 setup 下载）
-│   ├── marked.min.js
-│   ├── jszip.min.js
-│   └── gpt-tokenizer.js
-│
-├── resources/           ← 手动放入
-│   └── node/
-│       └── node.exe     ← Node.js v20 便携版 ← 必须手动准备
-│
-├── build/               ← electron-builder 打包资源
-│   ├── icon.ico         ← 应用图标（你自己放）
-│   └── ...
-│
-└── sillytavern/         ← 由 setup 自动克隆
-    ├── server.js
-    ├── package.json
-    ├── node_modules/    ← 由 setup 自动安装
-    └── public/
-        └── scripts/
-            └── extensions/
-                └── third-party/
-                    └── JS-Slash-Runner/  ← 酒馆助手，由 setup 克隆
-```
+
+删除所有生成文件，只保留源代码。
+
+---
+
+## 前端依赖
+
+| 文件 | 用途 |
+|------|------|
+| marked.min.js | Markdown 解析 |
+| jszip.min.js | ZIP 文件处理 |
+| gpt-tokenizer.js | Token 计数 |
+
+依赖会自动从 CDN 下载，失败时在运行时自动降级使用 CDN。
 
 ---
 
@@ -143,27 +128,21 @@ xxx/
 
 ### Q：启动后提示「TavernHelper 未正确加载」
 
-说明酒馆助手扩展未被 SillyTavern 激活。检查：
+检查 `resources/sillytavern/data/default-user/extensions/JS-Slash-Runner.json` 是否存在，内容应为 `{"enabled": true}`
 
-1. `sillytavern/data/default-user/extensions/JS-Slash-Runner.json` 是否存在且内容为 `{"enabled": true}`
-2. 手动在 ST 界面的扩展面板里开启 JS-Slash-Runner，然后重启
+### Q：系统没有 Node.js 怎么办？
 
-### Q：SillyTavern 子进程报错 `node: not found`
+打包版会自动检测并下载到 `resources/node/`
 
-`resources/node/node.exe` 不存在，请运行 `node scripts/download-node.js`
+### Q：如何更新 SillyTavern 或酒馆助手？
 
-### Q：打包后安装包很大（300-500MB）
+删除 `resources/sillytavern/` 和 `download/*.zip`，重新运行 `npm run setup`
 
-正常。ST 的 `node_modules` 约 200-300MB，加上便携版 node.exe（50MB）。
-可在 `package.json` 的 `build.extraResources` filter 里排除不必要的文件。
+### Q：下载失败怎么办？
 
-### Q：想更新 SillyTavern 或酒馆助手
-
-重新运行 `npm run setup`，脚本会自动 `git pull` 更新。
-
-### Q：如何添加自定义图标
-
-将 512×512 的 `.ico` 文件放到 `build/icon.ico` 即可，electron-builder 自动使用。
+检查网络连接，或手动下载解压：
+- SillyTavern: 解压到 `resources/sillytavern/`
+- 酒馆助手: 解压到 `resources/sillytavern/public/scripts/extensions/third-party/JS-Slash-Runner/`
 
 ---
 
@@ -172,9 +151,9 @@ xxx/
 | 组件 | 版本 | 来源 |
 |------|------|------|
 | Electron | 29.x | npm |
-| SillyTavern | release 最新 | GitHub |
-| JS-Slash-Runner | main 最新 | GitHub |
-| Node.js (内置) | 20.x LTS | nodejs.org |
+| SillyTavern | release 最新 | GitHub (zip) |
+| JS-Slash-Runner | main 最新 | GitHub (zip) |
+| Node.js | 20.x LTS 或系统版本 | 系统/nodejs.org |
 | marked | latest | CDN/vendor |
 | JSZip | 3.10.1 | CDN/vendor |
 | gpt-tokenizer | latest | CDN/vendor |
@@ -183,7 +162,4 @@ xxx/
 
 ## 许可证
 
-本打包方案代码 MIT。
-SillyTavern 遵循 AGPL-3.0。
-JS-Slash-Runner 遵循其原始许可证。
-auto.js 版权归原作者所有。
+本打包方案代码 MIT。SillyTavern 遵循 AGPL-3.0。

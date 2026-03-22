@@ -6,9 +6,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win --x64",
-    "clean": "node scripts/clean.js",
-    "setup": "node scripts/setup.js"
+    "build": "electron-builder --win --x64",
+    "setup": "node scripts/setup.js",
+    "clean": "node scripts/clean.js"
   },
   "devDependencies": {
     "electron": "^29.4.6",
@@ -29,6 +29,7 @@
       "preload.js",
       "auto.js",
       "splash.html",
+      "scripts/downloader.js",
       "!resources",
       "!node_modules"
     ],
@@ -37,7 +38,8 @@
     "asarUnpack": [
       "preload.js",
       "auto.js",
-      "splash.html"
+      "splash.html",
+      "scripts/downloader.js"
     ],
     "win": {
       "target": [
