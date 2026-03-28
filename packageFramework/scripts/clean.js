@@ -18,9 +18,7 @@ const KEEP_FILES = [
   'auto.js',
   'splash.html',
   'package.json',
-  'README.md',
-  'launcher.bat',
-  'dev.bat',
+  'README.md'
 ];
 
 // 保留的文件夹（白名单）
