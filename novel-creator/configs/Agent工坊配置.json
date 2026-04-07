@@ -1,0 +1,102 @@
+{
+  "version": "1.0",
+  "description": "Agent 工坊专用配置 - 用于生成多Agent协作的角色卡和工作流",
+  "mode": "workshop",
+  "maxStateBooks": 10,
+  "stateTypeLimit": 10,
+  "maxConsecutiveReflows": 2,
+  "maxReflowDepth": 50,
+  "workflowStages": [
+    {
+      "stage": 1,
+      "id": "config",
+      "name": "配置规划",
+      "color": "#9b59b6",
+      "description": "主AI分析需求，生成工作流配置结构",
+      "agents": [
+        "主AI配置生成器"
+      ],
+      "mode": "serial"
+    },
+    {
+      "stage": 2,
+      "id": "card",
+      "name": "角色卡生成",
+      "color": "#e74c3c",
+      "description": "为每个专用Agent生成专属角色卡",
+      "agents": [
+        "专用角色卡生成器"
+      ],
+      "mode": "parallel"
+    }
+  ],
+  "agents": {
+    "主AI配置生成器": {
+      "name": "主AI配置生成器",
+      "displayName": "主AI配置生成器",
+      "hover": "分析用户需求，生成完整的工作流配置结构（包含Agent数量、类型、工作流阶段）",
+      "role": "configPlanner",
+      "stage": "config",
+      "order": 1,
+      "required": true,
+      "parallel": false,
+      "inputs": [],
+      "inputTemplate": "你是自动化小说创作系统的配置规划专家。\n\n你的任务是根据用户的描述，设计整个工作流的配置结构。\n\n【输出格式】\n请输出一个JSON对象，包含以下结构：\n\n{\n  \"description\": \"配置描述\",\n  \"mode\": \"normal\" | \"interactive\" | \"datafication\",\n  \"agentCount\": 数字（总Agent数量）,\n  \"agents\": [\n    {\n      \"id\": \"agent_id\",\n      \"name\": \"Agent名称\",\n      \"desc\": \"Agent职责描述\",\n      \"category\": \"core\" | \"image\" | \"audio\" | \"interactive\" | \"state\" | \"summary\",\n      \"required\": true | false,\n      \"suggestedType\": \"general\" | \"special\"\n    }\n  ],\n  \"workflowStages\": [\n    {\n      \"id\": \"stage_id\",\n      \"name\": \"阶段名称\",\n      \"agents\": [\"agent_id1\", \"agent_id2\"],\n      \"mode\": \"serial\" | \"parallel\"\n    }\n  ],\n  \"notes\": \"给用户的说明或建议\"\n}\n\n【规则】\n1. core类Agent（章节创作、剧情概览、状态优化、状态维护）是必须的\n2. image/audio/interactive类Agent根据用户需求可选\n3. suggestedType建议：如果Agent职责复杂/专业，建议用special\n4. 工作流阶段要有合理的依赖关系\n5. 始终输出合法的JSON，不要包含其他文字",
+      "inputMode": [],
+      "autoConfig": [],
+      "inputPrompts": [],
+      "outputs": [
+        "配置结构JSON"
+      ],
+      "description": "分析需求，生成工作流配置",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "apiConfigId": "workshop_api",
+      "review": false
+    },
+    "专用角色卡生成器": {
+      "name": "专用角色卡生成器",
+      "displayName": "专用角色卡生成器",
+      "hover": "为复杂/专业Agent生成专属角色卡（chara_card_v2格式）",
+      "role": "specialGenerator",
+      "stage": "card",
+      "order": 10,
+      "required": true,
+      "parallel": false,
+      "inputs": [
+        "主AI配置生成器"
+      ],
+      "inputTemplate": "你是专用角色卡生成器，负责为小说创作系统中的专用Agent生成角色卡文件。\n\n【你的任务】\n根据提供的信息，生成一个符合 SillyTavern v2 格式的角色卡JSON文件。\n\n【输出格式】\n必须输出纯JSON，格式如下：\n{\n    \"spec\": \"chara_card_v2\",\n    \"spec_version\": \"1.0\",\n    \"data\": {\n        \"name\": \"角色名称\",\n        \"description\": \"角色描述（简短，100字以内）\",\n        \"personality\": \"角色性格（简洁）\",\n        \"scenario\": \"使用场景\",\n        \"first_mes\": \"首次消息\",\n        \"alternate_greetings\": [],\n        \"system_prompt\": \"【核心系统提示词 - 详细定义该Agent的职能、规则、输出格式】\",\n        \"post_history_instructions\": \"生成后指令\",\n        \"creator_notes\": \"创建者备注\",\n        \"creator\": \"Agent工坊\",\n        \"character_version\": \"1.0\",\n        \"tags\": [\"专用Agent\", \"具体标签\"]\n    }\n}\n\n【system_prompt 编写规范】\nsystem_prompt 是核心，需要包含：\n1. 角色定位：明确该Agent是什么、负责什么\n2. 核心职责：具体执行什么任务\n3. 行为规则：该怎么做、遵循什么原则\n4. 输出格式：输出的具体格式要求\n5. 约束条件：禁止做什么\n\n【重要】\n- 输出必须是纯JSON，不包含任何解释或额外文字\n- 如果输入信息不足，主动推断合理的内容\n- 确保生成的system_prompt具有可执行性",
+      "inputMode": ["txt"],
+      "autoConfig": [
+        0
+      ],
+      "inputPrompts": [
+        "请为这个专用Agent生成角色卡"
+      ],
+      "outputs": [
+        "角色卡JSON"
+      ],
+      "description": "生成专用角色卡",
+      "reflowConditions": [],
+      "executeInterval": 0,
+      "apiConfigId": "workshop_api",
+      "review": false
+    }
+  },
+  "categories": {},
+  "categoryGroups": [],
+  "extensions": {},
+  "apiConfigs": {
+    "workshop_api": {
+      "type": "text",
+      "source": "openai",
+      "mode": "txt-txt",
+      "apiUrl": "https://api.deepseek.com/v1/chat/completions",
+      "key": "",
+      "model": "deepseek-chat",
+      "maxTokens": 4096,
+      "temperature": 0.7
+    }
+  }
+}

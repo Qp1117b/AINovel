@@ -1,0 +1,14 @@
+{
+  "name": "novel-creator-build",
+  "version": "1.0.0",
+  "description": "自动化小说创作系统构建工具",
+  "private": true,
+  "scripts": {
+    "build": "\"F:\\Program Files\\nvm\\v24.14.1\\node.exe\" build.js",
+    "build:min": "\"F:\\Program Files\\nvm\\v24.14.1\\node.exe\" build.js --minify",
+    "watch": "\"F:\\Program Files\\nvm\\v24.14.1\\node.exe\" build.js --watch"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

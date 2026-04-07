@@ -446,7 +446,148 @@ function createWindow() {
     },
   });
   mainWindow.loadURL(`http://127.0.0.1:${ST_PORT}`);
-  mainWindow.once('ready-to-show', () => { mainWindow.show(); log('Window', '主窗口已显示'); });
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    log('Window', '主窗口已显示');
+
+    // 监听渲染进程的 console 输出
+    mainWindow.webContents.on('console-message', (event, level, message) => {
+      if (level >= 0) log('RENDER', message);
+    });
+
+    // ─── 注入 NovelCreator 模块（通过 executeJavaScript）─────────
+    const NC_MANIFEST = require('./scripts/manifest');
+    const NC_PATH = require('path');
+    const NC_FS = require('fs');
+    const ROOT_DIR = __dirname;
+    log('NC', 'ROOT_DIR=' + ROOT_DIR + ' manifest.srcDir=' + NC_MANIFEST.srcDir);
+    const srcDir = NC_PATH.resolve(ROOT_DIR, NC_MANIFEST.srcDir);
+    log('NC', 'srcDir=' + srcDir);
+
+    function stripUserscriptHeader(code) {
+      return code.replace(/\/\/\s*==UserScript==[\s\S]*?\/\/\s*==\/UserScript==/m, '').trim();
+    }
+    function unwrapIIFE(code) {
+      return code
+        .replace(/^\s*\(?\s*function\s*(\([^)]*\)|\w*)\s*\{\s*'?use strict'?;?\s*/m, '')
+        .replace(/\}\)\s*\(\s*\);\s*$/, '');
+    }
+
+    // 读取所有模块并拼接
+    const moduleCodeParts = [];
+    const modules = NC_MANIFEST.modules || [];
+    for (let i = 0; i < modules.length; i++) {
+      const mod = modules[i];
+      if (!mod) { log('NC', '跳过空模块 index=' + i); continue; }
+      const filePath = NC_PATH.join(srcDir, mod);
+      let code = '';
+      try {
+        code = NC_FS.readFileSync(filePath, 'utf8');
+      } catch(e) {
+        log('NC', '读取模块失败 ' + mod + ': ' + e.message);
+        continue;
+      }
+      code = stripUserscriptHeader(code);
+      code = unwrapIIFE(code);
+      moduleCodeParts.push(code);
+    }
+    const coreCode = moduleCodeParts.join('\n\n');
+    log('NC', '已读取 ' + moduleCodeParts.length + ' 个模块，总计 ' + coreCode.length + ' 字符');
+
+    // CDN 降级
+    const depCdnList = (NC_MANIFEST.externalDeps || [])
+      .map(d => ({ name: d.name, url: d.cdn }))
+      .filter(d => d.local && !NC_FS.existsSync(NC_PATH.join(ROOT_DIR, d.local)));
+
+    // 注入 bootstrap（main world）
+    function injectBootstrap() {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+
+      const depsJson = JSON.stringify(depCdnList);
+      const bootstrap = '(function() {\n' +
+        "  'use strict';\n" +
+        '\n' +
+        "  function loadScript(url) {\n" +
+        "    return new Promise(function(resolve, reject) {\n" +
+        "      var s = document.createElement('script');\n" +
+        "      s.src = url;\n" +
+        "      s.onload = resolve;\n" +
+        "      s.onerror = function() { reject(new Error('CDN 加载失败: ' + url)); };\n" +
+        "      document.head.appendChild(s);\n" +
+        "    });\n" +
+        "  }\n" +
+        '\n' +
+        "  function waitFor(checkFn, timeout, label) {\n" +
+        "    return new Promise(function(resolve, reject) {\n" +
+        "      var start = Date.now();\n" +
+        "      var timer = setInterval(function() {\n" +
+        "        try {\n" +
+        "          if (checkFn()) {\n" +
+        "            clearInterval(timer);\n" +
+        "            resolve();\n" +
+        "          } else if (Date.now() - start > timeout) {\n" +
+        "            clearInterval(timer);\n" +
+        "            reject(new Error(label + ' 超时'));\n" +
+        "          }\n" +
+        "        } catch(e) {\n" +
+        "          clearInterval(timer);\n" +
+        "          reject(e);\n" +
+        "        }\n" +
+        "      }, 500);\n" +
+        "    });\n" +
+        "  }\n" +
+        '\n' +
+        "  async function main() {\n" +
+        "    console.log('[NovelCreator] bootstrap 启动 (executeJavaScript 模式)');\n" +
+        '\n' +
+        "    var cdnList = " + depsJson + ";\n" +
+        "    for (var i = 0; i < cdnList.length; i++) {\n" +
+        "      console.log('[NovelCreator] 加载 CDN:', cdnList[i].name);\n" +
+        "      await loadScript(cdnList[i].url);\n" +
+        "    }\n" +
+        '\n' +
+        "    console.log('[NovelCreator] 等待 SillyTavern...');\n" +
+        "    await waitFor(function() {\n" +
+        "      return typeof window.SillyTavern !== 'undefined' && typeof window.SillyTavern.getContext === 'function';\n" +
+        "    }, 120000, 'SillyTavern');\n" +
+        "    console.log('[NovelCreator] SillyTavern 就绪');\n" +
+        '\n' +
+        "    console.log('[NovelCreator] 等待 TavernHelper...');\n" +
+        "    await waitFor(function() {\n" +
+        "      return typeof window.TavernHelper !== 'undefined' &&\n" +
+        "             typeof window.TavernHelper.getWorldbook         === 'function' &&\n" +
+        "             typeof window.TavernHelper.updateWorldbookWith === 'function' &&\n" +
+        "             typeof window.TavernHelper.generate            === 'function' &&\n" +
+        "             typeof window.TavernHelper.triggerSlash        === 'function' &&\n" +
+        "             typeof window.TavernHelper.stopAllGeneration   === 'function';\n" +
+        "    }, 120000, 'TavernHelper');\n" +
+        "    console.log('[NovelCreator] TavernHelper 就绪');\n" +
+        '\n' +
+        "    console.log('[NovelCreator] 注入核心模块...');\n" +
+        "    var s = document.createElement('script');\n" +
+        "    s.id = 'novel-creator-modules';\n" +
+        "    s.textContent = " + JSON.stringify(coreCode) + ";\n" +
+        "    document.head.appendChild(s);\n" +
+        "    console.log('[NovelCreator] 核心模块注入成功');\n" +
+        "  }\n" +
+        '\n' +
+        "  main().catch(function(err) {\n" +
+        "    console.error('[NovelCreator] 错误:', err.message);\n" +
+        "  });\n" +
+        "})();\n";
+
+      const escaped = JSON.stringify(bootstrap);
+      const js = 'try { eval(' + escaped + '); } catch(e) { console.error("[NovelCreator] eval 失败:", e.message); }';
+      mainWindow.webContents.executeJavaScript(js).catch(e => {
+        log('NC', 'bootstrap 注入失败: ' + e.message);
+      });
+    }
+
+    // 等待页面稳定后（3s）再注入
+    setTimeout(injectBootstrap, 3000);
+    log('NC', '计划 3s 后注入 bootstrap');
+
+  });
 
   mainWindow.webContents.on('before-input-event', (event, input) => {
     const isF12 = input.type === 'keyDown' && input.key === 'F12';
@@ -608,6 +749,16 @@ ipcMain.handle('get-log-content', () => {
     }
   } catch (_) { }
   return '';
+});
+
+// 渲染进程 → 主进程：模块加载进度（来自 preload 注入的 electronAPI.reportModuleProgress）
+ipcMain.on('module-progress', (event, { current, total, name }) => {
+  log('NC', `加载模块 (${current}/${total}): ${name}`);
+});
+
+// 渲染进程 → 主进程：通用日志消息
+ipcMain.on('nc-log', (event, msg) => {
+  log('NC', msg);
 });
 
 // ─── 应用生命周期 ─────────────────────────────────────────────
